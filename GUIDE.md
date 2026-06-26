@@ -81,10 +81,14 @@ open http://localhost:3939
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `POST /scan` | text/plain (≤2MB) | Scan log text — returns hit lines with context |
+| `POST /scan` | text/plain (≤2MB) | Scan log text — returns hit lines with context. Rate limited: 30 req/min. |
 | `GET /export/iptables` | — | iptables-restore format (IP feed) |
 | `GET /export/dnsmasq` | — | dnsmasq `address=/domain/` format |
 | `GET /export/wazuh` | — | Wazuh CDB list format |
+| `GET /export/csv/ip` | — | IP list, one per line (CSV) |
+| `GET /export/csv/domain` | — | Domain list, one per line (CSV) |
+| `GET /export/csv/hash` | — | SHA256 list, one per line (CSV) |
+| `GET /export/json` | — | All 3 feeds bundled as JSON `{ip:{feed,generated_at,total,data[]},…}` |
 
 ### Network Analysis
 
@@ -215,19 +219,30 @@ NCSA opendata.ncsa.or.th
 | Section | Feature |
 |---------|---------|
 | Header | Dark/light mode toggle (🌙/☀️), last-updated timestamp, settings gear |
+| Sticky Nav | Jump links to all 13 sections; active section highlighted while scrolling |
 | Stats cards | IP / Domain / Hash counts, TLP badge, freshness indicator, integrity check |
+| New-since-visit | Green banner when feed counts grew since last page load (localStorage) |
 | Recent Activity | Per-sync added/removed entries with GeoIP country |
 | Single Lookup | Auto-detect type, parent domain matching, GeoIP |
 | CIDR Check | Find all blacklisted IPs in a subnet (max /16) |
 | Bulk Check | Paste list → POST /check/bulk (up to 10 000) |
 | Search | Partial match across any feed type |
-| Log Scan | Paste log text → get hit lines with context |
-| Export | Download iptables / dnsmasq / wazuh formats |
+| Log Scan | File upload (.log/.txt) or paste text → hit lines with context |
+| Export | iptables / dnsmasq / wazuh / IP CSV / Domain CSV / Hash CSV / JSON bundle |
 | Watch List | Monitor values → webhook alert when added to blacklist |
 | ThaICERT News | Latest cybersecurity news (monthly CSV, clickable headlines) |
 | Network Analysis | Top 25 /24 subnets bar chart with country + AS |
 | Trend Chart | 30 sync history chart (IP/Domain/Hash tabs) |
 | About | MISP provenance, source query, publisher, license, TLP |
+
+## Rate Limits (per IP, per minute)
+
+| Endpoint | Limit |
+|----------|-------|
+| `POST /check/bulk` | 120 req/min |
+| `POST /scan` | 30 req/min |
+| `POST /check/cidr` | 60 req/min |
+| All others | none (behind reverse proxy / firewall recommended) |
 
 **Dark mode** — toggle persists to localStorage.
 
