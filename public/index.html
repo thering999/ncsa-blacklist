@@ -149,6 +149,9 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .log-line-cell { font-family: monospace; font-size: 11px; color: var(--text-muted); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.news-headline a { color: var(--text); text-decoration: none; font-size: 13px; }
+.news-headline a:hover { color: var(--primary); text-decoration: underline; }
+.news-id { color: var(--text-muted); font-size: 11px; white-space: nowrap; font-family: sans-serif; }
 
 @media (max-width: 600px) {
   .stats-grid { grid-template-columns: 1fr; }
@@ -303,6 +306,11 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <table class="data-table" id="watchTable"></table>
   </div>
 
+  <div class="card">
+    <h2>📰 ข่าวสารภัยคุกคาม <span id="newsSource" style="font-size:11px;font-weight:400;color:var(--text-muted)"></span></h2>
+    <div id="newsResult"><div class="result info"><span class="spinner"></span>กำลังโหลด...</div></div>
+  </div>
+
   <div class="card" id="aboutCard" style="display:none">
     <h2>ℹ️ เกี่ยวกับแหล่งข้อมูล</h2>
     <p class="about-desc" id="aboutDesc"></p>
@@ -383,6 +391,33 @@ async function loadStats() {
     const latest = [data.ip, data.domain, data.hash].filter(Boolean).map(d => d.generated_at).sort().pop();
     if (latest) document.getElementById('headerUpdated').textContent = 'Updated: ' + latest.slice(0, 10);
   } catch (_) {}
+}
+
+// --- Threat News ---
+async function loadNews() {
+  const out = document.getElementById('newsResult');
+  try {
+    const data = await fetch('/news?limit=25').then(r => r.json());
+    const src = document.getElementById('newsSource');
+    if (data.source) src.textContent = `— ${data.source}`;
+    if (!data.items.length) {
+      out.innerHTML = '<div class="result info">ไม่มีข้อมูลข่าว</div>';
+      return;
+    }
+    const rows = data.items.map(n => {
+      const idShort = n.id.split(' ')[0];
+      return `<tr>
+        <td class="news-id">${esc(idShort)}</td>
+        <td class="news-headline"><a href="${esc(n.url)}" target="_blank" rel="noreferrer noopener">${esc(n.headline)}</a></td>
+      </tr>`;
+    }).join('');
+    out.innerHTML = `<table class="data-table">
+      <thead><tr><th>#</th><th>หัวข้อ (คลิกอ่านบน ThaICERT)</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ โหลดข่าวไม่สำเร็จ: ${esc(e.message)}</div>`;
+  }
 }
 
 // --- Feed info ---
@@ -678,6 +713,7 @@ function esc(s) {
 }
 
 loadStats();
+loadNews();
 loadInfo();
 renderWatchAuthGate();
 loadWatch();

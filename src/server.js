@@ -59,6 +59,7 @@ setInterval(() => {
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+const { fetchLatestNews } = require('./news');
 const { parseTokens, makeRequireAdmin } = require('./auth');
 const adminTokens = parseTokens(process.env);
 if (Object.keys(adminTokens).length === 0) {
@@ -147,6 +148,12 @@ app.post('/check/bulk', express.json({ limit: '1mb' }), (req, res) => {
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
   res.json({ type, results: values.map((v) => ({ value: String(v), blacklisted: d.set.has(String(v)) })) });
+});
+
+app.get('/news', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 25, 200);
+  const { items, source, fetchedAt } = await fetchLatestNews();
+  res.json({ source, fetchedAt: fetchedAt ? new Date(fetchedAt).toISOString() : null, count: items.length, items: items.slice(0, limit) });
 });
 
 app.get('/search', (req, res) => {
