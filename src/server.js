@@ -60,7 +60,27 @@ setInterval(() => {
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const { fetchLatestNews } = require('./news');
+const { lookup: geoLookup } = require('./geoip');
 const { parseTokens, makeRequireAdmin } = require('./auth');
+
+// --- CIDR helpers ---
+function ipToInt(ip) {
+  return ip.split('.').reduce((a, b) => ((a << 8) | parseInt(b)) >>> 0, 0);
+}
+function intToIp(n) {
+  return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+}
+function parseCIDR(cidr) {
+  const m = cidr.match(/^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/);
+  if (!m) return null;
+  const prefix = parseInt(m[2]);
+  if (prefix < 0 || prefix > 32) return null;
+  const base = ipToInt(m[1]);
+  const mask = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+  const start = (base & mask) >>> 0;
+  const end = (start | (~mask >>> 0)) >>> 0;
+  return { start, end, count: end - start + 1, prefix };
+}
 const adminTokens = parseTokens(process.env);
 if (Object.keys(adminTokens).length === 0) {
   console.warn('no ADMIN_TOKEN/ADMIN_TOKENS set — /watch and /reload are unauthenticated; do not expose this publicly as-is');
@@ -136,7 +156,9 @@ app.get('/check/auto/:value', (req, res) => {
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
   if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value) });
-  res.json({ type, value, blacklisted: d.set.has(value), matched: value, matchType: 'exact' });
+  const blacklisted = d.set.has(value);
+  const geo = type === 'ip' ? geoLookup(value) : null;
+  res.json({ type, value, blacklisted, matched: value, matchType: 'exact', geo });
 });
 
 app.get('/check/:type/:value', (req, res) => {
@@ -144,7 +166,28 @@ app.get('/check/:type/:value', (req, res) => {
   const d = store[type];
   if (!d) return res.status(404).json({ error: `unknown type: ${type}` });
   if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value) });
-  res.json({ type, value, blacklisted: d.set.has(value), matched: value, matchType: 'exact' });
+  const blacklisted = d.set.has(value);
+  const geo = type === 'ip' ? geoLookup(value) : null;
+  res.json({ type, value, blacklisted, matched: value, matchType: 'exact', geo });
+});
+
+app.post('/check/cidr', express.json({ limit: '1kb' }), (req, res) => {
+  const { cidr } = req.body || {};
+  if (!cidr) return res.status(400).json({ error: 'cidr required' });
+  const range = parseCIDR(cidr.trim());
+  if (!range) return res.status(400).json({ error: 'invalid CIDR (IPv4 only, /0-/32)' });
+  if (range.count > 65536) return res.status(400).json({ error: 'CIDR too large (max /16 = 65536 IPs)' });
+  const d = store.ip;
+  if (!d) return res.status(503).json({ error: 'ip data not loaded' });
+  const hits = [];
+  for (const ip of d.set) {
+    const n = ipToInt(ip);
+    if (n >= range.start && n <= range.end) {
+      hits.push({ ip, geo: geoLookup(ip) });
+    }
+  }
+  hits.sort((a, b) => ipToInt(a.ip) - ipToInt(b.ip));
+  res.json({ cidr, range_start: intToIp(range.start), range_end: intToIp(range.end), total_in_range: range.count, hits_count: hits.length, hits: hits.slice(0, 1000) });
 });
 
 app.get('/analyze/networks', (req, res) => {
@@ -156,7 +199,11 @@ app.get('/analyze/networks', (req, res) => {
     counts.set(net, (counts.get(net) || 0) + 1);
   }
   const top = [...counts.entries()]
-    .map(([network, count]) => ({ network, count }))
+    .map(([network, count]) => {
+      const repIp = network.replace('.0/24', '.1');
+      const g = geoLookup(repIp);
+      return { network, count, country: g?.country || null, as: g?.as?.split(' ')[0] || null };
+    })
     .sort((a, b) => b.count - a.count)
     .slice(0, 25);
   res.json({ total_ips: d.set.size, total_networks: counts.size, top });

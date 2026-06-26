@@ -236,6 +236,15 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
   </div>
 
   <div class="card">
+    <h2>🌐 ตรวจสอบ IP Range (CIDR)</h2>
+    <div class="form-row">
+      <input id="cidrInput" placeholder="เช่น 1.10.214.0/24 หรือ 23.129.64.0/22" style="font-family:monospace" onkeydown="if(event.key==='Enter')cidrCheck()">
+      <button onclick="cidrCheck()" id="cidrBtn">ค้นหา</button>
+    </div>
+    <div id="cidrResult"></div>
+  </div>
+
+  <div class="card">
     <h2>📋 ตรวจสอบหลายรายการ</h2>
     <div class="form-row" style="margin-bottom:8px">
       <select id="bulkType">
@@ -402,6 +411,35 @@ async function loadStats() {
   } catch (_) {}
 }
 
+// --- CIDR Check ---
+async function cidrCheck() {
+  const cidr = document.getElementById('cidrInput').value.trim();
+  const out = document.getElementById('cidrResult');
+  if (!cidr) return;
+  const btn = document.getElementById('cidrBtn');
+  btn.disabled = true;
+  out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังค้นหา...</div>';
+  try {
+    const res = await fetch('/check/cidr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cidr }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.statusText);
+    if (!d.hits_count) {
+      out.innerHTML = `<div class="result clean">✅ ไม่พบ IP ใน blacklist ใน ${esc(cidr)} (${d.total_in_range.toLocaleString()} IPs checked)</div>`;
+    } else {
+      const rows = d.hits.map(h => {
+        const geo = h.geo ? `<span style="font-size:11px;color:var(--text-muted)"> 🌍 ${esc(h.geo.country||'')}${h.geo.as ? ' · '+esc(h.geo.as) : ''}</span>` : '';
+        return `<tr><td><code>${esc(h.ip)}</code>${geo}</td></tr>`;
+      }).join('');
+      const cap = d.hits.length < d.hits_count ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">แสดง ${d.hits.length} จาก ${d.hits_count} รายการ</div>` : '';
+      out.innerHTML = `<div class="result hit" style="margin-bottom:8px">⚠️ พบ <strong>${d.hits_count}</strong> IP blacklisted ใน ${esc(cidr)} (${d.total_in_range.toLocaleString()} IPs total)</div>
+        <table class="data-table"><tbody>${rows}</tbody></table>${cap}`;
+    }
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
+}
+
 // --- Network Analysis ---
 async function loadNetworks() {
   const out = document.getElementById('networksResult');
@@ -411,10 +449,11 @@ async function loadNetworks() {
     const max = d.top[0].count;
     const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ทั้งหมด ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_networks.toLocaleString()} networks (/24)</div>`;
     const rows = d.top.map(n => `
-      <div style="display:grid;grid-template-columns:160px 1fr 50px;gap:8px;align-items:center;margin-bottom:4px">
+      <div style="display:grid;grid-template-columns:160px 1fr 50px 55px;gap:8px;align-items:center;margin-bottom:4px">
         <code style="font-size:12px;color:var(--text)">${esc(n.network)}</code>
         <div class="net-bar"><div class="net-bar-fill" style="width:${Math.round(n.count/max*100)}%"></div></div>
         <span class="net-count">${n.count}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${n.country ? esc(n.country) : ''} ${n.as ? '<span style="font-size:10px">'+esc(n.as)+'</span>' : ''}</span>
       </div>`).join('');
     out.innerHTML = summary + rows;
   } catch (e) {
@@ -492,10 +531,13 @@ async function checkOne() {
     if (!res.ok) throw new Error(d.error || res.statusText);
     const typeLabel = { ip: 'IP', domain: 'Domain', hash: 'Hash' }[d.type] || d.type;
     const parentNote = (d.matchType === 'parent')
-      ? ` <span style="font-size:12px;opacity:.8">(parent domain: <code>${esc(d.matched)}</code>)</span>` : '';
+      ? ` <span style="font-size:12px;opacity:.8">(parent: <code>${esc(d.matched)}</code>)</span>` : '';
+    const geoNote = (d.geo && d.type === 'ip')
+      ? `<div style="margin-top:6px;font-size:12px;color:var(--text-muted)">🌍 ${esc(d.geo.country || '?')}${d.geo.city ? ' · ' + esc(d.geo.city) : ''}${d.geo.as ? ' · ' + esc(d.geo.as) : ''}</div>`
+      : '';
     out.innerHTML = d.blacklisted
-      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${parentNote}</div>`
-      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}</div>`;
+      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${parentNote}${geoNote}</div>`
+      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${geoNote}</div>`;
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }
