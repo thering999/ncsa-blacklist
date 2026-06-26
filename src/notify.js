@@ -3,10 +3,15 @@ const crypto = require('crypto');
 async function notifyWebhook(url, body, headers) {
   const secret = process.env.WEBHOOK_SECRET;
   if (secret) headers['X-Signature'] = 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
-  try {
-    await fetch(url, { method: 'POST', headers, body });
-  } catch (err) {
-    console.error('webhook notify failed:', err.message);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(10_000) });
+      if (res.ok) return;
+      throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      if (attempt === 3) { console.error('webhook notify failed after 3 attempts:', err.message); return; }
+      await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
+    }
   }
 }
 
@@ -114,4 +119,17 @@ async function notifyStale(staleFeeds) {
   if (process.env.SMTP_HOST && process.env.SMTP_TO) await notifyEmail('[NCSA] Feed stale alert', text);
 }
 
-module.exports = { notify, notifyStale };
+async function notifySummary(totals) {
+  const entries = Object.entries(totals);
+  if (!entries.length) return;
+  const lines = entries.map(([type, s]) =>
+    `${type}: ${s.syncs} syncs, +${s.added} added, -${s.removed} removed, total ${s.latest_total}`
+  );
+  const text = `NCSA blocklist weekly summary\n${lines.join('\n')}`;
+  const webhookUrl = process.env.WEBHOOK_URL;
+  if (webhookUrl) await notifyWebhook(webhookUrl, JSON.stringify({ text }), { 'Content-Type': 'application/json' });
+  if (process.env.LINE_NOTIFY_TOKEN) await notifyLine(text);
+  if (process.env.SMTP_HOST && process.env.SMTP_TO) await notifyEmail('[NCSA] Weekly summary', text);
+}
+
+module.exports = { notify, notifyStale, notifySummary };

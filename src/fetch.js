@@ -58,6 +58,20 @@ function appendHistory(entry) {
 
 const ANOMALY_REMOVED_RATIO = 0.5;
 const ANOMALY_MIN_PREV = 10;
+const FETCH_TIMEOUT_MS = 30_000;
+const FETCH_MAX_RETRIES = 3;
+
+async function fetchWithRetry(url, options, attempt = 1) {
+  try {
+    return await fetch(url, { ...options, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch (err) {
+    if (attempt >= FETCH_MAX_RETRIES) throw err;
+    const delay = 2 ** attempt * 1000; // 2s, 4s
+    console.warn(`fetch attempt ${attempt} failed (${err.message}), retry in ${delay}ms`);
+    await new Promise((r) => setTimeout(r, delay));
+    return fetchWithRetry(url, options, attempt + 1);
+  }
+}
 
 async function fetchFeed(type, url) {
   const etagState = loadEtagState();
@@ -65,7 +79,7 @@ async function fetchFeed(type, url) {
   if (etagState[type]?.etag) headers['If-None-Match'] = etagState[type].etag;
   else if (etagState[type]?.lastModified) headers['If-Modified-Since'] = etagState[type].lastModified;
 
-  const res = await fetch(url, { headers });
+  const res = await fetchWithRetry(url, { headers });
 
   if (res.status === 304) {
     return { type, total: null, added: 0, removed: 0, unchanged: true, cached: true };

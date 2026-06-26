@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
 const { fetchAll, FEEDS, DATA_DIR } = require('./fetch');
-const { notifyStale } = require('./notify');
+const { notifyStale, notifySummary } = require('./notify');
 
 cron.schedule('0 1 * * *', () => {
   console.log('running daily NCSA feed sync...');
@@ -56,4 +56,28 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
-console.log('scheduler started — daily sync at 01:00, stale check every hour');
+// Weekly summary every Monday 08:00
+const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
+cron.schedule('0 8 * * 1', async () => {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 3600_000;
+    const lines = fs.existsSync(HISTORY_FILE)
+      ? fs.readFileSync(HISTORY_FILE, 'utf8').trim().split('\n').filter(Boolean)
+      : [];
+    const week = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((e) => e && new Date(e.date).getTime() >= cutoff);
+    const totals = {};
+    for (const e of week) {
+      if (!totals[e.type]) totals[e.type] = { added: 0, removed: 0, syncs: 0, latest_total: 0 };
+      totals[e.type].added += e.added || 0;
+      totals[e.type].removed += e.removed || 0;
+      totals[e.type].syncs += 1;
+      totals[e.type].latest_total = e.total || totals[e.type].latest_total;
+    }
+    await notifySummary(totals);
+  } catch (err) {
+    console.error('weekly summary error:', err.message);
+  }
+});
+
+console.log('scheduler started — daily sync at 01:00, stale check every hour, weekly summary Mon 08:00');

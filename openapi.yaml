@@ -1,0 +1,591 @@
+openapi: 3.1.0
+info:
+  title: NCSA Blacklist API
+  description: Sync and lookup service for NCSA Thailand public threat blocklists (IP/domain/hash)
+  version: "0.2.0"
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+
+tags:
+  - name: lookup
+    description: Blacklist lookups
+  - name: analysis
+    description: Feed analysis and statistics
+  - name: management
+    description: Watchlist, allowlist, reload
+  - name: export
+    description: Data export
+  - name: admin
+    description: Admin-only endpoints (require ADMIN_TOKEN)
+  - name: observability
+    description: Health, metrics, history
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    GeoInfo:
+      type: object
+      properties:
+        country: { type: string, example: TH }
+        region: { type: string }
+        city: { type: string }
+        ll: { type: array, items: { type: number } }
+        as: { type: string, example: "AS7470 TRUE INTERNET Co.,Ltd." }
+    LookupResult:
+      type: object
+      properties:
+        type: { type: string, enum: [ip, domain, hash] }
+        value: { type: string }
+        blacklisted: { type: boolean }
+        allowlisted: { type: boolean }
+        matched: { type: string }
+        matchType: { type: string, enum: [exact, parent] }
+        geo: { $ref: "#/components/schemas/GeoInfo" }
+        rdns: { type: string, nullable: true }
+        risk: { type: integer, minimum: 0, maximum: 100 }
+        feeds: { type: array, items: { type: string } }
+    WatchlistEntry:
+      type: object
+      required: [type, value]
+      properties:
+        type: { type: string, enum: [ip, domain, hash] }
+        value: { type: string }
+        note: { type: string }
+        added_at: { type: string, format: date-time }
+
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      tags: [observability]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  sync_last_run: { type: string, format: date-time, nullable: true }
+                  sync_next_run: { type: string, format: date-time, nullable: true }
+
+  /stats:
+    get:
+      summary: Feed entry counts and metadata
+      tags: [observability]
+      responses:
+        "200":
+          description: Per-feed stats
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    total: { type: integer }
+                    generated_at: { type: string }
+                    sha256: { type: string }
+                    integrity_ok: { type: boolean, nullable: true }
+
+  /info:
+    get:
+      summary: Feed publisher metadata
+      tags: [observability]
+      responses:
+        "200":
+          description: Publisher info per feed
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      tags: [observability]
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          description: METRICS_TOKEN required
+
+  /history:
+    get:
+      summary: Sync history (last 1000 records)
+      tags: [observability]
+      responses:
+        "200":
+          description: Array of sync records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date: { type: string, format: date-time }
+                    type: { type: string }
+                    total: { type: integer }
+                    added: { type: integer }
+                    removed: { type: integer }
+
+  /check/auto/{value}:
+    get:
+      summary: Auto-detect type and check blacklist
+      tags: [lookup]
+      parameters:
+        - name: value
+          in: path
+          required: true
+          schema: { type: string }
+          description: IPv4/IPv6 address, domain, or SHA256 hash
+      responses:
+        "200":
+          description: Lookup result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LookupResult" }
+        "503":
+          description: Data not loaded
+
+  /check/{type}/{value}:
+    get:
+      summary: Check blacklist by explicit type
+      tags: [lookup]
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema: { type: string, enum: [ip, domain, hash] }
+        - name: value
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lookup result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LookupResult" }
+        "404":
+          description: Unknown type
+
+  /check/bulk:
+    post:
+      summary: Bulk lookup (up to 10,000 values)
+      tags: [lookup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values]
+              properties:
+                type:
+                  type: string
+                  enum: [ip, domain, hash, auto]
+                  default: auto
+                values:
+                  type: array
+                  items: { type: string }
+                  maxItems: 10000
+      responses:
+        "200":
+          description: Bulk results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  blacklisted_count: { type: integer }
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/LookupResult" }
+        "400":
+          description: Too many values or missing input
+
+  /check/cidr:
+    post:
+      summary: Find blacklisted IPs within a CIDR range (IPv4, max /16)
+      tags: [lookup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cidr]
+              properties:
+                cidr: { type: string, example: "1.2.3.0/24" }
+      responses:
+        "200":
+          description: Hits within range
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cidr: { type: string }
+                  hits_count: { type: integer }
+                  hits:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ip: { type: string }
+                        geo: { $ref: "#/components/schemas/GeoInfo" }
+        "400":
+          description: Invalid or too-large CIDR
+
+  /scan:
+    post:
+      summary: Scan log text for blacklisted IPs
+      tags: [lookup]
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              description: Raw log text (max 2MB)
+      responses:
+        "200":
+          description: Scan result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hits: { type: array, items: { type: string } }
+                  hits_with_context:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ip: { type: string }
+                        lines: { type: array, items: { type: string } }
+
+  /analyze/countries:
+    get:
+      summary: IP count by country
+      tags: [analysis]
+      responses:
+        "200":
+          description: Country breakdown
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_ips: { type: integer }
+                  total_countries: { type: integer }
+                  top:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        country: { type: string }
+                        count: { type: integer }
+                        pct: { type: number }
+
+  /analyze/networks:
+    get:
+      summary: Top /24 networks by IP count
+      tags: [analysis]
+      parameters:
+        - name: country
+          in: query
+          schema: { type: string }
+          description: Filter by 2-letter country code
+      responses:
+        "200":
+          description: Network breakdown
+
+  /analyze/asns:
+    get:
+      summary: Top ASNs by IP count
+      tags: [analysis]
+      responses:
+        "200":
+          description: ASN breakdown
+
+  /search:
+    get:
+      summary: Prefix search across blacklisted values
+      tags: [lookup]
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema: { type: string, enum: [ip, domain, hash] }
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 3 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 200 }
+        - name: page
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Matching values
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results: { type: array, items: { type: string } }
+                  total: { type: integer }
+                  page: { type: integer }
+        "400":
+          description: Query too short
+
+  /watch:
+    get:
+      summary: List watchlist entries
+      tags: [management]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Watchlist array
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WatchlistEntry" }
+    post:
+      summary: Add to watchlist
+      tags: [management]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, value]
+              properties:
+                type: { type: string, enum: [ip, domain, hash] }
+                value: { type: string }
+                note: { type: string }
+      responses:
+        "200":
+          description: Added
+        "400":
+          description: Validation error
+    delete:
+      summary: Remove from watchlist
+      tags: [management]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, value]
+              properties:
+                type: { type: string }
+                value: { type: string }
+      responses:
+        "200":
+          description: Removed
+
+  /allowlist:
+    get:
+      summary: List allowlist entries
+      tags: [management]
+      responses:
+        "200":
+          description: Allowlist array
+    post:
+      summary: Add to allowlist (overrides blacklist)
+      tags: [management]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, value]
+              properties:
+                type: { type: string, enum: [ip, domain, hash] }
+                value: { type: string }
+      responses:
+        "200":
+          description: Added
+        "400":
+          description: Validation error
+    delete:
+      summary: Remove from allowlist
+      tags: [management]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, value]
+              properties:
+                type: { type: string }
+                value: { type: string }
+      responses:
+        "200":
+          description: Removed
+
+  /reload:
+    post:
+      summary: Reload feed data from disk
+      tags: [management]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Reloaded
+
+  /recent:
+    get:
+      summary: Recent feed diffs (additions/removals per sync)
+      tags: [observability]
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, enum: [ip, domain, hash] }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+      responses:
+        "200":
+          description: Recent sync diffs
+
+  /admin/health:
+    get:
+      summary: Admin health details
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Detailed health info
+        "401":
+          description: Unauthorized
+
+  /admin/feed-health:
+    get:
+      summary: Per-feed file health (age, size, status)
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Feed health map
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feeds:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        status: { type: string, enum: [ok, stale, missing] }
+                        entries: { type: integer }
+                        file_age_seconds: { type: number }
+                        file_size_kb: { type: number }
+                        last_modified: { type: string }
+                        url: { type: string }
+
+  /admin/summary:
+    get:
+      summary: Sync summary stats
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 7 }
+        - name: send
+          in: query
+          schema: { type: boolean }
+          description: If true, also send via configured notification channels
+      responses:
+        "200":
+          description: Summary stats
+
+  /admin/webhook-test:
+    post:
+      summary: Send a test webhook notification
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Sent
+
+  /export/iptables:
+    get:
+      summary: Export as iptables DROP rules
+      tags: [export]
+      responses:
+        "200":
+          description: Shell script
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /export/dnsmasq:
+    get:
+      summary: Export as dnsmasq domain blocklist
+      tags: [export]
+      responses:
+        "200":
+          description: dnsmasq config
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /export/wazuh-cdb:
+    get:
+      summary: Export as Wazuh CDB list
+      tags: [export]
+      responses:
+        "200":
+          description: Wazuh CDB format
+          content:
+            text/plain:
+              schema:
+                type: string

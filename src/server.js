@@ -14,7 +14,10 @@ const VALID_TYPES = new Set(Object.keys(FEEDS));
 
 const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
 
+const helmet = require('helmet');
 const app = express();
+
+app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled — API-only, no HTML served by Express
 
 // Request ID — must be first so all routes including /healthz get it
 app.use((req, res, next) => {
@@ -85,10 +88,17 @@ app.get('/healthz', (req, res) => {
   res.json({ ok: true, sync_last_run, sync_next_run });
 });
 
+const LOG_JSON = process.env.LOG_FORMAT === 'json';
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms rid=${res.get('X-Request-Id') || '-'}`);
+    const rid = res.get('X-Request-Id') || '-';
+    const ms = Date.now() - start;
+    if (LOG_JSON) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), method: req.method, path: req.originalUrl, status: res.statusCode, ms, rid }));
+    } else {
+      console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms rid=${rid}`);
+    }
   });
   next();
 });
@@ -153,6 +163,16 @@ function parseCIDR(cidr) {
 const adminTokens = parseTokens(process.env);
 if (Object.keys(adminTokens).length === 0) {
   console.warn('no ADMIN_TOKEN/ADMIN_TOKENS set — /watch and /reload are unauthenticated; do not expose this publicly as-is');
+}
+
+// ADMIN_ALLOWED_IPS=10.0.0.0/8,192.168.0.0/16 — restricts /admin/* to specific IP ranges
+const _adminAllowedRanges = (process.env.ADMIN_ALLOWED_IPS || '').split(',').map(s => s.trim()).filter(Boolean).map(parseCIDR).filter(Boolean);
+function requireAdminIp(req, res, next) {
+  if (!_adminAllowedRanges.length) return next();
+  const clientIp = req.ip || '';
+  const n = ipToInt(clientIp);
+  if (_adminAllowedRanges.some(r => n >= r.start && n <= r.end)) return next();
+  return res.status(403).json({ error: 'forbidden: IP not in ADMIN_ALLOWED_IPS' });
 }
 
 // Startup env validation
@@ -415,6 +435,9 @@ app.post('/reload', requireAdmin, (req, res) => {
   console.log(`reload by admin "${req.adminName || 'default'}"`);
   res.json({ reloaded: true });
 });
+
+// IP restriction for all /admin/* routes (no-op if ADMIN_ALLOWED_IPS unset)
+app.use('/admin', requireAdminIp);
 
 app.get('/admin/health', requireAdmin, (req, res) => {
   const mem = process.memoryUsage();
