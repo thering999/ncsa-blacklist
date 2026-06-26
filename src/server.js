@@ -66,12 +66,54 @@ if (Object.keys(adminTokens).length === 0) {
 }
 const requireAdmin = makeRequireAdmin(adminTokens);
 
+function expiresAt(generatedAt, validDays) {
+  if (!generatedAt || !validDays) return null;
+  const d = new Date(generatedAt);
+  d.setDate(d.getDate() + validDays);
+  return d.toISOString().slice(0, 10);
+}
+
 app.get('/stats', (req, res) => {
   const stats = {};
   for (const [type, d] of Object.entries(store)) {
-    stats[type] = d ? { total: d.meta.total, generated_at: d.meta.generated_at } : null;
+    if (!d) { stats[type] = null; continue; }
+    const m = d.meta;
+    stats[type] = {
+      total: m.total,
+      generated_at: m.generated_at,
+      valid_for_days: m.valid_for_days ?? null,
+      expires_at: expiresAt(m.generated_at, m.valid_for_days),
+      tlp: m.tlp?.[0] ?? null,
+      sha256: m.file?.sha256 ?? null,
+      feed: m.feed ?? null,
+    };
   }
   res.json(stats);
+});
+
+app.get('/info', (req, res) => {
+  const info = {};
+  for (const [type, d] of Object.entries(store)) {
+    if (!d) { info[type] = null; continue; }
+    const m = d.meta;
+    info[type] = {
+      feed: m.feed,
+      description: m.description,
+      publisher: m.publisher,
+      country: m.country,
+      license: m.license,
+      contact: m.contact,
+      homepage: m.homepage,
+      tlp: m.tlp,
+      source: m.source,
+      generated_at: m.generated_at,
+      valid_for_days: m.valid_for_days,
+      expires_at: expiresAt(m.generated_at, m.valid_for_days),
+      total: m.total,
+      sha256: m.file?.sha256,
+    };
+  }
+  res.json(info);
 });
 
 app.get('/check/:type/:value', (req, res) => {

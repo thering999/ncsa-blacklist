@@ -27,11 +27,21 @@ async function fetchFeed(type, url) {
   const json = await res.json();
   if (!Array.isArray(json.data)) throw new Error(`${type} fetch returned malformed payload (no data array)`);
 
-  const file = path.join(DATA_DIR, `${type}.json`);
+  const filePath = path.join(DATA_DIR, `${type}.json`);
   let prevValues = [];
-  if (fs.existsSync(file)) {
-    prevValues = JSON.parse(fs.readFileSync(file, 'utf8')).data;
+  let prevSha256 = null;
+  if (fs.existsSync(filePath)) {
+    const prev = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    prevValues = prev.data;
+    prevSha256 = prev.file?.sha256 ?? null;
   }
+
+  // Skip write + history when upstream data is identical (same file SHA256)
+  const newSha256 = json.file?.sha256 ?? null;
+  if (prevSha256 && newSha256 && prevSha256 === newSha256) {
+    return { type, total: json.total, added: 0, removed: 0, generated_at: json.generated_at, unchanged: true, watchHits: [] };
+  }
+
   const { added, removed } = diffSets(prevValues, json.data);
 
   if (prevValues.length >= ANOMALY_MIN_PREV && removed.length / prevValues.length > ANOMALY_REMOVED_RATIO) {
@@ -40,7 +50,7 @@ async function fetchFeed(type, url) {
   }
 
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(json));
+  fs.writeFileSync(filePath, JSON.stringify(json));
 
   const watched = watchlist.load().filter((w) => w.type === type);
   const watchHits = watched.filter((w) => added.includes(w.value)).map((w) => w.value);
@@ -51,6 +61,7 @@ async function fetchFeed(type, url) {
     added: added.length,
     removed: removed.length,
     generated_at: json.generated_at,
+    sha256: newSha256,
   };
   appendHistory({ date: new Date().toISOString(), ...entry });
 
