@@ -101,6 +101,38 @@ app.get('/history', (req, res) => {
   res.json(entries.slice(-30));
 });
 
+app.get('/export/iptables', (req, res) => {
+  const d = store.ip;
+  if (!d) return res.status(503).send('# ip data not loaded — run fetch first\n');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="ncsa-iptables.sh"');
+  const lines = ['#!/bin/sh', `# generated from NCSA ip blocklist — ${d.meta.generated_at}`,
+    'ipset create ncsa-blacklist hash:ip -exist'];
+  for (const ip of d.set) lines.push(`ipset add ncsa-blacklist ${ip} -exist`);
+  lines.push('iptables -I INPUT -m set --match-set ncsa-blacklist src -j DROP');
+  res.send(lines.join('\n') + '\n');
+});
+
+app.get('/export/dnsmasq', (req, res) => {
+  const d = store.domain;
+  if (!d) return res.status(503).send('# domain data not loaded — run fetch first\n');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="ncsa-dnsmasq.conf"');
+  const lines = [`# generated from NCSA domain blocklist — ${d.meta.generated_at}`];
+  for (const domain of d.set) lines.push(`address=/${domain}/0.0.0.0`);
+  res.send(lines.join('\n') + '\n');
+});
+
+app.get('/export/wazuh', (req, res) => {
+  const d = store.hash;
+  if (!d) return res.status(503).send('# hash data not loaded — run fetch first\n');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="ncsa-wazuh.cdb"');
+  const lines = [];
+  for (const hash of d.set) lines.push(`${hash.toLowerCase()}:ncsa-blacklist`);
+  res.send(lines.join('\n') + '\n');
+});
+
 app.get('/watch', (req, res) => {
   res.json(watchlist.load());
 });

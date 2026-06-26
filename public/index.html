@@ -2,164 +2,563 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<title>NCSA Blacklist Checker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NCSA Blacklist</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #222; }
-  h1 { font-size: 1.4rem; }
-  section { margin-bottom: 32px; }
-  input, textarea, select, button { font-size: 1rem; padding: 8px; }
-  input, textarea { width: 100%; box-sizing: border-box; }
-  button { cursor: pointer; margin-top: 8px; }
-  .result { margin-top: 12px; padding: 12px; border-radius: 6px; }
-  .hit { background: #fdecea; color: #b3261e; }
-  .clean { background: #e6f4ea; color: #1e7a34; }
-  #stats { font-size: 0.9rem; color: #555; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  td, th { text-align: left; padding: 4px 8px; border-bottom: 1px solid #ddd; font-size: 0.9rem; }
-  #historyChart { background: #fafafa; border: 1px solid #eee; border-radius: 4px; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --border: #e0e4e8;
+  --text: #1a1d23;
+  --text-muted: #6b7280;
+  --primary: #1a56db;
+  --primary-hover: #1449c4;
+  --danger: #e02424;
+  --danger-bg: #fef2f2;
+  --success: #057a55;
+  --success-bg: #f0fdf4;
+  --warning: #b45309;
+  --warning-bg: #fffbeb;
+  --header-bg: #111827;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.1);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.15);
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
+
+/* Header */
+header { background: var(--header-bg); color: #f9fafb; padding: 0 20px; height: 56px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.header-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1rem; }
+.header-badge { background: #dc2626; color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; letter-spacing: .05em; }
+.header-spacer { flex: 1; }
+#headerUpdated { font-size: 12px; color: #9ca3af; }
+#settingsBtn { background: none; border: 1px solid #374151; color: #d1d5db; width: 34px; height: 34px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: background .15s; }
+#settingsBtn:hover { background: #1f2937; }
+
+/* Settings panel */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; }
+.modal-overlay.open { display: block; }
+.settings-panel { background: var(--surface); width: 360px; max-height: calc(100vh - 56px); overflow-y: auto; padding: 24px; box-shadow: var(--shadow-md); position: absolute; top: 56px; right: 0; }
+.settings-panel h3 { margin-bottom: 16px; font-size: .95rem; }
+.field-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; margin-top: 12px; }
+.settings-panel input[type=password] { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 14px; font-family: monospace; }
+.settings-panel input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+.settings-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.settings-note { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+
+/* Buttons */
+.btn { border: none; border-radius: 6px; padding: 8px 16px; font-size: 14px; cursor: pointer; transition: background .15s; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-ghost { background: none; border: 1px solid var(--border); color: var(--text); margin-left: 6px; }
+.btn-ghost:hover { background: var(--bg); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-sm { font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; color: var(--text-muted); transition: background .15s; }
+.btn-sm:hover { background: var(--bg); color: var(--text); }
+
+/* Layout */
+main { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+
+/* Stats */
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 12px; }
+.stat-icon { width: 42px; height: 42px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.stat-icon.ip { background: #eff6ff; }
+.stat-icon.domain { background: #f5f3ff; }
+.stat-icon.hash { background: #fff7ed; }
+.stat-count { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+.stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+.stat-updated { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+
+/* Cards */
+.card { background: var(--surface); border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow); margin-bottom: 14px; }
+.card h2 { font-size: .9rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; color: #374151; }
+
+/* Form rows */
+.form-row { display: flex; gap: 8px; align-items: stretch; }
+.form-row select, .form-row input { font-size: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.form-row select:focus, .form-row input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+.form-row select { flex-shrink: 0; }
+.form-row input { flex: 1; min-width: 0; }
+.form-row button { font-size: 14px; padding: 8px 14px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; flex-shrink: 0; white-space: nowrap; transition: background .15s; }
+.form-row button:hover { background: var(--primary-hover); }
+.form-row button:disabled { background: #93c5fd; cursor: not-allowed; }
+
+textarea.log-input { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: monospace; resize: vertical; background: #fafafa; color: var(--text); }
+textarea.log-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+/* Results */
+.result { margin-top: 10px; padding: 11px 14px; border-radius: 6px; font-size: 14px; }
+.result.hit { background: var(--danger-bg); color: var(--danger); border-left: 3px solid var(--danger); }
+.result.clean { background: var(--success-bg); color: var(--success); border-left: 3px solid var(--success); }
+.result.info { background: #f0f9ff; color: #075985; border-left: 3px solid #0284c7; }
+.result.warn { background: var(--warning-bg); color: var(--warning); border-left: 3px solid #d97706; }
+
+/* Tables */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.data-table th { text-align: left; padding: 6px 10px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 2px solid var(--border); }
+.data-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-family: monospace; }
+.data-table tr:last-child td { border-bottom: none; }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: sans-serif; }
+.badge.hit { background: var(--danger-bg); color: var(--danger); }
+.badge.clean { background: var(--success-bg); color: var(--success); }
+
+.result-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Auth gate */
+.auth-gate { padding: 12px 14px; background: var(--warning-bg); border: 1px dashed #d97706; border-radius: 6px; font-size: 13px; color: var(--warning); text-align: center; margin-bottom: 10px; }
+.auth-gate a { color: var(--warning); font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+/* Export grid */
+.export-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 4px; }
+.export-btn { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 14px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); text-decoration: none; transition: border-color .15s, background .15s; font-size: 13px; font-weight: 500; }
+.export-btn:hover { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+.export-icon { font-size: 22px; }
+.export-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.export-btn:hover .export-sub { color: #6b9de8; }
+
+/* Chart */
+#historyChart { width: 100%; height: 190px; overflow: visible; display: block; }
+
+/* Tabs */
+.tab-row { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.tab-btn { background: none; border: none; padding: 7px 14px; font-size: 13px; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+/* Spinner */
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #e0e4e8; border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .export-grid { grid-template-columns: repeat(2, 1fr); }
+  main { padding: 14px 10px; }
+  .card { padding: 14px; }
+  .settings-panel { width: 100%; }
+}
 </style>
 </head>
 <body>
-  <h1>NCSA Blacklist Checker</h1>
-  <p id="stats">loading stats...</p>
 
-  <section>
-    <h2>ตรวจสอบรายการเดียว</h2>
-    <select id="type">
-      <option value="ip">IP</option>
-      <option value="domain">Domain</option>
-      <option value="hash">Hash (SHA256)</option>
-    </select>
-    <input id="value" placeholder="เช่น 1.2.3.4 / example.com / hash...">
-    <button onclick="checkOne()">ตรวจสอบ</button>
+<header>
+  <div class="header-logo">
+    <span>🛡️ NCSA Blacklist</span>
+    <span class="header-badge">LIVE</span>
+  </div>
+  <div class="header-spacer"></div>
+  <span id="headerUpdated"></span>
+  <button id="settingsBtn" title="Settings / Admin">⚙</button>
+</header>
+
+<div class="modal-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+  <div class="settings-panel">
+    <h3>⚙ Settings &amp; Admin</h3>
+    <div class="field-label">Admin Token</div>
+    <input type="password" id="tokenInput" placeholder="Bearer token (ADMIN_TOKEN)" autocomplete="off">
+    <div style="margin-top:8px">
+      <button class="btn btn-primary" onclick="saveToken()">บันทึก</button>
+      <button class="btn btn-ghost" onclick="closeSettings()">ปิด</button>
+    </div>
+    <hr class="settings-divider">
+    <div class="field-label">Data</div>
+    <p class="settings-note">โหลดข้อมูลใหม่จากไฟล์ที่ดึงไว้ (ต้องใช้ Admin Token)</p>
+    <button class="btn btn-danger" onclick="reloadData()">🔄 Reload Data</button>
+    <div id="reloadResult" style="margin-top:8px;font-size:13px"></div>
+  </div>
+</div>
+
+<main>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon ip">🌐</div>
+      <div>
+        <div class="stat-count" id="statIp">—</div>
+        <div class="stat-label">IP Addresses</div>
+        <div class="stat-updated" id="statIpDate"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon domain">🔗</div>
+      <div>
+        <div class="stat-count" id="statDomain">—</div>
+        <div class="stat-label">Domains</div>
+        <div class="stat-updated" id="statDomainDate"></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon hash">🔐</div>
+      <div>
+        <div class="stat-count" id="statHash">—</div>
+        <div class="stat-label">File Hashes</div>
+        <div class="stat-updated" id="statHashDate"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔍 ตรวจสอบรายการเดียว</h2>
+    <div class="form-row">
+      <select id="type">
+        <option value="ip">IP</option>
+        <option value="domain">Domain</option>
+        <option value="hash">Hash (SHA256)</option>
+      </select>
+      <input id="value" placeholder="เช่น 1.2.3.4 / evil.com / abc123..." onkeydown="if(event.key==='Enter')checkOne()">
+      <button onclick="checkOne()" id="checkBtn">ตรวจสอบ</button>
+    </div>
     <div id="checkResult"></div>
-  </section>
+  </div>
 
-  <section>
-    <h2>สแกน log (วาง access log / firewall log)</h2>
-    <textarea id="logText" rows="8" placeholder="วาง log ที่มี IP ลงตรงนี้..."></textarea>
-    <button onclick="scanLog()">สแกน</button>
+  <div class="card">
+    <h2>📋 ตรวจสอบหลายรายการ</h2>
+    <div class="form-row" style="margin-bottom:8px">
+      <select id="bulkType">
+        <option value="ip">IP</option>
+        <option value="domain">Domain</option>
+        <option value="hash">Hash (SHA256)</option>
+      </select>
+      <button onclick="bulkCheck()" id="bulkBtn">ตรวจสอบทั้งหมด</button>
+    </div>
+    <textarea class="log-input" id="bulkInput" rows="5" placeholder="วาง 1 ค่าต่อบรรทัด&#10;1.2.3.4&#10;5.6.7.8&#10;evil.com"></textarea>
+    <div id="bulkResult"></div>
+  </div>
+
+  <div class="card">
+    <h2>📂 สแกน Log</h2>
+    <textarea class="log-input" id="logText" rows="7" placeholder="วาง access log / firewall log ที่มี IP ลงตรงนี้..."></textarea>
+    <div class="form-row" style="margin-top:8px">
+      <button onclick="scanLog()" id="scanBtn">สแกน</button>
+    </div>
     <div id="scanResult"></div>
-  </section>
+  </div>
 
-  <section>
-    <h2>Watch list (แจ้งเตือนถ้าเข้า blacklist)</h2>
-    <select id="watchType">
-      <option value="ip">IP</option>
-      <option value="domain">Domain</option>
-      <option value="hash">Hash (SHA256)</option>
-    </select>
-    <input id="watchValue" placeholder="ค่าที่จะเฝ้าดู">
-    <button onclick="addWatch()">เพิ่ม</button>
-    <table id="watchTable"></table>
-  </section>
+  <div class="card">
+    <h2>⬇️ Export Blocklist</h2>
+    <div class="export-grid">
+      <a class="export-btn" href="/export/iptables" download="ncsa-iptables.sh">
+        <span class="export-icon">🔥</span>
+        <strong>iptables</strong>
+        <span class="export-sub">ipset shell script</span>
+      </a>
+      <a class="export-btn" href="/export/dnsmasq" download="ncsa-dnsmasq.conf">
+        <span class="export-icon">🌍</span>
+        <strong>dnsmasq</strong>
+        <span class="export-sub">DNS block config</span>
+      </a>
+      <a class="export-btn" href="/export/wazuh" download="ncsa-wazuh.cdb">
+        <span class="export-icon">🛡️</span>
+        <strong>Wazuh CDB</strong>
+        <span class="export-sub">SIEM hash list</span>
+      </a>
+    </div>
+  </div>
 
-  <section>
-    <h2>แนวโน้ม (30 รอบล่าสุด)</h2>
-    <select id="historyType" onchange="loadHistory()">
-      <option value="ip">IP</option>
-      <option value="domain">Domain</option>
-      <option value="hash">Hash</option>
-    </select>
-    <svg id="historyChart" width="100%" height="160" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
-    <table id="historyTable"></table>
-  </section>
+  <div class="card">
+    <h2>👁️ Watch List</h2>
+    <div id="watchAuthGate"></div>
+    <div id="watchAddForm" style="display:none">
+      <div class="form-row" style="margin-bottom:10px">
+        <select id="watchType">
+          <option value="ip">IP</option>
+          <option value="domain">Domain</option>
+          <option value="hash">Hash (SHA256)</option>
+        </select>
+        <input id="watchValue" placeholder="ค่าที่จะเฝ้าดู" onkeydown="if(event.key==='Enter')addWatch()">
+        <button onclick="addWatch()">เพิ่ม</button>
+      </div>
+    </div>
+    <table class="data-table" id="watchTable"></table>
+  </div>
+
+  <div class="card">
+    <h2>📈 แนวโน้ม (30 รอบล่าสุด)</h2>
+    <div class="tab-row">
+      <button class="tab-btn active" onclick="switchHistory('ip',this)">IP</button>
+      <button class="tab-btn" onclick="switchHistory('domain',this)">Domain</button>
+      <button class="tab-btn" onclick="switchHistory('hash',this)">Hash</button>
+    </div>
+    <svg id="historyChart" viewBox="0 0 800 190" preserveAspectRatio="none"></svg>
+    <table class="data-table" id="historyTable" style="margin-top:8px"></table>
+  </div>
+</main>
 
 <script>
-async function loadStats() {
-  const res = await fetch('/stats');
-  const data = await res.json();
-  const parts = Object.entries(data).map(([type, d]) =>
-    d ? `${type}: ${d.total.toLocaleString()} (updated ${d.generated_at})` : `${type}: no data`
-  );
-  document.getElementById('stats').textContent = parts.join(' | ');
+let adminToken = localStorage.getItem('ncsa_admin_token') || '';
+
+// --- Settings ---
+document.getElementById('settingsBtn').addEventListener('click', openSettings);
+
+function openSettings() {
+  document.getElementById('tokenInput').value = adminToken;
+  document.getElementById('settingsOverlay').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+}
+function saveToken() {
+  adminToken = document.getElementById('tokenInput').value.trim();
+  if (adminToken) localStorage.setItem('ncsa_admin_token', adminToken);
+  else localStorage.removeItem('ncsa_admin_token');
+  closeSettings();
+  renderWatchAuthGate();
+  loadWatch();
 }
 
+function authHeaders(extra) {
+  const h = Object.assign({ 'Content-Type': 'application/json' }, extra);
+  if (adminToken) h['Authorization'] = `Bearer ${adminToken}`;
+  return h;
+}
+
+// --- Stats ---
+async function loadStats() {
+  try {
+    const data = await fetch('/stats').then(r => r.json());
+    const fmt = s => s ? s.slice(0, 10) : '';
+    document.getElementById('statIp').textContent = data.ip ? data.ip.total.toLocaleString() : 'N/A';
+    document.getElementById('statIpDate').textContent = data.ip ? fmt(data.ip.generated_at) : '';
+    document.getElementById('statDomain').textContent = data.domain ? data.domain.total.toLocaleString() : 'N/A';
+    document.getElementById('statDomainDate').textContent = data.domain ? fmt(data.domain.generated_at) : '';
+    document.getElementById('statHash').textContent = data.hash ? data.hash.total.toLocaleString() : 'N/A';
+    document.getElementById('statHashDate').textContent = data.hash ? fmt(data.hash.generated_at) : '';
+    const latest = [data.ip, data.domain, data.hash].filter(Boolean).map(d => d.generated_at).sort().pop();
+    if (latest) document.getElementById('headerUpdated').textContent = 'Updated: ' + latest.slice(0, 10);
+  } catch (_) {}
+}
+
+// --- Single lookup ---
 async function checkOne() {
   const type = document.getElementById('type').value;
   const value = document.getElementById('value').value.trim();
   const out = document.getElementById('checkResult');
   if (!value) return;
-  const res = await fetch(`/check/${type}/${encodeURIComponent(value)}`);
-  const data = await res.json();
-  out.className = 'result ' + (data.blacklisted ? 'hit' : 'clean');
-  out.textContent = data.blacklisted
-    ? `อยู่ใน blacklist: ${value}`
-    : `ไม่พบใน blacklist: ${value}`;
+  const btn = document.getElementById('checkBtn');
+  btn.disabled = true;
+  out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังตรวจสอบ...</div>';
+  try {
+    const res = await fetch(`/check/${type}/${encodeURIComponent(value)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.statusText);
+    out.innerHTML = d.blacklisted
+      ? `<div class="result hit">⚠️ <strong>พบใน blacklist:</strong> ${esc(value)}</div>`
+      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist:</strong> ${esc(value)}</div>`;
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
 }
 
+// --- Bulk lookup ---
+async function bulkCheck() {
+  const type = document.getElementById('bulkType').value;
+  const lines = document.getElementById('bulkInput').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const out = document.getElementById('bulkResult');
+  if (!lines.length) return;
+  const btn = document.getElementById('bulkBtn');
+  btn.disabled = true;
+  out.innerHTML = `<div class="result info"><span class="spinner"></span>กำลังตรวจสอบ ${lines.length} รายการ...</div>`;
+  try {
+    const results = await Promise.all(lines.map(async v => {
+      const res = await fetch(`/check/${type}/${encodeURIComponent(v)}`);
+      const d = await res.json();
+      return { value: v, hit: !!d.blacklisted };
+    }));
+    window._bulkResults = results;
+    const hits = results.filter(r => r.hit).length;
+    const summary = hits > 0
+      ? `<div class="result hit">⚠️ พบ <strong>${hits}</strong> รายการอันตราย จาก ${results.length} รายการ</div>`
+      : `<div class="result clean">✅ ไม่พบรายการอันตราย — ตรวจ ${results.length} รายการ</div>`;
+    const rows = results.map(r =>
+      `<tr><td>${esc(r.value)}</td><td><span class="badge ${r.hit ? 'hit' : 'clean'}">${r.hit ? 'BLACKLISTED' : 'CLEAN'}</span></td></tr>`
+    ).join('');
+    out.innerHTML = summary +
+      (hits ? `<div class="result-actions"><button class="btn-sm" onclick="copyHits()">📋 Copy hits</button></div>` : '') +
+      `<table class="data-table"><thead><tr><th>ค่า</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
+}
+
+function copyHits() {
+  const text = (window._bulkResults || []).filter(r => r.hit).map(r => r.value).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => { btn.textContent = '📋 Copy hits'; }, 1500);
+  });
+}
+
+// --- Log scan ---
 async function scanLog() {
   const text = document.getElementById('logText').value;
   const out = document.getElementById('scanResult');
   if (!text.trim()) return;
-  const res = await fetch('/scan', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
-  const data = await res.json();
-  if (data.hits.length === 0) {
-    out.className = 'result clean';
-    out.textContent = `สแกน ${data.scanned} IP ไม่พบรายการอันตราย`;
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังสแกน...</div>';
+  try {
+    const res = await fetch('/scan', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
+    const d = await res.json();
+    if (d.hits.length === 0) {
+      out.innerHTML = `<div class="result clean">✅ สแกน <strong>${d.scanned}</strong> IP ไม่พบรายการอันตราย</div>`;
+    } else {
+      const rows = d.hits.map(ip => `<tr><td>${esc(ip)}</td></tr>`).join('');
+      out.innerHTML = `<div class="result hit">⚠️ พบ <strong>${d.hits.length}</strong> IP อันตราย จาก ${d.scanned} IP</div>
+        <table class="data-table"><thead><tr><th>IP ที่พบใน blacklist</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
+}
+
+// --- Reload ---
+async function reloadData() {
+  const out = document.getElementById('reloadResult');
+  if (!adminToken) {
+    out.innerHTML = '<span style="color:var(--warning)">⚠️ ต้องตั้ง Admin Token ก่อน</span>';
     return;
   }
-  out.className = 'result hit';
-  out.innerHTML = `พบ ${data.hits.length} IP อันตราย (จากทั้งหมด ${data.scanned}):<table>` +
-    data.hits.map((ip) => `<tr><td>${ip}</td></tr>`).join('') + '</table>';
+  out.innerHTML = '<span class="spinner"></span>กำลังโหลด...';
+  try {
+    const res = await fetch('/reload', { method: 'POST', headers: { Authorization: `Bearer ${adminToken}` } });
+    if (res.ok) {
+      out.innerHTML = '<span style="color:var(--success)">✅ Reload สำเร็จ</span>';
+      loadStats();
+    } else {
+      const d = await res.json();
+      out.innerHTML = `<span style="color:var(--danger)">❌ ${esc(d.error || res.statusText)}</span>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--danger)">❌ ${esc(e.message)}</span>`;
+  }
+}
+
+// --- Watch list ---
+function renderWatchAuthGate() {
+  const gate = document.getElementById('watchAuthGate');
+  const form = document.getElementById('watchAddForm');
+  if (!adminToken) {
+    gate.innerHTML = `<div class="auth-gate">การแก้ไข Watch List ต้องใช้ Admin Token — <a onclick="openSettings()">ตั้งค่า Token</a></div>`;
+    form.style.display = 'none';
+  } else {
+    gate.innerHTML = '';
+    form.style.display = 'block';
+  }
 }
 
 async function loadWatch() {
-  const res = await fetch('/watch');
-  const list = await res.json();
-  const table = document.getElementById('watchTable');
-  table.innerHTML = list.map((w) =>
-    `<tr><td>${w.type}</td><td>${w.value}</td><td><button onclick="removeWatch('${w.type}','${w.value}')">ลบ</button></td></tr>`
-  ).join('');
+  try {
+    const list = await fetch('/watch').then(r => r.json());
+    const table = document.getElementById('watchTable');
+    if (!list.length) {
+      table.innerHTML = '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:12px;font-family:sans-serif">ยังไม่มีรายการ</td></tr>';
+      return;
+    }
+    table.innerHTML = '<thead><tr><th>ประเภท</th><th>ค่า</th><th></th></tr></thead><tbody>' +
+      list.map(w =>
+        `<tr><td style="font-family:sans-serif">${esc(w.type)}</td><td>${esc(w.value)}</td>` +
+        `<td><button class="btn-sm" onclick="removeWatch(${JSON.stringify(w.type)},${JSON.stringify(w.value)})">ลบ</button></td></tr>`
+      ).join('') + '</tbody>';
+  } catch (_) {}
 }
 
 async function addWatch() {
   const type = document.getElementById('watchType').value;
   const value = document.getElementById('watchValue').value.trim();
   if (!value) return;
-  await fetch('/watch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, value }) });
+  await fetch('/watch', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ type, value }) });
   document.getElementById('watchValue').value = '';
   loadWatch();
 }
 
 async function removeWatch(type, value) {
-  await fetch('/watch', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, value }) });
+  await fetch('/watch', { method: 'DELETE', headers: authHeaders(), body: JSON.stringify({ type, value }) });
   loadWatch();
+}
+
+// --- History chart ---
+let currentHistoryType = 'ip';
+
+function switchHistory(type, btn) {
+  currentHistoryType = type;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadHistory();
 }
 
 function drawChart(entries) {
   const svg = document.getElementById('historyChart');
   if (entries.length < 2) {
-    svg.innerHTML = '<text x="10" y="80" font-size="12" fill="#888">ข้อมูลยังน้อยเกินจะวาดกราฟ (ต้องมีอย่างน้อย 2 รอบ sync)</text>';
+    svg.innerHTML = '<text x="400" y="95" font-size="13" fill="#9ca3af" text-anchor="middle">ข้อมูลน้อยเกินไป (ต้องมีอย่างน้อย 2 รอบ sync)</text>';
     return;
   }
-  const totals = entries.map((e) => e.total);
-  const min = Math.min(...totals);
-  const max = Math.max(...totals);
-  const range = max - min || 1;
-  const stepX = 600 / (entries.length - 1);
-  const points = totals.map((t, i) => {
-    const x = i * stepX;
-    const y = 150 - ((t - min) / range) * 140;
-    return `${x},${y}`;
-  });
-  svg.innerHTML =
-    `<polyline points="${points.join(' ')}" fill="none" stroke="#1e7a34" stroke-width="2"/>` +
-    `<text x="4" y="14" font-size="11" fill="#555">max ${max.toLocaleString()}</text>` +
-    `<text x="4" y="156" font-size="11" fill="#555">min ${min.toLocaleString()}</text>`;
+  const W = 800, H = 190, PL = 64, PR = 16, PT = 16, PB = 38;
+  const totals = entries.map(e => e.total);
+  const min = Math.min(...totals), max = Math.max(...totals), range = max - min || 1;
+  const n = entries.length;
+  const px = i => PL + (i / (n - 1)) * (W - PL - PR);
+  const py = v => PT + (1 - (v - min) / range) * (H - PT - PB);
+
+  let grid = '';
+  for (let i = 0; i <= 4; i++) {
+    const v = min + range * i / 4;
+    const y = py(v);
+    grid += `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W - PR}" y2="${y.toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>`;
+    grid += `<text x="${PL - 6}" y="${(y + 4).toFixed(1)}" font-size="10" fill="#9ca3af" text-anchor="end">${Math.round(v).toLocaleString()}</text>`;
+  }
+
+  const pts = entries.map((e, i) => `${px(i).toFixed(1)},${py(e.total).toFixed(1)}`);
+  const area = `${px(0).toFixed(1)},${H - PB} ${pts.join(' ')} ${px(n - 1).toFixed(1)},${H - PB}`;
+
+  const step = Math.max(1, Math.floor(n / 6));
+  const labelSet = new Set();
+  for (let i = 0; i < n; i += step) labelSet.add(i);
+  labelSet.add(n - 1);
+  let labels = '';
+  for (const i of labelSet) {
+    const d = (entries[i].date || '').slice(5, 10);
+    labels += `<text x="${px(i).toFixed(1)}" y="${H - 6}" font-size="10" fill="#9ca3af" text-anchor="middle">${d}</text>`;
+  }
+
+  const dots = entries.map((e, i) =>
+    `<circle cx="${px(i).toFixed(1)}" cy="${py(e.total).toFixed(1)}" r="3.5" fill="#1a56db" stroke="white" stroke-width="1.5"><title>${(e.date || '').slice(0, 10)}: ${e.total.toLocaleString()}</title></circle>`
+  ).join('');
+
+  svg.innerHTML = grid +
+    `<polygon points="${area}" fill="#dbeafe" opacity=".5"/>` +
+    `<polyline points="${pts.join(' ')}" fill="none" stroke="#1a56db" stroke-width="2" stroke-linejoin="round"/>` +
+    dots + labels;
 }
 
 async function loadHistory() {
-  const type = document.getElementById('historyType').value;
-  const res = await fetch(`/history?type=${type}`);
-  const entries = await res.json();
-  drawChart(entries);
-  const table = document.getElementById('historyTable');
-  table.innerHTML = '<tr><th>วันที่</th><th>total</th><th>+</th><th>-</th></tr>' +
-    entries.map((e) => `<tr><td>${e.date.slice(0, 16)}</td><td>${e.total}</td><td>${e.added}</td><td>${e.removed}</td></tr>`).join('');
+  try {
+    const entries = await fetch(`/history?type=${currentHistoryType}`).then(r => r.json());
+    drawChart(entries);
+    const table = document.getElementById('historyTable');
+    if (!entries.length) {
+      table.innerHTML = '<tr><td style="color:#9ca3af;text-align:center;padding:10px;font-family:sans-serif">ยังไม่มีข้อมูลประวัติ</td></tr>';
+      return;
+    }
+    table.innerHTML = '<thead><tr><th>วันที่</th><th>Total</th><th>เพิ่ม</th><th>ลบ</th></tr></thead><tbody>' +
+      [...entries].reverse().slice(0, 10).map(e =>
+        `<tr><td>${(e.date || '').slice(0, 16)}</td><td>${e.total.toLocaleString()}</td>` +
+        `<td style="color:var(--success)">+${e.added}</td><td style="color:var(--danger)">-${e.removed}</td></tr>`
+      ).join('') + '</tbody>';
+  } catch (_) {}
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 loadStats();
+renderWatchAuthGate();
 loadWatch();
 loadHistory();
 </script>
