@@ -9,8 +9,25 @@ services:
       - PORT=3939
       - DATA_DIR=/data
       - ADMIN_TOKEN=${ADMIN_TOKEN:-}
+      - ADMIN_TOKENS=${ADMIN_TOKENS:-}
       - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      - LINE_NOTIFY_TOKEN=${LINE_NOTIFY_TOKEN:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TO=${SMTP_TO:-}
+      - EXTRA_FEEDS=${EXTRA_FEEDS:-}
       - CORS_ORIGIN=${CORS_ORIGIN:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3939/healthz', r => process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   ncsa-blacklist-sync:
@@ -21,6 +38,19 @@ services:
     environment:
       - DATA_DIR=/data
       - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      - LINE_NOTIFY_TOKEN=${LINE_NOTIFY_TOKEN:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TO=${SMTP_TO:-}
+      - EXTRA_FEEDS=${EXTRA_FEEDS:-}
+    depends_on:
+      ncsa-blacklist:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

@@ -541,5 +541,81 @@ app.delete('/watch', requireAdmin, express.json(), (req, res) => {
   res.json(watchlist.remove(type, value));
 });
 
+// --- Prometheus metrics ---
+app.get('/metrics', (req, res) => {
+  const mem = process.memoryUsage();
+  const uptime = process.uptime();
+  let syncTs = 0;
+  try {
+    const lines = fs.readFileSync(HISTORY_FILE, 'utf8').trim().split('\n').filter(Boolean);
+    if (lines.length) syncTs = Math.floor(new Date(JSON.parse(lines[lines.length - 1]).date).getTime() / 1000);
+  } catch {}
+  const lines = [
+    '# HELP ncsa_store_size Number of entries in each feed',
+    '# TYPE ncsa_store_size gauge',
+    ...Object.entries(store).map(([t, d]) => `ncsa_store_size{type="${t}"} ${d ? d.set.size : 0}`),
+    '# HELP ncsa_process_uptime_seconds Process uptime',
+    '# TYPE ncsa_process_uptime_seconds counter',
+    `ncsa_process_uptime_seconds ${Math.round(uptime)}`,
+    '# HELP ncsa_memory_rss_bytes Resident set size',
+    '# TYPE ncsa_memory_rss_bytes gauge',
+    `ncsa_memory_rss_bytes ${mem.rss}`,
+    '# HELP ncsa_memory_heap_used_bytes Heap used',
+    '# TYPE ncsa_memory_heap_used_bytes gauge',
+    `ncsa_memory_heap_used_bytes ${mem.heapUsed}`,
+    '# HELP ncsa_rate_limit_keys Active rate limit keys',
+    '# TYPE ncsa_rate_limit_keys gauge',
+    `ncsa_rate_limit_keys ${_rateMap.size}`,
+    '# HELP ncsa_sync_last_run_timestamp Unix timestamp of last sync',
+    '# TYPE ncsa_sync_last_run_timestamp gauge',
+    `ncsa_sync_last_run_timestamp ${syncTs}`,
+    '',
+  ];
+  res.set('Content-Type', 'text/plain; version=0.0.4');
+  res.send(lines.join('\n'));
+});
+
+// --- ASN Analysis ---
+app.get('/analyze/asns', (req, res) => {
+  const d = store.ip;
+  if (!d) return res.status(503).json({ error: 'ip data not loaded' });
+  const counts = new Map();
+  for (const ip of d.set) {
+    if (!IPV4_RE.test(ip)) continue;
+    const g = geoLookup(ip);
+    const asn = g?.as || 'Unknown';
+    const org = g?.org || g?.as || 'Unknown';
+    const key = asn;
+    const e = counts.get(key) || { asn, org, count: 0, country: g?.country || null };
+    e.count++;
+    counts.set(key, e);
+  }
+  const top = [...counts.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 30);
+  res.json({ total_ips: d.set.size, total_asns: counts.size, top });
+});
+
+// --- Stats + Info with cache headers ---
+app.use('/stats', (req, res, next) => { res.set('Cache-Control', 'public, max-age=60'); next(); });
+app.use('/info', (req, res, next) => { res.set('Cache-Control', 'public, max-age=300'); next(); });
+
+// --- Scan result CSV download ---
+app.post('/scan/csv', rateLimit(30, 60_000), express.text({ limit: '2mb' }), (req, res) => {
+  const text = req.body;
+  if (!text) return res.status(400).json({ error: 'body required' });
+  const d = store.ip;
+  if (!d) return res.status(503).json({ error: 'ip data not loaded' });
+  const { hits, lines: hitLines } = scanLogWithContext(text, d.set);
+  const rows = [['line_no', 'ip', 'log_excerpt']];
+  for (const l of (hitLines || [])) {
+    for (const ip of l.ips) rows.push([l.line, ip, l.text.replace(/"/g, '""')]);
+  }
+  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  res.set('Content-Type', 'text/csv');
+  res.set('Content-Disposition', `attachment; filename="ncsa-scan-${Date.now()}.csv"`);
+  res.send(csv);
+});
+
 const PORT = process.env.PORT || 3939;
 app.listen(PORT, () => console.log(`ncsa-blacklist API on :${PORT}`));

@@ -290,6 +290,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <a class="nav-link" href="#sec-watch">👁️ Watch</a>
     <a class="nav-link" href="#sec-news">📰 News</a>
     <a class="nav-link" href="#sec-networks">🌐 Networks</a>
+    <a class="nav-link" href="#sec-asns">🏢 ASNs</a>
     <a class="nav-link" href="#sec-trend">📈 Trend</a>
     <a class="nav-link" href="#sec-about">ℹ️ About</a>
   </nav>
@@ -452,6 +453,11 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     </div>
     <div id="networksResult"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
     <div id="countriesResult" style="display:none"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
+  </div>
+
+  <div class="card" id="sec-asns">
+    <h2>🏢 วิเคราะห์ Autonomous Systems (Top AS)</h2>
+    <div id="asnsResult"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
   </div>
 
   <div class="card" id="sec-trend">
@@ -709,6 +715,46 @@ async function loadRecent() {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }
 }
+
+// --- ASN Analysis ---
+async function loadAsns() {
+  const out = document.getElementById('asnsResult');
+  if (out.dataset.loaded) return;
+  try {
+    const d = await fetch('/analyze/asns').then(r => r.json());
+    if (!d.top || !d.top.length) { out.innerHTML = '<div class="result info">ไม่มีข้อมูล ASN</div>'; return; }
+    const max = d.top[0].count;
+    const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_asns} AS</div>`;
+    const rows = d.top.map(n => `
+      <div style="display:grid;grid-template-columns:90px 1fr 50px 1fr;gap:8px;align-items:center;margin-bottom:5px">
+        <code style="font-size:11px;color:var(--primary)">${esc(n.asn||'?')}</code>
+        <div class="net-bar"><div class="net-bar-fill" style="width:${Math.round(n.count/max*100)}%"></div></div>
+        <span class="net-count">${n.count}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${flag(n.country)} ${esc(n.org||'')}</span>
+      </div>`).join('');
+    out.innerHTML = summary + rows;
+    out.dataset.loaded = '1';
+  } catch (e) { out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`; }
+}
+
+// --- Scan CSV download ---
+async function downloadScanCSV() {
+  const text = document.getElementById('logText').value;
+  if (!text.trim()) return;
+  const res = await fetch('/scan/csv', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `ncsa-scan-${Date.now()}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// --- ?dark=1 URL param ---
+(function initDarkParam() {
+  if (new URLSearchParams(window.location.search).get('dark') === '1') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
 
 // --- Network Analysis ---
 function flag(cc) {
@@ -1022,7 +1068,8 @@ async function scanLog() {
           `<tr><td style="color:var(--text-muted);font-family:sans-serif">${l.line}</td><td style="color:var(--danger)">${esc(ip)}</td><td class="log-line-cell">${esc(l.text)}</td></tr>`
         )
       ).join('');
-      out.innerHTML = `<div class="result hit">⚠️ พบ <strong>${d.hits.length}</strong> IP อันตราย จาก ${d.scanned} IP</div>
+      const dlBtn = `<button class="btn btn-ghost" onclick="downloadScanCSV()" style="font-size:12px;padding:3px 10px;margin-left:8px">⬇️ Download CSV</button>`;
+      out.innerHTML = `<div class="result hit">⚠️ พบ <strong>${d.hits.length}</strong> IP อันตราย จาก ${d.scanned} IP${dlBtn}</div>
         <table class="data-table">
           <thead><tr><th>บรรทัด</th><th>IP</th><th>Log</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -1242,6 +1289,7 @@ function esc(s) {
 loadStats();
 loadRecent();
 loadNetworks();
+loadAsns();
 loadNews();
 loadInfo();
 renderWatchAuthGate();

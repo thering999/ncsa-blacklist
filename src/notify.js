@@ -25,6 +25,27 @@ async function notifyLine(text) {
   }
 }
 
+function buildHtml(subject, lines) {
+  const rows = lines.map(l => {
+    const isWatch = l.startsWith('WATCH');
+    const isError = l.startsWith('ERROR');
+    const color = isWatch ? '#dc2626' : isError ? '#d97706' : '#374151';
+    const bg = isWatch ? '#fef2f2' : isError ? '#fffbeb' : 'transparent';
+    return `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:13px;color:${color};background:${bg}">${l.replace(/</g,'&lt;')}</td></tr>`;
+  }).join('');
+  return `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#f9fafb;padding:24px">
+<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden">
+  <div style="background:#1d4ed8;padding:16px 20px">
+    <span style="color:#fff;font-size:16px;font-weight:700">🛡️ NCSA Blacklist</span>
+  </div>
+  <div style="padding:16px 20px">
+    <p style="margin:0 0 12px;color:#374151;font-size:14px">${subject}</p>
+    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">${rows}</table>
+    <p style="margin:16px 0 0;font-size:11px;color:#9ca3af">ส่งโดย NCSA Blacklist · <a href="https://github.com/thering999/ncsa-blacklist" style="color:#6b7280">GitHub</a></p>
+  </div>
+</div></body></html>`;
+}
+
 async function notifyEmail(subject, text) {
   const host = process.env.SMTP_HOST;
   if (!host) return;
@@ -36,12 +57,14 @@ async function notifyEmail(subject, text) {
     secure: process.env.SMTP_SECURE === 'true',
     auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
   });
+  const textLines = text.split('\n').filter(Boolean).slice(1); // skip header line
   try {
     await transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: process.env.SMTP_TO,
       subject,
       text,
+      html: buildHtml(subject, textLines),
     });
   } catch (err) {
     console.error('email notify failed:', err.message);
