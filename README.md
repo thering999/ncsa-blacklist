@@ -22,7 +22,9 @@
 | 👁️ **Watch List** | ติดตาม IP/domain/hash → แจ้งเตือนผ่าน Webhook / LINE Notify / Email |
 | 📰 **ThaICERT News** | ข่าวความมั่นคงไซเบอร์ล่าสุด (CKAN CSV, cache 6 ชั่วโมง) |
 | ⬇️ **Export** | iptables · dnsmasq · Wazuh CDB · CSV · JSON bundle |
-| 🌙 **Dark Mode** | บันทึกค่าไว้ใน localStorage |
+| 🏢 **ASN Analysis** | จัดกลุ่ม IP ตาม Autonomous System — top 30 AS พร้อม org/country |
+| 📊 **Prometheus Metrics** | `/metrics` endpoint สำหรับ Grafana/Prometheus monitoring |
+| 🌙 **Dark Mode** | บันทึกค่าไว้ใน localStorage หรือ `?dark=1` URL param |
 | 📱 **Mobile Responsive** | รองรับมือถือ ทุก breakpoint |
 
 ---
@@ -120,6 +122,12 @@ POST /check/cidr
 POST /scan
 Content-Type: text/plain
 <log content>
+
+# Download scan hits as CSV
+POST /scan/csv
+Content-Type: text/plain
+<log content>
+# → ncsa-scan-<timestamp>.csv (columns: line_no, ip, log_excerpt)
 ```
 
 ### ค้นหา
@@ -136,6 +144,7 @@ GET /search?type=ip&q=1.10&page=1&limit=100
 GET /analyze/networks          # Top 50 /24 subnets + country/AS
 GET /analyze/networks?country=TH   # กรองเฉพาะประเทศ
 GET /analyze/countries         # Top 25 ประเทศ + % ของ IP ทั้งหมด
+GET /analyze/asns              # Top 30 Autonomous Systems + org/country
 ```
 
 ### Export
@@ -171,7 +180,8 @@ POST /admin/webhook-test       # ส่ง test ping: {"webhook":"https://..."}
 
 ```bash
 GET /healthz                   # {ok:true, sync_last_run, sync_next_run}
-GET /stats                     # จำนวน + sha256 + integrity ต่อ feed
+GET /metrics                   # Prometheus text format (store sizes, uptime, memory, sync ts)
+GET /stats                     # จำนวน + sha256 + integrity ต่อ feed (cache 60s)
 GET /info                      # provenance: publisher, MISP URL, license
 GET /history?type=ip           # ประวัติ 30 sync ล่าสุด
 GET /recent?limit=15           # diff ล่าสุด: เพิ่ม/ลบ + GeoIP
@@ -387,6 +397,32 @@ const sig = req.headers['x-signature']; // "sha256=<hex>"
 const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 if (sig !== expected) return res.status(401).end();
 ```
+
+---
+
+## Prometheus / Grafana
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: ncsa-blacklist
+    static_configs:
+      - targets: ['localhost:3939']
+    metrics_path: /metrics
+    scrape_interval: 60s
+```
+
+Metrics ที่ export:
+| Metric | Type | คำอธิบาย |
+|--------|------|----------|
+| `ncsa_store_size{type="ip"}` | gauge | จำนวน IP ใน blacklist |
+| `ncsa_store_size{type="domain"}` | gauge | จำนวน domain |
+| `ncsa_store_size{type="hash"}` | gauge | จำนวน SHA256 hash |
+| `ncsa_process_uptime_seconds` | counter | uptime ของ process |
+| `ncsa_memory_rss_bytes` | gauge | RAM (RSS) |
+| `ncsa_memory_heap_used_bytes` | gauge | Heap ที่ใช้งาน |
+| `ncsa_rate_limit_keys` | gauge | จำนวน active rate limit keys |
+| `ncsa_sync_last_run_timestamp` | gauge | Unix timestamp ของ sync ล่าสุด |
 
 ---
 
