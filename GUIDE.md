@@ -96,6 +96,13 @@ open http://localhost:3939
 |----------|-------------|
 | `GET /analyze/networks` | Top 25 /24 subnets by blacklisted IP count + country/AS |
 
+### Admin (requires auth)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /admin/health` | Auth | uptime, RSS/heap MB, store sizes, file sizes, rate limit key count, Node version |
+| `POST /admin/webhook-test` | Auth + JSON `{webhook}` | Send test ping to webhook URL; returns `{ok, status}` |
+
 ### Watch List (requires auth)
 
 | Endpoint | Method | Description |
@@ -227,7 +234,9 @@ NCSA opendata.ncsa.or.th
 | CIDR Check | Find all blacklisted IPs in a subnet (max /16) |
 | Bulk Check | Paste list → POST /check/bulk (up to 10 000) |
 | Search | Partial match across any feed type |
-| Log Scan | File upload (.log/.txt) or paste text → hit lines with context |
+| Log Scan | File upload (.log/.txt) or drag-drop or paste text → hit lines with context |
+| Settings: Health | Admin panel shows uptime, memory, store sizes (requires token) |
+| Settings: Webhook test | Send test ping to any webhook URL, shows HTTP response |
 | Export | iptables / dnsmasq / wazuh / IP CSV / Domain CSV / Hash CSV / JSON bundle |
 | Watch List | Monitor values → webhook alert when added to blacklist |
 | ThaICERT News | Latest cybersecurity news (monthly CSV, clickable headlines) |
