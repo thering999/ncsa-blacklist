@@ -27,19 +27,25 @@ fs.writeFileSync(path.join(tmpDir, 'hash.json'), JSON.stringify(fixture('hash', 
 const { app } = require('../src/server');
 
 let server, baseUrl;
+const openSockets = new Set();
 
 before(() => new Promise((resolve) => {
   server = app.listen(0, '127.0.0.1', () => {
     baseUrl = `http://127.0.0.1:${server.address().port}`;
     resolve();
   });
+  server.on('connection', (socket) => {
+    openSockets.add(socket);
+    socket.on('close', () => openSockets.delete(socket));
+  });
 }));
 
 after(() => new Promise((resolve) => {
-  server.close(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    resolve();
-  });
+  for (const socket of openSockets) socket.destroy();
+  const cleanup = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} resolve(); };
+  server.close(cleanup);
+  // Force resolve after 2s in case connections linger (unref = don't hold event loop)
+  setTimeout(cleanup, 2000).unref();
 }));
 
 async function get(p) {

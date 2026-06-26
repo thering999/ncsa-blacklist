@@ -16,6 +16,12 @@ const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
 
 const app = express();
 
+// Request ID — must be first so all routes including /healthz get it
+app.use((req, res, next) => {
+  res.set('X-Request-Id', req.get('X-Request-Id') || crypto.randomUUID());
+  next();
+});
+
 // --- Rate limiter (in-memory per IP) ---
 const _rateMap = new Map();
 function rateLimit(maxReq, windowMs) {
@@ -63,7 +69,7 @@ function riskScore(ip, blacklisted, geo) {
   return Math.min(100, score);
 }
 // Prune stale rate entries every 5 min
-setInterval(() => { const now = Date.now(); for (const [k, v] of _rateMap) if (now > v.reset) _rateMap.delete(k); }, 5 * 60_000);
+setInterval(() => { const now = Date.now(); for (const [k, v] of _rateMap) if (now > v.reset) _rateMap.delete(k); }, 5 * 60_000).unref();
 let store = loadAll();
 
 app.get('/healthz', (req, res) => {
@@ -80,11 +86,9 @@ app.get('/healthz', (req, res) => {
 });
 
 app.use((req, res, next) => {
-  const reqId = req.get('X-Request-Id') || crypto.randomUUID();
-  res.set('X-Request-Id', reqId);
   const start = Date.now();
   res.on('finish', () => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms rid=${reqId}`);
+    console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms rid=${res.get('X-Request-Id') || '-'}`);
   });
   next();
 });
