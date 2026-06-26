@@ -117,6 +117,17 @@ app.get('/info', (req, res) => {
   res.json(info);
 });
 
+// Check domain + all parent domains; returns first match
+function domainCheck(domainSet, value) {
+  if (domainSet.has(value)) return { blacklisted: true, matched: value, matchType: 'exact' };
+  const parts = value.split('.');
+  for (let i = 1; i < parts.length - 1; i++) {
+    const parent = parts.slice(i).join('.');
+    if (domainSet.has(parent)) return { blacklisted: true, matched: parent, matchType: 'parent' };
+  }
+  return { blacklisted: false, matched: value, matchType: 'exact' };
+}
+
 app.get('/check/auto/:value', (req, res) => {
   const { value } = req.params;
   const type = /^[0-9a-f]{64}$/i.test(value) ? 'hash'
@@ -124,14 +135,31 @@ app.get('/check/auto/:value', (req, res) => {
     : 'domain';
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
-  res.json({ type, value, blacklisted: d.set.has(value) });
+  if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value) });
+  res.json({ type, value, blacklisted: d.set.has(value), matched: value, matchType: 'exact' });
 });
 
 app.get('/check/:type/:value', (req, res) => {
   const { type, value } = req.params;
   const d = store[type];
   if (!d) return res.status(404).json({ error: `unknown type: ${type}` });
-  res.json({ type, value, blacklisted: d.set.has(value) });
+  if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value) });
+  res.json({ type, value, blacklisted: d.set.has(value), matched: value, matchType: 'exact' });
+});
+
+app.get('/analyze/networks', (req, res) => {
+  const d = store.ip;
+  if (!d) return res.status(503).json({ error: 'ip data not loaded' });
+  const counts = new Map();
+  for (const ip of d.set) {
+    const net = ip.split('.').slice(0, 3).join('.') + '.0/24';
+    counts.set(net, (counts.get(net) || 0) + 1);
+  }
+  const top = [...counts.entries()]
+    .map(([network, count]) => ({ network, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 25);
+  res.json({ total_ips: d.set.size, total_networks: counts.size, top });
 });
 
 app.post('/scan', express.text({ limit: '2mb' }), (req, res) => {
@@ -147,7 +175,13 @@ app.post('/check/bulk', express.json({ limit: '1mb' }), (req, res) => {
   if (values.length > 10000) return res.status(400).json({ error: 'max 10000 values per request' });
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
-  res.json({ type, results: values.map((v) => ({ value: String(v), blacklisted: d.set.has(String(v)) })) });
+  res.json({
+    type, results: values.map((v) => {
+      const s = String(v);
+      if (type === 'domain') return { value: s, ...domainCheck(d.set, s) };
+      return { value: s, blacklisted: d.set.has(s), matched: s, matchType: 'exact' };
+    }),
+  });
 });
 
 app.get('/news', async (req, res) => {

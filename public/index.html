@@ -152,6 +152,10 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 .news-headline a { color: var(--text); text-decoration: none; font-size: 13px; }
 .news-headline a:hover { color: var(--primary); text-decoration: underline; }
 .news-id { color: var(--text-muted); font-size: 11px; white-space: nowrap; font-family: sans-serif; }
+.net-bar-wrap { display: flex; align-items: center; gap: 8px; }
+.net-bar { height: 10px; background: #1a56db22; border-radius: 2px; position: relative; flex: 1; }
+.net-bar-fill { height: 100%; background: var(--primary); border-radius: 2px; transition: width .4s; }
+.net-count { font-size: 12px; color: var(--text-muted); white-space: nowrap; font-family: sans-serif; }
 
 @media (max-width: 600px) {
   .stats-grid { grid-template-columns: 1fr; }
@@ -318,6 +322,11 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
   </div>
 
   <div class="card">
+    <h2>🌐 วิเคราะห์ IP Networks (Top /24)</h2>
+    <div id="networksResult"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
+  </div>
+
+  <div class="card">
     <h2>📈 แนวโน้ม (30 รอบล่าสุด)</h2>
     <div class="tab-row">
       <button class="tab-btn active" onclick="switchHistory('ip',this)">IP</button>
@@ -393,6 +402,26 @@ async function loadStats() {
   } catch (_) {}
 }
 
+// --- Network Analysis ---
+async function loadNetworks() {
+  const out = document.getElementById('networksResult');
+  try {
+    const d = await fetch('/analyze/networks').then(r => r.json());
+    if (!d.top || !d.top.length) { out.innerHTML = '<div class="result info">ไม่มีข้อมูล IP</div>'; return; }
+    const max = d.top[0].count;
+    const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ทั้งหมด ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_networks.toLocaleString()} networks (/24)</div>`;
+    const rows = d.top.map(n => `
+      <div style="display:grid;grid-template-columns:160px 1fr 50px;gap:8px;align-items:center;margin-bottom:4px">
+        <code style="font-size:12px;color:var(--text)">${esc(n.network)}</code>
+        <div class="net-bar"><div class="net-bar-fill" style="width:${Math.round(n.count/max*100)}%"></div></div>
+        <span class="net-count">${n.count}</span>
+      </div>`).join('');
+    out.innerHTML = summary + rows;
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
+  }
+}
+
 // --- Threat News ---
 async function loadNews() {
   const out = document.getElementById('newsResult');
@@ -462,8 +491,10 @@ async function checkOne() {
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || res.statusText);
     const typeLabel = { ip: 'IP', domain: 'Domain', hash: 'Hash' }[d.type] || d.type;
+    const parentNote = (d.matchType === 'parent')
+      ? ` <span style="font-size:12px;opacity:.8">(parent domain: <code>${esc(d.matched)}</code>)</span>` : '';
     out.innerHTML = d.blacklisted
-      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}</div>`
+      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${parentNote}</div>`
       : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}</div>`;
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
@@ -494,9 +525,10 @@ async function bulkCheck() {
     const summary = hits > 0
       ? `<div class="result hit">⚠️ พบ <strong>${hits}</strong> รายการอันตราย จาก ${results.length} รายการ</div>`
       : `<div class="result clean">✅ ไม่พบรายการอันตราย — ตรวจ ${results.length} รายการ</div>`;
-    const rows = results.map(r =>
-      `<tr><td>${esc(r.value)}</td><td><span class="badge ${r.hit ? 'hit' : 'clean'}">${r.hit ? 'BLACKLISTED' : 'CLEAN'}</span></td></tr>`
-    ).join('');
+    const rows = results.map(r => {
+      const parentNote = (r.matchType === 'parent') ? ` <small style="color:#6b7280">(→${esc(r.matched)})</small>` : '';
+      return `<tr><td>${esc(r.value)}${parentNote}</td><td><span class="badge ${r.hit ? 'hit' : 'clean'}">${r.hit ? 'BLACKLISTED' : 'CLEAN'}</span></td></tr>`;
+    }).join('');
     out.innerHTML = summary +
       (hits ? `<div class="result-actions"><button class="btn-sm" onclick="copyHits()">📋 Copy hits</button></div>` : '') +
       `<table class="data-table"><thead><tr><th>ค่า</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -713,6 +745,7 @@ function esc(s) {
 }
 
 loadStats();
+loadNetworks();
 loadNews();
 loadInfo();
 renderWatchAuthGate();
