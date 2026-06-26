@@ -98,4 +98,18 @@ async function notify(results) {
   }
 }
 
-module.exports = { notify };
+async function notifyStale(staleFeeds) {
+  if (!staleFeeds.length) return;
+  const lines = staleFeeds.map(f =>
+    f.age_hours != null
+      ? `STALE [${f.type}]: last updated ${f.age_hours}h ago`
+      : `MISSING [${f.type}]: data file not found`
+  );
+  const text = `NCSA blocklist stale alert\n${lines.join('\n')}`;
+  const webhookUrl = process.env.WEBHOOK_URL;
+  if (webhookUrl) await notifyWebhook(webhookUrl, JSON.stringify({ text }), { 'Content-Type': 'application/json' });
+  if (process.env.LINE_NOTIFY_TOKEN) await notifyLine(text);
+  if (process.env.SMTP_HOST && process.env.SMTP_TO) await notifyEmail('[NCSA] Feed stale alert', text);
+}
+
+module.exports = { notify, notifyStale };

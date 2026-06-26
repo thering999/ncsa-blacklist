@@ -543,6 +543,13 @@ app.delete('/watch', requireAdmin, express.json(), (req, res) => {
 
 // --- Prometheus metrics ---
 app.get('/metrics', (req, res) => {
+  const metricsToken = process.env.METRICS_TOKEN;
+  if (metricsToken) {
+    const auth = req.get('Authorization');
+    if (!auth || auth !== `Bearer ${metricsToken}`) {
+      return res.status(401).set('WWW-Authenticate', 'Bearer realm="metrics"').end();
+    }
+  }
   const mem = process.memoryUsage();
   const uptime = process.uptime();
   let syncTs = 0;
@@ -650,6 +657,13 @@ app.get('/admin/feed-health', requireAdmin, (req, res) => {
 
 const PORT = process.env.PORT || 3939;
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`ncsa-blacklist API on :${PORT}`));
+  const server = app.listen(PORT, () => console.log(`ncsa-blacklist API on :${PORT}`));
+  function shutdown(signal) {
+    console.log(`${signal} — shutting down gracefully`);
+    server.close(() => { console.log('server closed'); process.exit(0); });
+    setTimeout(() => { console.error('force exit after 10s'); process.exit(1); }, 10_000).unref();
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 module.exports = { app };

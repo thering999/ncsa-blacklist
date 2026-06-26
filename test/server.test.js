@@ -204,3 +204,22 @@ test('GET /history returns array', async () => {
   assert.strictEqual(status, 200);
   assert.ok(Array.isArray(body));
 });
+
+test('GET /metrics open when METRICS_TOKEN unset', async () => {
+  const res = await fetch(baseUrl + '/metrics');
+  assert.strictEqual(res.status, 200);
+});
+
+test('GET /metrics returns 401 when METRICS_TOKEN set and no auth', async () => {
+  process.env.METRICS_TOKEN = 'secret123';
+  const res = await fetch(baseUrl + '/metrics');
+  assert.strictEqual(res.status, 401);
+  delete process.env.METRICS_TOKEN;
+});
+
+test('GET /metrics accepts correct METRICS_TOKEN', async () => {
+  process.env.METRICS_TOKEN = 'secret123';
+  const res = await fetch(baseUrl + '/metrics', { headers: { Authorization: 'Bearer secret123' } });
+  assert.strictEqual(res.status, 200);
+  delete process.env.METRICS_TOKEN;
+});
