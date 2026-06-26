@@ -106,6 +106,8 @@ app.get('/stats', (req, res) => {
       expires_at: expiresAt(m.generated_at, m.valid_for_days),
       tlp: m.tlp?.[0] ?? null,
       sha256: m.file?.sha256 ?? null,
+      file_entries: m.file?.entries ?? null,
+      integrity_ok: m.file?.entries != null ? m.total === m.file.entries : null,
       feed: m.feed ?? null,
     };
   }

@@ -225,6 +225,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
       </div>
     </div>
   </div>
+  <div id="integrityWarn" style="display:none;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;border-radius:6px;padding:8px 14px;font-size:13px;margin-bottom:16px"></div>
 
   <div class="card">
     <h2>🔍 ตรวจสอบรายการเดียว</h2>
@@ -408,6 +409,17 @@ async function loadStats() {
     document.getElementById('statHashMeta').innerHTML = statMetaHtml(data.hash);
     const latest = [data.ip, data.domain, data.hash].filter(Boolean).map(d => d.generated_at).sort().pop();
     if (latest) document.getElementById('headerUpdated').textContent = 'Updated: ' + latest.slice(0, 10);
+    // Integrity check: warn if file.entries ≠ total for any feed
+    const broken = ['ip','domain','hash'].filter(t => data[t]?.integrity_ok === false);
+    const intEl = document.getElementById('integrityWarn');
+    if (intEl) {
+      if (broken.length) {
+        intEl.textContent = `⚠ Data integrity mismatch on: ${broken.join(', ')} (file.entries ≠ total)`;
+        intEl.style.display = 'block';
+      } else {
+        intEl.style.display = 'none';
+      }
+    }
   } catch (_) {}
 }
 
@@ -499,6 +511,7 @@ async function loadInfo() {
     const rows = [
       ['Publisher', `<a href="${esc(ip.homepage)}" target="_blank" rel="noreferrer">${esc(ip.publisher)}</a>`],
       ['Source system', esc(ip.source?.system || 'MISP')],
+      ['MISP URL', ip.source?.base_url ? `<a href="${esc(ip.source.base_url)}" target="_blank" rel="noreferrer">${esc(ip.source.base_url)}</a>` : '—'],
       ['License', esc(ip.license || 'CC0-1.0')],
       ['TLP', (ip.tlp || []).map(t => `<span class="tlp-badge">${esc(t.toUpperCase())}</span>`).join(' ')],
       ['Contact', `<a href="mailto:${esc(ip.contact)}">${esc(ip.contact)}</a>`],
@@ -507,6 +520,12 @@ async function loadInfo() {
     document.getElementById('aboutGrid').innerHTML = rows.map(([k, v]) =>
       `<div class="about-item"><dt>${k}</dt><dd>${v}</dd></div>`
     ).join('');
+    if (ip.source?.query) {
+      const qEl = document.createElement('div');
+      qEl.style.cssText = 'margin-top:12px;background:var(--bg);border-radius:6px;padding:10px 12px;';
+      qEl.innerHTML = `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">MISP Query (IP feed)</div><code style="font-size:12px;word-break:break-all;line-height:1.7">${esc(ip.source.query)}</code>`;
+      document.getElementById('aboutGrid').after(qEl);
+    }
   } catch (_) {}
 }
 
