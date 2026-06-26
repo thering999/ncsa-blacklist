@@ -163,6 +163,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .log-line-cell { font-family: monospace; font-size: 11px; color: var(--text-muted); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop-active { outline: 2px dashed var(--primary); outline-offset: 4px; background: #eff6ff; }
 .news-headline a { color: var(--text); text-decoration: none; font-size: 13px; }
 .news-headline a:hover { color: var(--primary); text-decoration: underline; }
 .news-id { color: var(--text-muted); font-size: 11px; white-space: nowrap; font-family: sans-serif; }
@@ -213,6 +214,16 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <p class="settings-note">โหลดข้อมูลใหม่จากไฟล์ที่ดึงไว้ (ต้องใช้ Admin Token)</p>
     <button class="btn btn-danger" onclick="reloadData()">🔄 Reload Data</button>
     <div id="reloadResult" style="margin-top:8px;font-size:13px"></div>
+    <hr class="settings-divider">
+    <div class="field-label">System Health</div>
+    <div id="healthPanel" style="font-size:12px;color:var(--text-muted);margin-top:6px">
+      <button class="btn btn-ghost" onclick="loadHealth()" style="font-size:12px;padding:4px 10px">ดูข้อมูลระบบ</button>
+    </div>
+    <hr class="settings-divider">
+    <div class="field-label">Test Webhook</div>
+    <input type="url" id="testWebhookUrl" placeholder="https://hooks.example.com/..." style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;margin-bottom:6px;background:var(--bg);color:var(--text)">
+    <button class="btn btn-ghost" onclick="testWebhook()" style="font-size:12px;padding:4px 10px">📤 ส่ง Test Ping</button>
+    <div id="webhookTestResult" style="margin-top:6px;font-size:12px"></div>
   </div>
 </div>
 
@@ -421,13 +432,63 @@ let adminToken = localStorage.getItem('ncsa_admin_token') || '';
 // --- Settings ---
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
 
-// --- File upload for log scan ---
+// --- File upload + drag-drop for log scan ---
 function loadScanFile(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => { document.getElementById('logText').value = ev.target.result; };
   reader.readAsText(file, 'utf-8');
+}
+(function initDragDrop() {
+  document.addEventListener('DOMContentLoaded', () => {
+    const card = document.getElementById('sec-scan');
+    if (!card) return;
+    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drop-active'); });
+    card.addEventListener('dragleave', e => { if (!card.contains(e.relatedTarget)) card.classList.remove('drop-active'); });
+    card.addEventListener('drop', e => {
+      e.preventDefault(); card.classList.remove('drop-active');
+      const file = e.dataTransfer.files[0];
+      if (file) { const r = new FileReader(); r.onload = ev => { document.getElementById('logText').value = ev.target.result; }; r.readAsText(file, 'utf-8'); }
+    });
+  });
+})();
+
+// --- Admin: system health ---
+async function loadHealth() {
+  const el = document.getElementById('healthPanel');
+  el.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch('/admin/health', { headers: { Authorization: `Bearer ${adminToken}` } });
+    if (!res.ok) { el.innerHTML = `<span style="color:var(--danger)">❌ ${res.status} — ต้องใช้ Admin Token</span>`; return; }
+    const d = await res.json();
+    el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:4px">
+      <span style="color:var(--text-muted)">Uptime</span><span>${d.uptime_human}</span>
+      <span style="color:var(--text-muted)">RAM (RSS)</span><span>${d.memory.rss_mb} MB</span>
+      <span style="color:var(--text-muted)">Heap used</span><span>${d.memory.heap_used_mb} / ${d.memory.heap_total_mb} MB</span>
+      <span style="color:var(--text-muted)">IP entries</span><span>${(d.store_sizes.ip||0).toLocaleString()}</span>
+      <span style="color:var(--text-muted)">Domain entries</span><span>${(d.store_sizes.domain||0).toLocaleString()}</span>
+      <span style="color:var(--text-muted)">Hash entries</span><span>${(d.store_sizes.hash||0).toLocaleString()}</span>
+      <span style="color:var(--text-muted)">Rate limit keys</span><span>${d.rate_limit_keys}</span>
+      <span style="color:var(--text-muted)">Node</span><span>${d.node_version}</span>
+    </div>`;
+  } catch (e) { el.innerHTML = `<span style="color:var(--danger)">❌ ${esc(e.message)}</span>`; }
+}
+
+// --- Admin: webhook test ---
+async function testWebhook() {
+  const url = document.getElementById('testWebhookUrl').value.trim();
+  const out = document.getElementById('webhookTestResult');
+  if (!url) { out.textContent = 'กรุณากรอก URL'; return; }
+  out.innerHTML = '<span class="spinner"></span>กำลังส่ง...';
+  try {
+    const res = await fetch('/admin/webhook-test', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ webhook: url }) });
+    const d = await res.json();
+    if (!res.ok) { out.innerHTML = `<span style="color:var(--danger)">❌ ${esc(d.error || res.statusText)}</span>`; return; }
+    out.innerHTML = d.ok
+      ? `<span style="color:var(--success)">✅ ส่งสำเร็จ (HTTP ${d.status})</span>`
+      : `<span style="color:var(--warning)">⚠ ส่งได้แต่ server ตอบ ${d.status} ${esc(d.statusText)}</span>`;
+  } catch (e) { out.innerHTML = `<span style="color:var(--danger)">❌ ${esc(e.message)}</span>`; }
 }
 
 // --- Section nav IntersectionObserver ---

@@ -300,6 +300,49 @@ app.post('/reload', requireAdmin, (req, res) => {
   res.json({ reloaded: true });
 });
 
+app.get('/admin/health', requireAdmin, (req, res) => {
+  const mem = process.memoryUsage();
+  const toMB = n => Math.round(n / 1024 / 1024 * 10) / 10;
+  const uptime = process.uptime();
+  const storeSizes = {};
+  for (const [t, d] of Object.entries(store)) storeSizes[t] = d ? d.set.size : 0;
+  // Data file sizes
+  const fileSizes = {};
+  for (const t of Object.keys(store)) {
+    const f = path.join(DATA_DIR, `${t}.json`);
+    try { fileSizes[t] = Math.round(fs.statSync(f).size / 1024) + ' KB'; } catch { fileSizes[t] = null; }
+  }
+  res.json({
+    uptime_seconds: Math.round(uptime),
+    uptime_human: `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`,
+    memory: { rss_mb: toMB(mem.rss), heap_used_mb: toMB(mem.heapUsed), heap_total_mb: toMB(mem.heapTotal) },
+    store_sizes: storeSizes,
+    file_sizes: fileSizes,
+    rate_limit_keys: _rateMap.size,
+    node_version: process.version,
+    pid: process.pid,
+  });
+});
+
+app.post('/admin/webhook-test', requireAdmin, express.json(), async (req, res) => {
+  const { webhook } = req.body || {};
+  if (!webhook) return res.status(400).json({ error: 'webhook required' });
+  const payload = { event: 'test', message: 'NCSA Blacklist webhook test ping', timestamp: new Date().toISOString() };
+  const body = JSON.stringify(payload);
+  const headers = { 'Content-Type': 'application/json' };
+  const secret = process.env.WEBHOOK_SECRET;
+  if (secret) {
+    const crypto = require('crypto');
+    headers['X-Signature'] = 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
+  }
+  try {
+    const r = await fetch(webhook, { method: 'POST', headers, body, signal: AbortSignal.timeout(6000) });
+    res.json({ ok: r.ok, status: r.status, statusText: r.statusText });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 app.get('/history', (req, res) => {
   const { type } = req.query;
   if (!fs.existsSync(HISTORY_FILE)) return res.json([]);
