@@ -356,7 +356,7 @@ DATA_DIR=./local-data node src/server.js   # start server
 ### Run tests
 ```bash
 npm test
-# 67 tests across 9 test files
+# 72 tests across 9 test files
 # Covers: auth, allowlist, diff, fetch (ETag via mock HTTP), notify, scan, scheduler, server (integration), watchlist
 ```
 

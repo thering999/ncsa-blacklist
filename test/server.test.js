@@ -240,6 +240,13 @@ test('GET /check/auto/ allowlisted IP overrides blacklist', async () => {
   await fetch(baseUrl + '/allowlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ip', value: '1.2.3.4' }) });
 });
 
+test('responses include X-Request-Id header', async () => {
+  const res = await fetch(baseUrl + '/healthz');
+  const rid = res.headers.get('x-request-id');
+  assert.ok(rid, 'X-Request-Id header must be present');
+  assert.match(rid, /^[0-9a-f-]{36}$/, 'must be a UUID');
+});
+
 test('POST /watch rejects invalid IP format', async () => {
   const { status, body } = await post('/watch', { type: 'ip', value: 'not-an-ip' });
   assert.strictEqual(status, 400);

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const dns = require('dns').promises;
 const express = require('express');
 const { loadAll } = require('./store');
@@ -79,9 +80,11 @@ app.get('/healthz', (req, res) => {
 });
 
 app.use((req, res, next) => {
+  const reqId = req.get('X-Request-Id') || crypto.randomUUID();
+  res.set('X-Request-Id', reqId);
   const start = Date.now();
   res.on('finish', () => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+    console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms rid=${reqId}`);
   });
   next();
 });
@@ -274,10 +277,11 @@ app.post('/check/cidr', rateLimit(60, 60_000), express.json({ limit: '1kb' }), (
   if (range.count > 65536) return res.status(400).json({ error: 'CIDR too large (max /16 = 65536 IPs)' });
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
+  const allowed = new Set(allowlist.load().filter(e => e.type === 'ip').map(e => e.value));
   const hits = [];
   for (const ip of d.set) {
     const n = ipToInt(ip);
-    if (n >= range.start && n <= range.end) {
+    if (n >= range.start && n <= range.end && !allowed.has(ip)) {
       hits.push({ ip, geo: geoLookup(ip) });
     }
   }
@@ -349,7 +353,9 @@ app.post('/check/bulk', rateLimit(120, 60_000), express.json({ limit: '1mb' }), 
     if (!d) return { value: s, type: t, error: 'data not loaded' };
     if (allowlist.check(t, s)) return { value: s, type: t, blacklisted: false, allowlisted: true, matched: s, matchType: 'exact' };
     if (t === 'domain') return { value: s, type: t, ...domainCheck(d.set, s) };
-    return { value: s, type: t, blacklisted: d.set.has(s), matched: s, matchType: 'exact' };
+    const blacklisted = d.set.has(s);
+    const geo = t === 'ip' ? geoLookup(s) : null;
+    return { value: s, type: t, blacklisted, matched: s, matchType: 'exact', ...(geo ? { geo } : {}) };
   });
   res.json({ type: type || 'auto', results });
 });

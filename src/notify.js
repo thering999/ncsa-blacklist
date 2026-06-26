@@ -77,9 +77,11 @@ async function notify(results) {
     .map(r => `${r.type}: +${r.added} -${r.removed} (total ${r.total})`);
   const watchLines = results.filter(r => r.watchHits?.length > 0)
     .map(r => `WATCH HIT [${r.type}]: ${r.watchHits.join(', ')}`);
+  const watchRemovalLines = results.filter(r => r.watchRemovals?.length > 0)
+    .map(r => `WATCH REMOVED [${r.type}]: ${r.watchRemovals.join(', ')}`);
 
-  if (errorLines.length === 0 && lines.length === 0 && watchLines.length === 0) return;
-  const text = `NCSA blocklist sync\n${[...errorLines, ...lines, ...watchLines].join('\n')}`;
+  if (errorLines.length === 0 && lines.length === 0 && watchLines.length === 0 && watchRemovalLines.length === 0) return;
+  const text = `NCSA blocklist sync\n${[...errorLines, ...lines, ...watchLines, ...watchRemovalLines].join('\n')}`;
 
   const webhookUrl = process.env.WEBHOOK_URL;
   if (webhookUrl) {
@@ -90,9 +92,9 @@ async function notify(results) {
   if (process.env.LINE_NOTIFY_TOKEN) await notifyLine(text);
 
   if (process.env.SMTP_HOST && process.env.SMTP_TO) {
-    const hasWatch = watchLines.length > 0;
+    const hasWatch = watchLines.length > 0 || watchRemovalLines.length > 0;
     await notifyEmail(
-      hasWatch ? `[NCSA] Watch hit detected` : `[NCSA] Blocklist sync update`,
+      hasWatch ? `[NCSA] Watch alert` : `[NCSA] Blocklist sync update`,
       text
     );
   }

@@ -111,6 +111,7 @@ async function fetchFeed(type, url) {
 
   const watched = watchlist.load().filter((w) => w.type === type);
   const watchHits = watched.filter((w) => added.includes(w.value)).map((w) => w.value);
+  const watchRemovals = watched.filter((w) => removed.includes(w.value)).map((w) => w.value);
 
   const now = new Date().toISOString();
   const entry = {
@@ -134,7 +135,7 @@ async function fetchFeed(type, url) {
     });
   }
 
-  return { ...entry, watchHits };
+  return { ...entry, watchHits, watchRemovals };
 }
 
 async function fetchAll() {
