@@ -60,17 +60,27 @@ const ANOMALY_REMOVED_RATIO = 0.5;
 const ANOMALY_MIN_PREV = 10;
 const FETCH_TIMEOUT_MS = 30_000;
 const FETCH_MAX_RETRIES = 3;
+const FETCH_RETRY_BASE_MS = parseInt(process.env.FETCH_RETRY_BASE_MS || '1000');
 
 async function fetchWithRetry(url, options, attempt = 1) {
+  let res;
   try {
-    return await fetch(url, { ...options, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    res = await fetch(url, { ...options, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   } catch (err) {
     if (attempt >= FETCH_MAX_RETRIES) throw err;
-    const delay = 2 ** attempt * 1000; // 2s, 4s
+    const delay = 2 ** attempt * FETCH_RETRY_BASE_MS;
     console.warn(`fetch attempt ${attempt} failed (${err.message}), retry in ${delay}ms`);
     await new Promise((r) => setTimeout(r, delay));
     return fetchWithRetry(url, options, attempt + 1);
   }
+  // Retry on 5xx server errors (not 4xx client errors)
+  if (res.status >= 500 && attempt < FETCH_MAX_RETRIES) {
+    const delay = 2 ** attempt * FETCH_RETRY_BASE_MS;
+    console.warn(`fetch attempt ${attempt} returned HTTP ${res.status}, retry in ${delay}ms`);
+    await new Promise((r) => setTimeout(r, delay));
+    return fetchWithRetry(url, options, attempt + 1);
+  }
+  return res;
 }
 
 async function fetchFeed(type, url) {

@@ -7,6 +7,7 @@ const http = require('http');
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ncsa-fetch-test-'));
 process.env.DATA_DIR = tmpDir;
+process.env.FETCH_RETRY_BASE_MS = '10'; // fast retries in tests (2^1*10=20ms, 2^2*10=40ms)
 
 const feedData = {
   feed: 'ip',
@@ -21,10 +22,12 @@ let mockServer, mockPort;
 let lastRequestHeaders = {};
 let nextStatus = 200;
 let nextEtag = null;
+let failCount = 0; // number of times to return 500 before succeeding
 
 before(() => new Promise((resolve) => {
   mockServer = http.createServer((req, res) => {
     lastRequestHeaders = Object.assign({}, req.headers);
+    if (failCount > 0) { failCount--; res.writeHead(500); res.end('error'); return; }
     if (nextStatus === 304) { res.writeHead(304); res.end(); return; }
     const h = { 'Content-Type': 'application/json' };
     if (nextEtag) h['ETag'] = nextEtag;
@@ -86,4 +89,15 @@ test('fetchAll handles 304 without error', async () => {
   const r = results.find(r => r.type === 'ip');
   assert.ok(!r?.error);
   assert.ok(r?.cached || r?.unchanged);
+});
+
+test('fetchWithRetry retries on HTTP 500 and succeeds', async () => {
+  nextStatus = 200; nextEtag = null;
+  feedData.file.sha256 = 'deadbeef04';
+  failCount = 1; // fail once then succeed (consumed by ip's first attempt)
+  const { fetchAll } = require('../src/fetch');
+  const results = await fetchAll();
+  const ipResult = results.find(r => r.type === 'ip');
+  assert.ok(!ipResult?.error, `ip should succeed after retry, got: ${ipResult?.error}`);
+  assert.strictEqual(failCount, 0, 'server failure should have been consumed by retry');
 });

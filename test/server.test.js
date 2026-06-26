@@ -149,6 +149,20 @@ test('POST /check/cidr rejects invalid CIDR', async () => {
   assert.strictEqual(status, 400);
 });
 
+test('POST /check/cidr IPv6 range returns 200', async () => {
+  // fixture has no IPv6 IPs so hits will be empty, but request should succeed
+  const { status, body } = await post('/check/cidr', { cidr: '2001:db8::/112' });
+  assert.strictEqual(status, 200);
+  assert.ok(Array.isArray(body.hits));
+  assert.strictEqual(body.hits.length, 0);
+  assert.ok(typeof body.total_in_range === 'number');
+});
+
+test('POST /check/cidr rejects too-large IPv6 range', async () => {
+  const { status } = await post('/check/cidr', { cidr: '2001:db8::/111' });
+  assert.strictEqual(status, 400);
+});
+
 test('GET /search returns matching results', async () => {
   const { status, body } = await get('/search?type=ip&q=1.2.3');
   assert.strictEqual(status, 200);

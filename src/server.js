@@ -149,16 +149,47 @@ function ipToInt(ip) {
 function intToIp(n) {
   return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
 }
+
+function ipv6ToBigInt(ip) {
+  // Expand :: shorthand
+  let full = ip;
+  if (ip.includes('::')) {
+    const [left, right] = ip.split('::');
+    const lp = left ? left.split(':') : [];
+    const rp = right ? right.split(':') : [];
+    const fill = Array(8 - lp.length - rp.length).fill('0');
+    full = [...lp, ...fill, ...rp].join(':');
+  }
+  return full.split(':').reduce((acc, h) => (acc << 16n) | BigInt(parseInt(h || '0', 16)), 0n);
+}
+
 function parseCIDR(cidr) {
-  const m = cidr.match(/^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/);
-  if (!m) return null;
-  const prefix = parseInt(m[2]);
-  if (prefix < 0 || prefix > 32) return null;
-  const base = ipToInt(m[1]);
-  const mask = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
-  const start = (base & mask) >>> 0;
-  const end = (start | (~mask >>> 0)) >>> 0;
-  return { start, end, count: end - start + 1, prefix };
+  // IPv4
+  const v4 = cidr.match(/^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/);
+  if (v4) {
+    const prefix = parseInt(v4[2]);
+    if (prefix > 32) return null;
+    const base = ipToInt(v4[1]);
+    const mask = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+    const start = (base & mask) >>> 0;
+    const end = (start | (~mask >>> 0)) >>> 0;
+    return { start, end, count: end - start + 1, prefix, isV6: false };
+  }
+  // IPv6
+  const v6 = cidr.match(/^(.+)\/(\d{1,3})$/);
+  if (v6 && v6[1].includes(':')) {
+    const prefix = parseInt(v6[2]);
+    if (prefix > 128) return null;
+    try {
+      const base = ipv6ToBigInt(v6[1]);
+      const bits = BigInt(128 - prefix);
+      const mask = prefix === 0 ? 0n : ((1n << 128n) - 1n) ^ ((1n << bits) - 1n);
+      const start = base & mask;
+      const end = start | ((1n << bits) - 1n);
+      return { start, end, count: end - start + 1n, prefix, isV6: true };
+    } catch { return null; }
+  }
+  return null;
 }
 const adminTokens = parseTokens(process.env);
 if (Object.keys(adminTokens).length === 0) {
@@ -297,20 +328,34 @@ app.post('/check/cidr', rateLimit(60, 60_000), express.json({ limit: '1kb' }), (
   const { cidr } = req.body || {};
   if (!cidr) return res.status(400).json({ error: 'cidr required' });
   const range = parseCIDR(cidr.trim());
-  if (!range) return res.status(400).json({ error: 'invalid CIDR (IPv4 only, /0-/32)' });
-  if (range.count > 65536) return res.status(400).json({ error: 'CIDR too large (max /16 = 65536 IPs)' });
+  if (!range) return res.status(400).json({ error: 'invalid CIDR' });
+  const MAX_IPS = range.isV6 ? 65536n : 65536;
+  if (range.count > MAX_IPS) {
+    return res.status(400).json({ error: range.isV6 ? 'CIDR too large (max /112 for IPv6)' : 'CIDR too large (max /16 for IPv4)' });
+  }
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
   const allowed = new Set(allowlist.load().filter(e => e.type === 'ip').map(e => e.value));
   const hits = [];
   for (const ip of d.set) {
-    const n = ipToInt(ip);
-    if (n >= range.start && n <= range.end && !allowed.has(ip)) {
-      hits.push({ ip, geo: geoLookup(ip) });
+    if (allowed.has(ip)) continue;
+    if (range.isV6) {
+      if (!ip.includes(':')) continue;
+      const n = ipv6ToBigInt(ip);
+      if (n >= range.start && n <= range.end) hits.push({ ip, geo: geoLookup(ip) });
+    } else {
+      if (ip.includes(':')) continue;
+      const n = ipToInt(ip);
+      if (n >= range.start && n <= range.end) hits.push({ ip, geo: geoLookup(ip) });
     }
   }
-  hits.sort((a, b) => ipToInt(a.ip) - ipToInt(b.ip));
-  res.json({ cidr, range_start: intToIp(range.start), range_end: intToIp(range.end), total_in_range: range.count, hits_count: hits.length, hits: hits.slice(0, 1000) });
+  hits.sort((a, b) => {
+    if (range.isV6) { const an = ipv6ToBigInt(a.ip), bn = ipv6ToBigInt(b.ip); return an < bn ? -1 : an > bn ? 1 : 0; }
+    return ipToInt(a.ip) - ipToInt(b.ip);
+  });
+  const base = { cidr, total_in_range: Number(range.count), hits_count: hits.length, hits: hits.slice(0, 1000) };
+  if (!range.isV6) Object.assign(base, { range_start: intToIp(range.start), range_end: intToIp(range.end) });
+  res.json(base);
 });
 
 app.get('/analyze/networks', (req, res) => {
