@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>NCSA Blacklist Checker</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.4rem; }
+  section { margin-bottom: 32px; }
+  input, textarea, select, button { font-size: 1rem; padding: 8px; }
+  input, textarea { width: 100%; box-sizing: border-box; }
+  button { cursor: pointer; margin-top: 8px; }
+  .result { margin-top: 12px; padding: 12px; border-radius: 6px; }
+  .hit { background: #fdecea; color: #b3261e; }
+  .clean { background: #e6f4ea; color: #1e7a34; }
+  #stats { font-size: 0.9rem; color: #555; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  td, th { text-align: left; padding: 4px 8px; border-bottom: 1px solid #ddd; font-size: 0.9rem; }
+  #historyChart { background: #fafafa; border: 1px solid #eee; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>NCSA Blacklist Checker</h1>
+  <p id="stats">loading stats...</p>
+
+  <section>
+    <h2>ตรวจสอบรายการเดียว</h2>
+    <select id="type">
+      <option value="ip">IP</option>
+      <option value="domain">Domain</option>
+      <option value="hash">Hash (SHA256)</option>
+    </select>
+    <input id="value" placeholder="เช่น 1.2.3.4 / example.com / hash...">
+    <button onclick="checkOne()">ตรวจสอบ</button>
+    <div id="checkResult"></div>
+  </section>
+
+  <section>
+    <h2>สแกน log (วาง access log / firewall log)</h2>
+    <textarea id="logText" rows="8" placeholder="วาง log ที่มี IP ลงตรงนี้..."></textarea>
+    <button onclick="scanLog()">สแกน</button>
+    <div id="scanResult"></div>
+  </section>
+
+  <section>
+    <h2>Watch list (แจ้งเตือนถ้าเข้า blacklist)</h2>
+    <select id="watchType">
+      <option value="ip">IP</option>
+      <option value="domain">Domain</option>
+      <option value="hash">Hash (SHA256)</option>
+    </select>
+    <input id="watchValue" placeholder="ค่าที่จะเฝ้าดู">
+    <button onclick="addWatch()">เพิ่ม</button>
+    <table id="watchTable"></table>
+  </section>
+
+  <section>
+    <h2>แนวโน้ม (30 รอบล่าสุด)</h2>
+    <select id="historyType" onchange="loadHistory()">
+      <option value="ip">IP</option>
+      <option value="domain">Domain</option>
+      <option value="hash">Hash</option>
+    </select>
+    <svg id="historyChart" width="100%" height="160" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
+    <table id="historyTable"></table>
+  </section>
+
+<script>
+async function loadStats() {
+  const res = await fetch('/stats');
+  const data = await res.json();
+  const parts = Object.entries(data).map(([type, d]) =>
+    d ? `${type}: ${d.total.toLocaleString()} (updated ${d.generated_at})` : `${type}: no data`
+  );
+  document.getElementById('stats').textContent = parts.join(' | ');
+}
+
+async function checkOne() {
+  const type = document.getElementById('type').value;
+  const value = document.getElementById('value').value.trim();
+  const out = document.getElementById('checkResult');
+  if (!value) return;
+  const res = await fetch(`/check/${type}/${encodeURIComponent(value)}`);
+  const data = await res.json();
+  out.className = 'result ' + (data.blacklisted ? 'hit' : 'clean');
+  out.textContent = data.blacklisted
+    ? `อยู่ใน blacklist: ${value}`
+    : `ไม่พบใน blacklist: ${value}`;
+}
+
+async function scanLog() {
+  const text = document.getElementById('logText').value;
+  const out = document.getElementById('scanResult');
+  if (!text.trim()) return;
+  const res = await fetch('/scan', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
+  const data = await res.json();
+  if (data.hits.length === 0) {
+    out.className = 'result clean';
+    out.textContent = `สแกน ${data.scanned} IP ไม่พบรายการอันตราย`;
+    return;
+  }
+  out.className = 'result hit';
+  out.innerHTML = `พบ ${data.hits.length} IP อันตราย (จากทั้งหมด ${data.scanned}):<table>` +
+    data.hits.map((ip) => `<tr><td>${ip}</td></tr>`).join('') + '</table>';
+}
+
+async function loadWatch() {
+  const res = await fetch('/watch');
+  const list = await res.json();
+  const table = document.getElementById('watchTable');
+  table.innerHTML = list.map((w) =>
+    `<tr><td>${w.type}</td><td>${w.value}</td><td><button onclick="removeWatch('${w.type}','${w.value}')">ลบ</button></td></tr>`
+  ).join('');
+}
+
+async function addWatch() {
+  const type = document.getElementById('watchType').value;
+  const value = document.getElementById('watchValue').value.trim();
+  if (!value) return;
+  await fetch('/watch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, value }) });
+  document.getElementById('watchValue').value = '';
+  loadWatch();
+}
+
+async function removeWatch(type, value) {
+  await fetch('/watch', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, value }) });
+  loadWatch();
+}
+
+function drawChart(entries) {
+  const svg = document.getElementById('historyChart');
+  if (entries.length < 2) {
+    svg.innerHTML = '<text x="10" y="80" font-size="12" fill="#888">ข้อมูลยังน้อยเกินจะวาดกราฟ (ต้องมีอย่างน้อย 2 รอบ sync)</text>';
+    return;
+  }
+  const totals = entries.map((e) => e.total);
+  const min = Math.min(...totals);
+  const max = Math.max(...totals);
+  const range = max - min || 1;
+  const stepX = 600 / (entries.length - 1);
+  const points = totals.map((t, i) => {
+    const x = i * stepX;
+    const y = 150 - ((t - min) / range) * 140;
+    return `${x},${y}`;
+  });
+  svg.innerHTML =
+    `<polyline points="${points.join(' ')}" fill="none" stroke="#1e7a34" stroke-width="2"/>` +
+    `<text x="4" y="14" font-size="11" fill="#555">max ${max.toLocaleString()}</text>` +
+    `<text x="4" y="156" font-size="11" fill="#555">min ${min.toLocaleString()}</text>`;
+}
+
+async function loadHistory() {
+  const type = document.getElementById('historyType').value;
+  const res = await fetch(`/history?type=${type}`);
+  const entries = await res.json();
+  drawChart(entries);
+  const table = document.getElementById('historyTable');
+  table.innerHTML = '<tr><th>วันที่</th><th>total</th><th>+</th><th>-</th></tr>' +
+    entries.map((e) => `<tr><td>${e.date.slice(0, 16)}</td><td>${e.total}</td><td>${e.added}</td><td>${e.removed}</td></tr>`).join('');
+}
+
+loadStats();
+loadWatch();
+loadHistory();
+</script>
+</body>
+</html>

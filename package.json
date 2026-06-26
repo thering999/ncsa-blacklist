@@ -1,0 +1,24 @@
+{
+  "name": "ncsa-blacklist",
+  "version": "0.2.0",
+  "description": "Sync + lookup service for NCSA Thailand public threat blocklists (IP/domain/hash)",
+  "main": "src/server.js",
+  "license": "MIT",
+  "scripts": {
+    "fetch": "node src/fetch.js",
+    "start": "node src/server.js",
+    "schedule": "node src/scheduler.js",
+    "lookup": "node src/cli.js",
+    "export:iptables": "node src/export-iptables.js",
+    "export:dnsmasq": "node src/export-dnsmasq.js",
+    "export:wazuh": "node src/export-wazuh-cdb.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-cron": "^4.5.0"
+  }
+}
