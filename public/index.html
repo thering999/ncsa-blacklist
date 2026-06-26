@@ -410,8 +410,13 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
   </div>
 
   <div class="card" id="sec-networks">
-    <h2>🌐 วิเคราะห์ IP Networks (Top /24)</h2>
+    <h2>🌐 วิเคราะห์ IP Networks</h2>
+    <div class="tab-row" style="margin-bottom:12px">
+      <button class="tab-btn active" id="netTabNetworks" onclick="switchNetTab('networks',this)">Top /24 Networks</button>
+      <button class="tab-btn" id="netTabCountries" onclick="switchNetTab('countries',this)">By Country</button>
+    </div>
     <div id="networksResult"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
+    <div id="countriesResult" style="display:none"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
   </div>
 
   <div class="card" id="sec-trend">
@@ -671,24 +676,68 @@ async function loadRecent() {
 }
 
 // --- Network Analysis ---
+function flag(cc) {
+  if (!cc || cc.length !== 2) return '';
+  try { return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)); } catch { return ''; }
+}
+
+function switchNetTab(tab, btn) {
+  document.querySelectorAll('#sec-networks .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('networksResult').style.display = tab === 'networks' ? '' : 'none';
+  document.getElementById('countriesResult').style.display = tab === 'countries' ? '' : 'none';
+  if (tab === 'countries') loadCountries();
+}
+
 async function loadNetworks() {
   const out = document.getElementById('networksResult');
   try {
     const d = await fetch('/analyze/networks').then(r => r.json());
     if (!d.top || !d.top.length) { out.innerHTML = '<div class="result info">ไม่มีข้อมูล IP</div>'; return; }
     const max = d.top[0].count;
-    const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ทั้งหมด ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_networks.toLocaleString()} networks (/24)</div>`;
+    const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ทั้งหมด ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_networks.toLocaleString()} networks (/24) — คลิก network เพื่อ CIDR check</div>`;
     const rows = d.top.map(n => `
-      <div style="display:grid;grid-template-columns:160px 1fr 50px 55px;gap:8px;align-items:center;margin-bottom:4px">
-        <code style="font-size:12px;color:var(--text)">${esc(n.network)}</code>
+      <div onclick="jumpToCIDR('${esc(n.network)}')" title="CIDR check ${esc(n.network)}"
+           style="display:grid;grid-template-columns:160px 1fr 50px 65px;gap:8px;align-items:center;margin-bottom:4px;cursor:pointer;padding:3px 6px;border-radius:4px;transition:background .1s"
+           onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+        <code style="font-size:12px;color:var(--primary)">${esc(n.network)}</code>
         <div class="net-bar"><div class="net-bar-fill" style="width:${Math.round(n.count/max*100)}%"></div></div>
         <span class="net-count">${n.count}</span>
-        <span style="font-size:11px;color:var(--text-muted)">${n.country ? esc(n.country) : ''} ${n.as ? '<span style="font-size:10px">'+esc(n.as)+'</span>' : ''}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${n.country ? flag(n.country)+' '+esc(n.country) : ''}</span>
       </div>`).join('');
     out.innerHTML = summary + rows;
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }
+}
+
+async function loadCountries() {
+  const out = document.getElementById('countriesResult');
+  if (out.dataset.loaded) return;
+  out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div>';
+  try {
+    const d = await fetch('/analyze/countries').then(r => r.json());
+    if (!d.top || !d.top.length) { out.innerHTML = '<div class="result info">ไม่มีข้อมูล</div>'; return; }
+    const max = d.top[0].count;
+    const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_countries} ประเทศ</div>`;
+    const rows = d.top.map(n => `
+      <div style="display:grid;grid-template-columns:130px 1fr 55px 55px;gap:8px;align-items:center;margin-bottom:4px">
+        <span style="font-size:13px">${flag(n.country)} <strong>${esc(n.country)}</strong></span>
+        <div class="net-bar"><div class="net-bar-fill" style="width:${Math.round(n.count/max*100)}%"></div></div>
+        <span class="net-count">${n.count.toLocaleString()}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${n.pct}%</span>
+      </div>`).join('');
+    out.innerHTML = summary + rows;
+    out.dataset.loaded = '1';
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
+  }
+}
+
+function jumpToCIDR(net) {
+  document.getElementById('cidrInput').value = net;
+  document.getElementById('sec-cidr').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(cidrCheck, 400);
 }
 
 // --- Threat News ---

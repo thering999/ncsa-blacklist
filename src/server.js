@@ -229,6 +229,22 @@ app.get('/analyze/networks', (req, res) => {
   res.json({ total_ips: d.set.size, total_networks: counts.size, top });
 });
 
+app.get('/analyze/countries', (req, res) => {
+  const d = store.ip;
+  if (!d) return res.status(503).json({ error: 'ip data not loaded' });
+  const counts = new Map();
+  for (const ip of d.set) {
+    const g = geoLookup(ip);
+    const cc = g?.country || 'Unknown';
+    counts.set(cc, (counts.get(cc) || 0) + 1);
+  }
+  const top = [...counts.entries()]
+    .map(([country, count]) => ({ country, count, pct: Math.round(count / d.set.size * 1000) / 10 }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 25);
+  res.json({ total_ips: d.set.size, total_countries: counts.size, top });
+});
+
 app.post('/scan', rateLimit(30, 60_000), express.text({ limit: '2mb' }), (req, res) => {
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });

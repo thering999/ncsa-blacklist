@@ -94,7 +94,8 @@ open http://localhost:3939
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /analyze/networks` | Top 25 /24 subnets by blacklisted IP count + country/AS |
+| `GET /analyze/networks` | Top 25 /24 subnets by blacklisted IP count + country/AS. Rows clickable → CIDR check. |
+| `GET /analyze/countries` | Top 25 countries by IP count + percentage. Returns `{total_ips, total_countries, top[{country,count,pct}]}` |
 
 ### Admin (requires auth)
 
@@ -240,7 +241,7 @@ NCSA opendata.ncsa.or.th
 | Export | iptables / dnsmasq / wazuh / IP CSV / Domain CSV / Hash CSV / JSON bundle |
 | Watch List | Monitor values → webhook alert when added to blacklist |
 | ThaICERT News | Latest cybersecurity news (monthly CSV, clickable headlines) |
-| Network Analysis | Top 25 /24 subnets bar chart with country + AS |
+| Network Analysis | Two tabs: (1) Top /24 subnets bar chart — click row → CIDR check; (2) By Country — flag emoji + percentage bar |
 | Trend Chart | 30 sync history chart (IP/Domain/Hash tabs) |
 | About | MISP provenance, source query, publisher, license, TLP |
 
