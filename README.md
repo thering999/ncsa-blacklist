@@ -180,6 +180,89 @@ GET /news                      # ThaICERT cybernews (cache 6h)
 
 ---
 
+## ตัวอย่าง Response
+
+### ตรวจสอบ IP (blacklisted)
+```json
+GET /check/auto/1.10.214.0
+
+{
+  "type": "ip",
+  "value": "1.10.214.0",
+  "blacklisted": true,
+  "matched": "1.10.214.0",
+  "matchType": "exact",
+  "geo": { "country": "TH", "city": "Bangkok", "as": "AS9931", "org": "CAT Telecom" },
+  "rdns": "1-10-214-0.static.tbcz.net",
+  "risk": 65,
+  "feeds": ["ip"]
+}
+```
+
+### ตรวจสอบ Domain (parent match)
+```json
+GET /check/auto/sub.evil.example.com
+
+{
+  "type": "domain",
+  "value": "sub.evil.example.com",
+  "blacklisted": true,
+  "matched": "evil.example.com",
+  "matchType": "parent",
+  "feeds": ["domain"]
+}
+```
+
+### Bulk Check (auto-detect)
+```json
+POST /check/bulk
+{"type":"auto","values":["1.2.3.4","evil.com","abc...64hex..."]}
+
+{
+  "type": "auto",
+  "results": [
+    {"value":"1.2.3.4","type":"ip","blacklisted":false},
+    {"value":"evil.com","type":"domain","blacklisted":true,"matched":"evil.com","matchType":"exact"},
+    {"value":"abc...","type":"hash","blacklisted":false}
+  ]
+}
+```
+
+### CIDR Check
+```json
+POST /check/cidr
+{"cidr":"1.10.214.0/24"}
+
+{
+  "cidr": "1.10.214.0/24",
+  "range_start": "1.10.214.0",
+  "range_end": "1.10.214.255",
+  "total_in_range": 256,
+  "hits_count": 3,
+  "hits": [
+    {"ip":"1.10.214.0","geo":{"country":"TH"}},
+    {"ip":"1.10.214.1","geo":{"country":"TH"}}
+  ]
+}
+```
+
+### Risk Score ความหมาย
+
+| คะแนน | สี | ความหมาย |
+|-------|-----|----------|
+| 0–39 | 🟢 เขียว | ความเสี่ยงต่ำ |
+| 40–69 | 🟡 เหลือง | ความเสี่ยงปานกลาง |
+| 70–100 | 🔴 แดง | ความเสี่ยงสูง |
+
+คะแนนคำนวณจาก:
+- อยู่ใน blacklist = **+50**
+- ประเทศความเสี่ยงสูง (CN/RU/KP/IR/BY/CU/SY/VE) = **+15**
+- CIDR density > 50 IPs ใน /24 เดียวกัน = **+20**
+- CIDR density > 10 IPs = **+12**
+- CIDR density > 2 IPs = **+5**
+
+---
+
 ## Permalink
 
 ทุก URL รองรับ query parameter สำหรับแชร์ผลลัพธ์:
@@ -267,6 +350,167 @@ ncsa-blacklist/
 | CKAN package metadata | `data.go.th` | Open Government Data |
 | ThaICERT cybernews | `ncsa.gdcatalog.go.th` | สาธารณะ |
 | GeoIP (offline) | geoip-lite (MaxMind GeoLite2) | CC BY-SA 4.0 |
+
+---
+
+## การตั้งค่าแจ้งเตือน
+
+### LINE Notify
+1. ไปที่ [notify-bot.line.me](https://notify-bot.line.me/th/) → Login
+2. **My page** → **Generate token** → ตั้งชื่อ → เลือก group/1:1 → **Generate**
+3. คัดลอก token → ใส่ใน `.env`:
+   ```
+   LINE_NOTIFY_TOKEN=your_token_here
+   ```
+4. ระบบจะส่งข้อความเมื่อ: sync มีการเปลี่ยนแปลง หรือ watch list hit
+
+### Email (SMTP)
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your@gmail.com
+SMTP_PASS=app_password_here    # ใช้ App Password ไม่ใช่ password จริง
+SMTP_FROM=your@gmail.com
+SMTP_TO=alert@yourcompany.com
+```
+> **Gmail:** ต้องเปิด 2FA แล้วสร้าง App Password ที่ myaccount.google.com/apppasswords
+
+### Webhook (Discord/Slack/Custom)
+```env
+WEBHOOK_URL=https://discord.com/api/webhooks/xxx/yyy
+WEBHOOK_SECRET=random_secret_here    # optional: HMAC signing
+```
+ตรวจสอบ signature ฝั่ง receiver:
+```js
+const sig = req.headers['x-signature']; // "sha256=<hex>"
+const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+if (sig !== expected) return res.status(401).end();
+```
+
+---
+
+## Integration Guide
+
+### iptables (Linux firewall)
+```bash
+# Download + apply blocklist
+curl http://localhost:3939/export/iptables -o ncsa-block.sh
+chmod +x ncsa-block.sh && sudo bash ncsa-block.sh
+
+# หรือ auto-update ทุกวันผ่าน cron:
+0 7 * * * curl -s http://localhost:3939/export/iptables | bash
+```
+
+### dnsmasq (DNS blocking)
+```bash
+# เพิ่มใน /etc/dnsmasq.d/ncsa-blacklist.conf
+curl http://localhost:3939/export/dnsmasq -o /etc/dnsmasq.d/ncsa-blacklist.conf
+systemctl reload dnsmasq
+```
+
+### Wazuh SIEM (hash lookup)
+```bash
+# ดาวน์โหลด CDB list
+curl http://localhost:3939/export/wazuh -o /var/ossec/etc/lists/ncsa-blacklist
+
+# ossec.conf — เพิ่ม rule:
+# <list>etc/lists/ncsa-blacklist</list>
+```
+
+### Python / curl
+```python
+import requests
+
+# ตรวจสอบ IP เดียว
+r = requests.get('http://localhost:3939/check/auto/1.2.3.4')
+print(r.json())  # {type, blacklisted, risk, geo, rdns}
+
+# Bulk check
+r = requests.post('http://localhost:3939/check/bulk', json={
+    'type': 'auto',
+    'values': ['1.2.3.4', 'evil.com', 'abc...hash...']
+})
+hits = [x for x in r.json()['results'] if x['blacklisted']]
+```
+
+---
+
+## Troubleshooting
+
+### ข้อมูลว่าง (0 IPs)
+```bash
+# รัน fetch เองทันที
+docker compose exec ncsa-blacklist node src/fetch.js
+
+# ดู log
+docker compose logs ncsa-blacklist-sync
+```
+
+### Sync ไม่ทำงาน
+- ตรวจสอบว่า container `ncsa-blacklist-sync` ยัง run อยู่: `docker compose ps`
+- ดู log: `docker compose logs ncsa-blacklist-sync --tail=50`
+- รัน fetch เองด้วยมือเพื่อทดสอบ
+
+### GeoIP ไม่มีข้อมูล
+- `geoip-lite` ใช้ฐานข้อมูล MaxMind ฟรี → IP บางส่วนไม่มีข้อมูล AS
+- อัปเดต database: `docker compose exec ncsa-blacklist node -e "require('geoip-lite').reloadDataSync()"`
+
+### LINE Notify ไม่ส่ง
+- ตรวจสอบ token ถูกต้อง: `curl -H "Authorization: Bearer <token>" https://notify-api.line.me/api/status`
+- Token expire หรือถูก revoke → สร้างใหม่
+
+### Port 3939 ถูก block
+```bash
+# เปลี่ยน port ใน .env
+PORT=8080
+docker compose up -d
+```
+
+### Disk space (DATA_DIR)
+- `history.jsonl` จำกัด 1,000 บรรทัด (auto-trim)
+- `recent.jsonl` จำกัด 120 รายการ (auto-trim)
+- feed JSON (~10-50MB ต่อไฟล์)
+
+---
+
+## Backup & Recovery
+
+ข้อมูลทั้งหมดอยู่ใน `DATA_DIR` (Docker volume: `ncsa-data` หรือ `./data`):
+
+```bash
+# Backup (Docker)
+docker run --rm -v ncsa-data:/data -v $(pwd):/backup alpine \
+  tar czf /backup/ncsa-backup-$(date +%Y%m%d).tar.gz /data
+
+# Restore
+docker run --rm -v ncsa-data:/data -v $(pwd):/backup alpine \
+  tar xzf /backup/ncsa-backup-20260626.tar.gz -C /
+```
+
+ไฟล์สำคัญที่ควร backup: `watchlist.json` (รายการที่ติดตาม) — ที่เหลือสร้างใหม่ได้จาก `npm run fetch`
+
+---
+
+## FAQ
+
+**Q: ข้อมูลอัปเดตบ่อยแค่ไหน?**
+A: Sync ทุก 6 ชั่วโมง upstream NCSA อัปเดตรายวัน
+
+**Q: รองรับ IPv6 ไหม?**
+A: ใช่ — `/check/auto`, `/check/bulk`, `/scan` ทุกตัวรองรับ IPv6
+
+**Q: ใช้ฟรีไหม? มี limit ไหม?**
+A: ฟรีทั้งหมด ข้อมูล NCSA เป็น CC0 open data ไม่มี API key ไม่มี rate limit จาก upstream
+
+**Q: ติดตั้งบน Raspberry Pi / ARM ได้ไหม?**
+A: ได้ — Docker image รองรับ linux/arm64 และ linux/arm/v7
+
+**Q: ขยาย feed เพิ่มเองได้ไหม?**
+A: ได้ — ใช้ `EXTRA_FEEDS=mylist:https://your-feed.com/blocklist.json` (format เดียวกับ NCSA)
+
+**Q: watch list แจ้งเตือนยังไง?**
+A: ทุกครั้งที่ sync — ถ้า value ใน watch list ถูกเพิ่มเข้า blacklist → ส่ง webhook/LINE/email ทันที
 
 ---
 
