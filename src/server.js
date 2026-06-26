@@ -5,6 +5,7 @@ const express = require('express');
 const { loadAll } = require('./store');
 const { scanLog, scanLogWithContext } = require('./scan');
 const watchlist = require('./watchlist');
+const allowlist = require('./allowlist');
 const { DATA_DIR } = require('./paths');
 const { FEEDS, RECENT_FILE } = require('./fetch');
 
@@ -146,6 +147,16 @@ const adminTokens = parseTokens(process.env);
 if (Object.keys(adminTokens).length === 0) {
   console.warn('no ADMIN_TOKEN/ADMIN_TOKENS set — /watch and /reload are unauthenticated; do not expose this publicly as-is');
 }
+
+// Startup env validation
+(function validateEnv() {
+  const w = (msg) => console.warn(`[config] ${msg}`);
+  if (process.env.SMTP_HOST && !process.env.SMTP_TO) w('SMTP_HOST set but SMTP_TO missing — email notifications will not send');
+  if (process.env.SMTP_HOST && process.env.SMTP_SECURE === 'true' && !process.env.SMTP_USER) w('SMTP_SECURE=true but no SMTP_USER — auth may be required');
+  if (process.env.WEBHOOK_URL && !process.env.WEBHOOK_URL.startsWith('http')) w('WEBHOOK_URL does not look like a URL');
+  if (process.env.RATE_LIMIT && isNaN(Number(process.env.RATE_LIMIT))) w('RATE_LIMIT must be a number');
+  if (process.env.PORT && isNaN(Number(process.env.PORT))) w('PORT must be a number');
+})();
 const requireAdmin = makeRequireAdmin(adminTokens);
 
 function expiresAt(generatedAt, validDays) {
@@ -226,6 +237,10 @@ app.get('/check/auto/:value', async (req, res) => {
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
 
+  if (allowlist.check(type, value)) {
+    return res.json({ type, value, blacklisted: false, allowlisted: true, matched: value, matchType: 'exact' });
+  }
+
   // Multi-feed: check all feeds for this value
   const feeds = [];
   for (const [t, fd] of Object.entries(store)) { if (fd && fd.set.has(value)) feeds.push(t); }
@@ -242,6 +257,9 @@ app.get('/check/:type/:value', (req, res) => {
   const { type, value } = req.params;
   const d = store[type];
   if (!d) return res.status(404).json({ error: `unknown type: ${type}` });
+  if (allowlist.check(type, value)) {
+    return res.json({ type, value, blacklisted: false, allowlisted: true, matched: value, matchType: 'exact' });
+  }
   if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value) });
   const blacklisted = d.set.has(value);
   const geo = type === 'ip' ? geoLookup(value) : null;
@@ -322,6 +340,7 @@ app.post('/check/bulk', rateLimit(120, 60_000), express.json({ limit: '1mb' }), 
     const t = (type === 'auto' || !type) ? autoDetectType(s) : type;
     const d = store[t];
     if (!d) return { value: s, type: t, error: 'data not loaded' };
+    if (allowlist.check(t, s)) return { value: s, type: t, blacklisted: false, allowlisted: true, matched: s, matchType: 'exact' };
     if (t === 'domain') return { value: s, type: t, ...domainCheck(d.set, s) };
     return { value: s, type: t, blacklisted: d.set.has(s), matched: s, matchType: 'exact' };
   });
@@ -539,6 +558,25 @@ app.delete('/watch', requireAdmin, express.json(), (req, res) => {
   if (!type || !value) return res.status(400).json({ error: 'type and value required' });
   console.log(`watch remove by admin "${req.adminName || 'default'}": ${type}:${value}`);
   res.json(watchlist.remove(type, value));
+});
+
+app.get('/allowlist', (req, res) => {
+  res.json(allowlist.load());
+});
+
+app.post('/allowlist', requireAdmin, express.json(), (req, res) => {
+  const { type, value } = req.body || {};
+  if (!type || !value) return res.status(400).json({ error: 'type and value required' });
+  if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
+  console.log(`allowlist add by admin "${req.adminName || 'default'}": ${type}:${value}`);
+  res.json(allowlist.add(type, value));
+});
+
+app.delete('/allowlist', requireAdmin, express.json(), (req, res) => {
+  const { type, value } = req.body || {};
+  if (!type || !value) return res.status(400).json({ error: 'type and value required' });
+  console.log(`allowlist remove by admin "${req.adminName || 'default'}": ${type}:${value}`);
+  res.json(allowlist.remove(type, value));
 });
 
 // --- Prometheus metrics ---

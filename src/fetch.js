@@ -22,7 +22,16 @@ if (process.env.EXTRA_FEEDS) {
 
 const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
 const RECENT_FILE = path.join(DATA_DIR, 'recent.jsonl');
+const ETAG_FILE = path.join(DATA_DIR, 'etag-state.json');
 const MAX_RECENT = 120; // keep last 120 sync records (40 per feed type × 3)
+
+function loadEtagState() {
+  try { return JSON.parse(fs.readFileSync(ETAG_FILE, 'utf8')); } catch { return {}; }
+}
+
+function saveEtagState(state) {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(ETAG_FILE, JSON.stringify(state)); } catch {}
+}
 
 function appendRecent(entry) {
   let lines = [];
@@ -51,7 +60,17 @@ const ANOMALY_REMOVED_RATIO = 0.5;
 const ANOMALY_MIN_PREV = 10;
 
 async function fetchFeed(type, url) {
-  const res = await fetch(url);
+  const etagState = loadEtagState();
+  const headers = {};
+  if (etagState[type]?.etag) headers['If-None-Match'] = etagState[type].etag;
+  else if (etagState[type]?.lastModified) headers['If-Modified-Since'] = etagState[type].lastModified;
+
+  const res = await fetch(url, { headers });
+
+  if (res.status === 304) {
+    return { type, total: null, added: 0, removed: 0, unchanged: true, cached: true };
+  }
+
   if (!res.ok) throw new Error(`${type} fetch failed: HTTP ${res.status}`);
   const json = await res.json();
   if (!Array.isArray(json.data)) throw new Error(`${type} fetch returned malformed payload (no data array)`);
@@ -80,6 +99,15 @@ async function fetchFeed(type, url) {
 
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(json));
+
+  // Persist ETag/Last-Modified for next conditional request
+  const newEtag = res.headers.get('etag');
+  const newLastModified = res.headers.get('last-modified');
+  if (newEtag || newLastModified) {
+    const state = loadEtagState();
+    state[type] = { etag: newEtag, lastModified: newLastModified };
+    saveEtagState(state);
+  }
 
   const watched = watchlist.load().filter((w) => w.type === type);
   const watchHits = watched.filter((w) => added.includes(w.value)).map((w) => w.value);

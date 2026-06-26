@@ -223,3 +223,34 @@ test('GET /metrics accepts correct METRICS_TOKEN', async () => {
   assert.strictEqual(res.status, 200);
   delete process.env.METRICS_TOKEN;
 });
+
+test('GET /allowlist returns array', async () => {
+  const { status, body } = await get('/allowlist');
+  assert.strictEqual(status, 200);
+  assert.ok(Array.isArray(body));
+});
+
+test('GET /check/auto/ allowlisted IP overrides blacklist', async () => {
+  // 1.2.3.4 is in blacklist fixture; add to allowlist
+  await post('/allowlist', { type: 'ip', value: '1.2.3.4' });
+  const { body } = await get('/check/auto/1.2.3.4');
+  assert.strictEqual(body.blacklisted, false);
+  assert.strictEqual(body.allowlisted, true);
+  // cleanup
+  await fetch(baseUrl + '/allowlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ip', value: '1.2.3.4' }) });
+});
+
+test('GET /admin/feed-health returns per-feed status (no auth configured)', async () => {
+  const { status, body } = await get('/admin/feed-health');
+  assert.strictEqual(status, 200);
+  assert.ok(body.feeds);
+  assert.ok('ip' in body.feeds);
+  assert.ok('domain' in body.feeds);
+  assert.ok('hash' in body.feeds);
+  assert.strictEqual(body.feeds.ip.status, 'ok');
+  assert.strictEqual(body.feeds.ip.entries, 2);
+  assert.ok(typeof body.feeds.ip.file_age_seconds === 'number');
+  assert.ok(body.feeds.ip.last_modified);
+  assert.ok(body.feeds.ip.file_size_kb >= 0);
+  assert.ok(body.feeds.ip.url.startsWith('https://'));
+});
