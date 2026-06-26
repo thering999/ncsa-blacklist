@@ -11,6 +11,15 @@ const FEEDS = {
   hash: 'https://opendata.ncsa.or.th/hash/sha256.json',
 };
 
+// EXTRA_FEEDS=mylist:https://example.com/feed.json,other:https://...
+if (process.env.EXTRA_FEEDS) {
+  for (const pair of process.env.EXTRA_FEEDS.split(',')) {
+    const [name, ...rest] = pair.trim().split(':');
+    const url = rest.join(':').trim();
+    if (name && url) FEEDS[name.trim()] = url;
+  }
+}
+
 const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
 const RECENT_FILE = path.join(DATA_DIR, 'recent.jsonl');
 const MAX_RECENT = 120; // keep last 120 sync records (40 per feed type × 3)
@@ -26,9 +35,16 @@ function appendRecent(entry) {
   fs.writeFileSync(RECENT_FILE, lines.join('\n') + '\n');
 }
 
+const MAX_HISTORY = 1000;
 function appendHistory(entry) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.appendFileSync(HISTORY_FILE, JSON.stringify(entry) + '\n');
+  let lines = [];
+  if (fs.existsSync(HISTORY_FILE)) {
+    lines = fs.readFileSync(HISTORY_FILE, 'utf8').trim().split('\n').filter(Boolean);
+  }
+  lines.push(JSON.stringify(entry));
+  if (lines.length > MAX_HISTORY) lines = lines.slice(-MAX_HISTORY);
+  fs.writeFileSync(HISTORY_FILE, lines.join('\n') + '\n');
 }
 
 const ANOMALY_REMOVED_RATIO = 0.5;

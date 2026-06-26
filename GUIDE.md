@@ -52,6 +52,16 @@ open http://localhost:3939
 | `ADMIN_TOKEN` | Single admin bearer token | (none — watch/reload unprotected) |
 | `ADMIN_TOKENS` | Named tokens: `name:token,name2:token2` | — |
 | `WEBHOOK_SECRET` | HMAC-SHA256 secret for watch notifications | — |
+| `WEBHOOK_URL` | Webhook URL for sync notifications | — |
+| `LINE_NOTIFY_TOKEN` | LINE Notify token — sends message on sync changes / watch hits | — |
+| `SMTP_HOST` | SMTP server for email notifications | — |
+| `SMTP_PORT` | SMTP port | `587` |
+| `SMTP_SECURE` | Use TLS (`true`/`false`) | `false` |
+| `SMTP_USER` | SMTP auth username | — |
+| `SMTP_PASS` | SMTP auth password | — |
+| `SMTP_FROM` | Sender address | same as `SMTP_USER` |
+| `SMTP_TO` | Recipient address(es) | — |
+| `EXTRA_FEEDS` | Extra blocklist feeds: `name:url,name2:url2` | — |
 | `DATA_DIR` | Where JSON feeds + history are stored | `/data` (Docker) |
 
 ---
@@ -62,6 +72,7 @@ open http://localhost:3939
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `GET /healthz` | — | `{ok, sync_last_run, sync_next_run}` — lightweight monitoring probe |
 | `GET /stats` | — | Count, generated_at, TLP, sha256, file_entries, integrity_ok per feed |
 | `GET /info` | — | Full provenance: publisher, MISP source URL, query, license, contact |
 | `GET /history` | — | Last 30 sync records (jsonl, newest first) |
@@ -94,7 +105,7 @@ open http://localhost:3939
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /analyze/networks` | Top 25 /24 subnets by blacklisted IP count + country/AS. Rows clickable → CIDR check. |
+| `GET /analyze/networks` | Top 50 /24 subnets by blacklisted IP count + country/AS. Supports `?country=TH` filter. Rows clickable → CIDR check. |
 | `GET /analyze/countries` | Top 25 countries by IP count + percentage. Returns `{total_ips, total_countries, top[{country,count,pct}]}` |
 
 ### Admin (requires auth)
@@ -241,7 +252,9 @@ NCSA opendata.ncsa.or.th
 | Export | iptables / dnsmasq / wazuh / IP CSV / Domain CSV / Hash CSV / JSON bundle |
 | Watch List | Monitor values → webhook alert when added to blacklist |
 | ThaICERT News | Latest cybersecurity news (monthly CSV, clickable headlines) |
-| Network Analysis | Two tabs: (1) Top /24 subnets bar chart — click row → CIDR check; (2) By Country — flag emoji + percentage bar |
+| Network Analysis | Two tabs: (1) Top /24 bar chart, country filter input, click → CIDR check; (2) By Country — flag emoji + percentage bar |
+| Single Lookup | Copy button + share link (🔗) on results; permalink via `?q=value` URL param |
+| Bulk Check | File upload (.txt/.csv) → auto-populate textarea for batch check |
 | Trend Chart | 30 sync history chart (IP/Domain/Hash tabs) |
 | About | MISP provenance, source query, publisher, license, TLP |
 

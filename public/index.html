@@ -164,6 +164,14 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 
 .log-line-cell { font-family: monospace; font-size: 11px; color: var(--text-muted); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drop-active { outline: 2px dashed var(--primary); outline-offset: 4px; background: #eff6ff; }
+.copy-btn { background: none; border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-size: 11px; cursor: pointer; color: var(--text-muted); margin-left: 6px; transition: background .1s; }
+.copy-btn:hover { background: var(--bg); color: var(--text); }
+@media print {
+  .page-nav, #settingsOverlay, .settings-btn, #darkBtn, .btn, .form-row, .tab-row { display: none !important; }
+  body { background: white; }
+  .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+  .stat-card { break-inside: avoid; }
+}
 .news-headline a { color: var(--text); text-decoration: none; font-size: 13px; }
 .news-headline a:hover { color: var(--primary); text-decoration: underline; }
 .news-id { color: var(--text-muted); font-size: 11px; white-space: nowrap; font-family: sans-serif; }
@@ -306,9 +314,10 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
         <option value="domain">Domain</option>
         <option value="hash">Hash (SHA256)</option>
       </select>
+      <input type="file" id="bulkFile" accept=".txt,.csv,text/*" style="font-size:12px;color:var(--text)" onchange="loadBulkFile(event)" title="อัปโหลด .txt/.csv (1 ค่าต่อบรรทัด)">
       <button onclick="bulkCheck()" id="bulkBtn">ตรวจสอบทั้งหมด</button>
     </div>
-    <textarea class="log-input" id="bulkInput" rows="5" placeholder="วาง 1 ค่าต่อบรรทัด&#10;1.2.3.4&#10;5.6.7.8&#10;evil.com&#10;&#10;(ส่ง 1 request ไม่ว่ากี่รายการ)"></textarea>
+    <textarea class="log-input" id="bulkInput" rows="5" placeholder="วาง 1 ค่าต่อบรรทัด หรืออัปโหลดไฟล์ด้านบน&#10;1.2.3.4&#10;5.6.7.8&#10;evil.com&#10;&#10;(ส่ง 1 request ไม่ว่ากี่รายการ)"></textarea>
     <div id="bulkResult"></div>
   </div>
 
@@ -411,9 +420,16 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 
   <div class="card" id="sec-networks">
     <h2>🌐 วิเคราะห์ IP Networks</h2>
-    <div class="tab-row" style="margin-bottom:12px">
-      <button class="tab-btn active" id="netTabNetworks" onclick="switchNetTab('networks',this)">Top /24 Networks</button>
-      <button class="tab-btn" id="netTabCountries" onclick="switchNetTab('countries',this)">By Country</button>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="tab-row" style="margin-bottom:0">
+        <button class="tab-btn active" id="netTabNetworks" onclick="switchNetTab('networks',this)">Top /24 Networks</button>
+        <button class="tab-btn" id="netTabCountries" onclick="switchNetTab('countries',this)">By Country</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center" id="netFilterRow">
+        <input id="netCountryFilter" placeholder="Filter country (e.g. CN)" maxlength="2" style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text);font-family:monospace" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')applyNetFilter()">
+        <button class="btn btn-ghost" onclick="applyNetFilter()" style="font-size:12px;padding:4px 10px">Filter</button>
+        <button class="btn btn-ghost" onclick="clearNetFilter()" style="font-size:12px;padding:4px 10px">Clear</button>
+      </div>
     </div>
     <div id="networksResult"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
     <div id="countriesResult" style="display:none"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
@@ -691,11 +707,14 @@ function switchNetTab(tab, btn) {
 
 async function loadNetworks() {
   const out = document.getElementById('networksResult');
+  const cc = out.dataset.countryFilter || '';
+  const url = '/analyze/networks' + (cc ? `?country=${encodeURIComponent(cc)}` : '');
   try {
-    const d = await fetch('/analyze/networks').then(r => r.json());
-    if (!d.top || !d.top.length) { out.innerHTML = '<div class="result info">ไม่มีข้อมูล IP</div>'; return; }
+    const d = await fetch(url).then(r => r.json());
+    if (!d.top || !d.top.length) { out.innerHTML = `<div class="result info">ไม่มีข้อมูล${cc ? ` สำหรับประเทศ ${esc(cc)}` : ''}</div>`; return; }
     const max = d.top[0].count;
-    const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ทั้งหมด ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_networks.toLocaleString()} networks (/24) — คลิก network เพื่อ CIDR check</div>`;
+    const filterNote = d.filter_country ? ` · filter: <strong>${esc(d.filter_country)}</strong>` : '';
+    const summary = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">IP ทั้งหมด ${d.total_ips.toLocaleString()} รายการ จาก ${d.total_networks.toLocaleString()} networks (/24)${filterNote} — คลิก network เพื่อ CIDR check</div>`;
     const rows = d.top.map(n => `
       <div onclick="jumpToCIDR('${esc(n.network)}')" title="CIDR check ${esc(n.network)}"
            style="display:grid;grid-template-columns:160px 1fr 50px 65px;gap:8px;align-items:center;margin-bottom:4px;cursor:pointer;padding:3px 6px;border-radius:4px;transition:background .1s"
@@ -804,6 +823,59 @@ function detectType(value) {
 }
 
 // --- Single lookup (auto-detect) ---
+// --- Copy to clipboard helper ---
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
+
+// --- Bulk file upload ---
+function loadBulkFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => { document.getElementById('bulkInput').value = ev.target.result; };
+  r.readAsText(file, 'utf-8');
+}
+
+// --- Network country filter ---
+function applyNetFilter() {
+  const cc = document.getElementById('netCountryFilter').value.trim().toUpperCase();
+  document.getElementById('networksResult').dataset.countryFilter = cc;
+  delete document.getElementById('networksResult').dataset.loaded;
+  loadNetworks();
+}
+function clearNetFilter() {
+  document.getElementById('netCountryFilter').value = '';
+  delete document.getElementById('networksResult').dataset.countryFilter;
+  delete document.getElementById('networksResult').dataset.loaded;
+  loadNetworks();
+}
+
+// --- Ctrl+K → focus search ---
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('searchQ').focus();
+    document.getElementById('sec-search').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
+
+// --- Permalink: ?q=value auto-check on load ---
+(function initPermalink() {
+  const params = new URLSearchParams(window.location.search);
+  const q = params.get('q');
+  if (q) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('value');
+      if (el) { el.value = q; checkOne().then(() => document.getElementById('sec-lookup').scrollIntoView({ behavior: 'smooth', block: 'start' })); }
+    });
+  }
+})();
+
 async function checkOne() {
   const value = document.getElementById('value').value.trim();
   const out = document.getElementById('checkResult');
@@ -811,6 +883,10 @@ async function checkOne() {
   const btn = document.getElementById('checkBtn');
   btn.disabled = true;
   out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังตรวจสอบ...</div>';
+  // Update URL for sharing
+  const url = new URL(window.location);
+  url.searchParams.set('q', value);
+  history.replaceState(null, '', url);
   try {
     const res = await fetch(`/check/auto/${encodeURIComponent(value)}`);
     const d = await res.json();
@@ -821,9 +897,11 @@ async function checkOne() {
     const geoNote = (d.geo && d.type === 'ip')
       ? `<div style="margin-top:6px;font-size:12px;color:var(--text-muted)">🌍 ${esc(d.geo.country || '?')}${d.geo.city ? ' · ' + esc(d.geo.city) : ''}${d.geo.as ? ' · ' + esc(d.geo.as) : ''}</div>`
       : '';
+    const copyBtn = `<button class="copy-btn" onclick="copyText('${value.replace(/'/g, "\\'")}',this)">copy</button>`;
+    const shareBtn = `<button class="copy-btn" onclick="copyText(location.href,this)" title="คัดลอก URL นี้">🔗</button>`;
     out.innerHTML = d.blacklisted
-      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${parentNote}${geoNote}</div>`
-      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${geoNote}</div>`;
+      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${copyBtn}${shareBtn}${parentNote}${geoNote}</div>`
+      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${copyBtn}${shareBtn}${geoNote}</div>`;
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }

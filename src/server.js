@@ -32,7 +32,18 @@ function rateLimit(maxReq, windowMs) {
 setInterval(() => { const now = Date.now(); for (const [k, v] of _rateMap) if (now > v.reset) _rateMap.delete(k); }, 5 * 60_000);
 let store = loadAll();
 
-app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get('/healthz', (req, res) => {
+  let sync_last_run = null, sync_next_run = null;
+  try {
+    const lines = fs.readFileSync(path.join(DATA_DIR, 'history.jsonl'), 'utf8').trim().split('\n').filter(Boolean);
+    if (lines.length) {
+      const last = JSON.parse(lines[lines.length - 1]);
+      sync_last_run = last.date || null;
+      if (sync_last_run) sync_next_run = new Date(new Date(sync_last_run).getTime() + 6 * 3600_000).toISOString();
+    }
+  } catch {}
+  res.json({ ok: true, sync_last_run, sync_next_run });
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -168,11 +179,18 @@ function domainCheck(domainSet, value) {
   return { blacklisted: false, matched: value, matchType: 'exact' };
 }
 
+const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/;
+const IPV6_RE = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^([0-9a-fA-F]{1,4}:){1,7}:$|^::(([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?$|^([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}$|^([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}$|^([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}$|^([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}$/;
+
+function autoDetectType(value) {
+  if (/^[0-9a-f]{64}$/i.test(value)) return 'hash';
+  if (IPV4_RE.test(value) || IPV6_RE.test(value)) return 'ip';
+  return 'domain';
+}
+
 app.get('/check/auto/:value', (req, res) => {
   const { value } = req.params;
-  const type = /^[0-9a-f]{64}$/i.test(value) ? 'hash'
-    : /^\d{1,3}(\.\d{1,3}){3}$/.test(value) ? 'ip'
-    : 'domain';
+  const type = autoDetectType(value);
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
   if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value) });
@@ -213,20 +231,23 @@ app.post('/check/cidr', rateLimit(60, 60_000), express.json({ limit: '1kb' }), (
 app.get('/analyze/networks', (req, res) => {
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
+  const { country } = req.query;
   const counts = new Map();
   for (const ip of d.set) {
+    if (!IPV4_RE.test(ip)) continue;
     const net = ip.split('.').slice(0, 3).join('.') + '.0/24';
     counts.set(net, (counts.get(net) || 0) + 1);
   }
-  const top = [...counts.entries()]
+  let top = [...counts.entries()]
     .map(([network, count]) => {
       const repIp = network.replace('.0/24', '.1');
       const g = geoLookup(repIp);
       return { network, count, country: g?.country || null, as: g?.as?.split(' ')[0] || null };
     })
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 25);
-  res.json({ total_ips: d.set.size, total_networks: counts.size, top });
+    .sort((a, b) => b.count - a.count);
+  if (country) top = top.filter(n => (n.country || '').toUpperCase() === country.toUpperCase());
+  top = top.slice(0, 50);
+  res.json({ total_ips: d.set.size, total_networks: counts.size, top, filter_country: country || null });
 });
 
 app.get('/analyze/countries', (req, res) => {
