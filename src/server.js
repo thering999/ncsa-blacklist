@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { loadAll } = require('./store');
-const { scanLog } = require('./scan');
+const { scanLog, scanLogWithContext } = require('./scan');
 const watchlist = require('./watchlist');
 const { DATA_DIR } = require('./paths');
 const { FEEDS } = require('./fetch');
@@ -116,6 +116,16 @@ app.get('/info', (req, res) => {
   res.json(info);
 });
 
+app.get('/check/auto/:value', (req, res) => {
+  const { value } = req.params;
+  const type = /^[0-9a-f]{64}$/i.test(value) ? 'hash'
+    : /^\d{1,3}(\.\d{1,3}){3}$/.test(value) ? 'ip'
+    : 'domain';
+  const d = store[type];
+  if (!d) return res.status(503).json({ error: `${type} data not loaded` });
+  res.json({ type, value, blacklisted: d.set.has(value) });
+});
+
 app.get('/check/:type/:value', (req, res) => {
   const { type, value } = req.params;
   const d = store[type];
@@ -126,7 +136,31 @@ app.get('/check/:type/:value', (req, res) => {
 app.post('/scan', express.text({ limit: '2mb' }), (req, res) => {
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
-  res.json(scanLog(req.body || '', d.set));
+  res.json(scanLogWithContext(req.body || '', d.set));
+});
+
+app.post('/check/bulk', express.json({ limit: '1mb' }), (req, res) => {
+  const { type, values } = req.body || {};
+  if (!type || !Array.isArray(values)) return res.status(400).json({ error: 'type and values[] required' });
+  if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
+  if (values.length > 10000) return res.status(400).json({ error: 'max 10000 values per request' });
+  const d = store[type];
+  if (!d) return res.status(503).json({ error: `${type} data not loaded` });
+  res.json({ type, results: values.map((v) => ({ value: String(v), blacklisted: d.set.has(String(v)) })) });
+});
+
+app.get('/search', (req, res) => {
+  const { type, q } = req.query;
+  if (!type || !q) return res.status(400).json({ error: 'type and q required' });
+  if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
+  if (q.length < 3) return res.status(400).json({ error: 'q must be at least 3 characters' });
+  const d = store[type];
+  if (!d) return res.status(503).json({ error: `${type} data not loaded` });
+  const results = [];
+  for (const v of d.set) {
+    if (v.includes(q)) { results.push(v); if (results.length >= 100) break; }
+  }
+  res.json({ type, q, count: results.length, capped: results.length === 100, results });
 });
 
 app.post('/reload', requireAdmin, (req, res) => {

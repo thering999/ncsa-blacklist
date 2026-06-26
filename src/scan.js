@@ -6,4 +6,20 @@ function scanLog(text, ipSet) {
   return { scanned: found.size, hits };
 }
 
-module.exports = { scanLog };
+function scanLogWithContext(text, ipSet) {
+  const lines = text.split('\n');
+  const allIps = new Set();
+  const hitLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    const lineIps = lines[i].match(IP_RE) || [];
+    for (const ip of lineIps) allIps.add(ip);
+    const lineHits = [...new Set(lineIps)].filter((ip) => ipSet.has(ip));
+    if (lineHits.length > 0) {
+      hitLines.push({ line: i + 1, text: lines[i].slice(0, 400), ips: lineHits });
+    }
+  }
+  const hits = [...new Set(hitLines.flatMap((l) => l.ips))];
+  return { scanned: allIps.size, hits, lines: hitLines };
+}
+
+module.exports = { scanLog, scanLogWithContext };

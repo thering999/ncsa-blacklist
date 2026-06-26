@@ -148,6 +148,8 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #e0e4e8; border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.log-line-cell { font-family: monospace; font-size: 11px; color: var(--text-muted); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 @media (max-width: 600px) {
   .stats-grid { grid-template-columns: 1fr; }
   .export-grid { grid-template-columns: repeat(2, 1fr); }
@@ -220,12 +222,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
   <div class="card">
     <h2>🔍 ตรวจสอบรายการเดียว</h2>
     <div class="form-row">
-      <select id="type">
-        <option value="ip">IP</option>
-        <option value="domain">Domain</option>
-        <option value="hash">Hash (SHA256)</option>
-      </select>
-      <input id="value" placeholder="เช่น 1.2.3.4 / evil.com / abc123..." onkeydown="if(event.key==='Enter')checkOne()">
+      <input id="value" placeholder="IP / domain / SHA256 hash — ตรวจจับประเภทอัตโนมัติ" onkeydown="if(event.key==='Enter')checkOne()" style="font-family:monospace">
       <button onclick="checkOne()" id="checkBtn">ตรวจสอบ</button>
     </div>
     <div id="checkResult"></div>
@@ -241,8 +238,22 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
       </select>
       <button onclick="bulkCheck()" id="bulkBtn">ตรวจสอบทั้งหมด</button>
     </div>
-    <textarea class="log-input" id="bulkInput" rows="5" placeholder="วาง 1 ค่าต่อบรรทัด&#10;1.2.3.4&#10;5.6.7.8&#10;evil.com"></textarea>
+    <textarea class="log-input" id="bulkInput" rows="5" placeholder="วาง 1 ค่าต่อบรรทัด&#10;1.2.3.4&#10;5.6.7.8&#10;evil.com&#10;&#10;(ส่ง 1 request ไม่ว่ากี่รายการ)"></textarea>
     <div id="bulkResult"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔎 ค้นหาใน Blacklist</h2>
+    <div class="form-row">
+      <select id="searchType">
+        <option value="ip">IP</option>
+        <option value="domain">Domain</option>
+        <option value="hash">Hash (SHA256)</option>
+      </select>
+      <input id="searchQ" placeholder="พิมพ์บางส่วน เช่น 100.11 / evil.com / 0009a5" style="font-family:monospace" onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()" id="searchBtn">ค้นหา</button>
+    </div>
+    <div id="searchResult"></div>
   </div>
 
   <div class="card">
@@ -396,9 +407,15 @@ async function loadInfo() {
   } catch (_) {}
 }
 
-// --- Single lookup ---
+// --- Type detection ---
+function detectType(value) {
+  if (/^[0-9a-f]{64}$/i.test(value)) return 'hash';
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return 'ip';
+  return 'domain';
+}
+
+// --- Single lookup (auto-detect) ---
 async function checkOne() {
-  const type = document.getElementById('type').value;
   const value = document.getElementById('value').value.trim();
   const out = document.getElementById('checkResult');
   if (!value) return;
@@ -406,33 +423,37 @@ async function checkOne() {
   btn.disabled = true;
   out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังตรวจสอบ...</div>';
   try {
-    const res = await fetch(`/check/${type}/${encodeURIComponent(value)}`);
+    const res = await fetch(`/check/auto/${encodeURIComponent(value)}`);
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || res.statusText);
+    const typeLabel = { ip: 'IP', domain: 'Domain', hash: 'Hash' }[d.type] || d.type;
     out.innerHTML = d.blacklisted
-      ? `<div class="result hit">⚠️ <strong>พบใน blacklist:</strong> ${esc(value)}</div>`
-      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist:</strong> ${esc(value)}</div>`;
+      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}</div>`
+      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}</div>`;
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }
   btn.disabled = false;
 }
 
-// --- Bulk lookup ---
+// --- Bulk lookup (single POST /check/bulk) ---
 async function bulkCheck() {
   const type = document.getElementById('bulkType').value;
-  const lines = document.getElementById('bulkInput').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const values = document.getElementById('bulkInput').value.split('\n').map(l => l.trim()).filter(Boolean);
   const out = document.getElementById('bulkResult');
-  if (!lines.length) return;
+  if (!values.length) return;
   const btn = document.getElementById('bulkBtn');
   btn.disabled = true;
-  out.innerHTML = `<div class="result info"><span class="spinner"></span>กำลังตรวจสอบ ${lines.length} รายการ...</div>`;
+  out.innerHTML = `<div class="result info"><span class="spinner"></span>กำลังตรวจสอบ ${values.length} รายการ...</div>`;
   try {
-    const results = await Promise.all(lines.map(async v => {
-      const res = await fetch(`/check/${type}/${encodeURIComponent(v)}`);
-      const d = await res.json();
-      return { value: v, hit: !!d.blacklisted };
-    }));
+    const res = await fetch('/check/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, values }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.statusText);
+    const results = d.results.map(r => ({ value: r.value, hit: r.blacklisted }));
     window._bulkResults = results;
     const hits = results.filter(r => r.hit).length;
     const summary = hits > 0
@@ -447,8 +468,7 @@ async function bulkCheck() {
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }
-  btn.disabled = false;
-}
+  btn.disabled = false;}
 
 function copyHits() {
   const text = (window._bulkResults || []).filter(r => r.hit).map(r => r.value).join('\n');
@@ -459,7 +479,7 @@ function copyHits() {
   });
 }
 
-// --- Log scan ---
+// --- Log scan (with line context) ---
 async function scanLog() {
   const text = document.getElementById('logText').value;
   const out = document.getElementById('scanResult');
@@ -473,9 +493,43 @@ async function scanLog() {
     if (d.hits.length === 0) {
       out.innerHTML = `<div class="result clean">✅ สแกน <strong>${d.scanned}</strong> IP ไม่พบรายการอันตราย</div>`;
     } else {
-      const rows = d.hits.map(ip => `<tr><td>${esc(ip)}</td></tr>`).join('');
+      const rows = (d.lines || []).flatMap(l =>
+        l.ips.map(ip =>
+          `<tr><td style="color:var(--text-muted);font-family:sans-serif">${l.line}</td><td style="color:var(--danger)">${esc(ip)}</td><td class="log-line-cell">${esc(l.text)}</td></tr>`
+        )
+      ).join('');
       out.innerHTML = `<div class="result hit">⚠️ พบ <strong>${d.hits.length}</strong> IP อันตราย จาก ${d.scanned} IP</div>
-        <table class="data-table"><thead><tr><th>IP ที่พบใน blacklist</th></tr></thead><tbody>${rows}</tbody></table>`;
+        <table class="data-table">
+          <thead><tr><th>บรรทัด</th><th>IP</th><th>Log</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
+}
+
+// --- Search ---
+async function doSearch() {
+  const type = document.getElementById('searchType').value;
+  const q = document.getElementById('searchQ').value.trim();
+  const out = document.getElementById('searchResult');
+  if (q.length < 3) { out.innerHTML = '<div class="result warn">ต้องพิมพ์อย่างน้อย 3 ตัวอักษร</div>'; return; }
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true;
+  out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังค้นหา...</div>';
+  try {
+    const res = await fetch(`/search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.statusText);
+    if (d.count === 0) {
+      out.innerHTML = `<div class="result clean">✅ ไม่พบ "${esc(q)}" ใน ${type} blacklist</div>`;
+    } else {
+      const cap = d.capped ? ` (แสดง 100 รายการแรก)` : '';
+      const rows = d.results.map(v => `<tr><td>${esc(v)}</td></tr>`).join('');
+      out.innerHTML = `<div class="result hit">⚠️ พบ <strong>${d.count}</strong> รายการที่ตรงกับ "${esc(q)}"${cap}</div>
+        <table class="data-table"><thead><tr><th>${type}</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
@@ -628,6 +682,9 @@ loadInfo();
 renderWatchAuthGate();
 loadWatch();
 loadHistory();
+
+// Auto-refresh stats every 5 minutes
+setInterval(loadStats, 5 * 60_000);
 </script>
 </body>
 </html>
