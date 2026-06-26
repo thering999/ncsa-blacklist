@@ -326,7 +326,14 @@ app.get('/analyze/countries', (req, res) => {
 app.post('/scan', rateLimit(30, 60_000), express.text({ limit: '2mb' }), (req, res) => {
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
-  res.json(scanLogWithContext(req.body || '', d.set));
+  const result = scanLogWithContext(req.body || '', d.set);
+  const allowed = new Set(allowlist.load().filter(e => e.type === 'ip').map(e => e.value));
+  if (allowed.size) {
+    result.hits = result.hits.filter(ip => !allowed.has(ip));
+    for (const l of result.lines) l.ips = l.ips.filter(ip => !allowed.has(ip));
+    result.lines = result.lines.filter(l => l.ips.length > 0);
+  }
+  res.json(result);
 });
 
 app.post('/check/bulk', rateLimit(120, 60_000), express.json({ limit: '1mb' }), (req, res) => {
@@ -545,10 +552,20 @@ app.get('/watch', (req, res) => {
   res.json(watchlist.load());
 });
 
+function validateTypeValue(type, value) {
+  if (!type || !value) return 'type and value required';
+  if (!VALID_TYPES.has(type)) return `type must be one of: ${[...VALID_TYPES].join(', ')}`;
+  const s = String(value).trim();
+  if (type === 'ip' && !IPV4_RE.test(s) && !IPV6_RE.test(s)) return 'invalid IP address';
+  if (type === 'hash' && !/^[0-9a-fA-F]{64}$/.test(s)) return 'invalid SHA256 hash (must be 64 hex chars)';
+  if (type === 'domain' && (s.includes('/') || s.includes(' '))) return 'invalid domain';
+  return null;
+}
+
 app.post('/watch', requireAdmin, express.json(), (req, res) => {
   const { type, value } = req.body || {};
-  if (!type || !value) return res.status(400).json({ error: 'type and value required' });
-  if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
+  const err = validateTypeValue(type, value);
+  if (err) return res.status(400).json({ error: err });
   console.log(`watch add by admin "${req.adminName || 'default'}": ${type}:${value}`);
   res.json(watchlist.add(type, value));
 });
@@ -566,8 +583,8 @@ app.get('/allowlist', (req, res) => {
 
 app.post('/allowlist', requireAdmin, express.json(), (req, res) => {
   const { type, value } = req.body || {};
-  if (!type || !value) return res.status(400).json({ error: 'type and value required' });
-  if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
+  const err = validateTypeValue(type, value);
+  if (err) return res.status(400).json({ error: err });
   console.log(`allowlist add by admin "${req.adminName || 'default'}": ${type}:${value}`);
   res.json(allowlist.add(type, value));
 });
@@ -663,7 +680,13 @@ app.post('/scan/csv', rateLimit(30, 60_000), express.text({ limit: '2mb' }), (re
   if (!text) return res.status(400).json({ error: 'body required' });
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
-  const { hits, lines: hitLines } = scanLogWithContext(text, d.set);
+  const result = scanLogWithContext(text, d.set);
+  const allowed = new Set(allowlist.load().filter(e => e.type === 'ip').map(e => e.value));
+  if (allowed.size) {
+    for (const l of result.lines) l.ips = l.ips.filter(ip => !allowed.has(ip));
+    result.lines = result.lines.filter(l => l.ips.length > 0);
+  }
+  const { hits, lines: hitLines } = result;
   const rows = [['line_no', 'ip', 'log_excerpt']];
   for (const l of (hitLines || [])) {
     for (const ip of l.ips) rows.push([l.line, ip, l.text.replace(/"/g, '""')]);

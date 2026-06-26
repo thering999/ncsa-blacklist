@@ -240,6 +240,28 @@ test('GET /check/auto/ allowlisted IP overrides blacklist', async () => {
   await fetch(baseUrl + '/allowlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ip', value: '1.2.3.4' }) });
 });
 
+test('POST /watch rejects invalid IP format', async () => {
+  const { status, body } = await post('/watch', { type: 'ip', value: 'not-an-ip' });
+  assert.strictEqual(status, 400);
+  assert.ok(body.error.includes('invalid IP'));
+});
+
+test('POST /allowlist rejects invalid hash format', async () => {
+  const { status, body } = await post('/allowlist', { type: 'hash', value: 'tooshort' });
+  assert.strictEqual(status, 400);
+  assert.ok(body.error.includes('SHA256'));
+});
+
+test('POST /scan excludes allowlisted IPs from hits', async () => {
+  // Add 1.2.3.4 to allowlist
+  await post('/allowlist', { type: 'ip', value: '1.2.3.4' });
+  const { body } = await post('/scan', 'Connection from 1.2.3.4 and 5.6.7.8', true);
+  assert.ok(!body.hits.includes('1.2.3.4'), '1.2.3.4 should be excluded by allowlist');
+  assert.ok(body.hits.includes('5.6.7.8'), '5.6.7.8 should still be reported');
+  // cleanup
+  await fetch(baseUrl + '/allowlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ip', value: '1.2.3.4' }) });
+});
+
 test('GET /admin/feed-health returns per-feed status (no auth configured)', async () => {
   const { status, body } = await get('/admin/feed-health');
   assert.strictEqual(status, 200);
