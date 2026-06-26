@@ -12,6 +12,24 @@ const VALID_TYPES = new Set(Object.keys(FEEDS));
 const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
 
 const app = express();
+
+// --- Rate limiter (in-memory per IP) ---
+const _rateMap = new Map();
+function rateLimit(maxReq, windowMs) {
+  return (req, res, next) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const key = ip + req.path;
+    const now = Date.now();
+    const e = _rateMap.get(key) || { n: 0, reset: now + windowMs };
+    if (now > e.reset) { e.n = 0; e.reset = now + windowMs; }
+    e.n++;
+    _rateMap.set(key, e);
+    if (e.n > maxReq) return res.status(429).json({ error: 'rate limit exceeded', reset: new Date(e.reset).toISOString() });
+    next();
+  };
+}
+// Prune stale rate entries every 5 min
+setInterval(() => { const now = Date.now(); for (const [k, v] of _rateMap) if (now > v.reset) _rateMap.delete(k); }, 5 * 60_000);
 let store = loadAll();
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
@@ -173,7 +191,7 @@ app.get('/check/:type/:value', (req, res) => {
   res.json({ type, value, blacklisted, matched: value, matchType: 'exact', geo });
 });
 
-app.post('/check/cidr', express.json({ limit: '1kb' }), (req, res) => {
+app.post('/check/cidr', rateLimit(60, 60_000), express.json({ limit: '1kb' }), (req, res) => {
   const { cidr } = req.body || {};
   if (!cidr) return res.status(400).json({ error: 'cidr required' });
   const range = parseCIDR(cidr.trim());
@@ -211,13 +229,13 @@ app.get('/analyze/networks', (req, res) => {
   res.json({ total_ips: d.set.size, total_networks: counts.size, top });
 });
 
-app.post('/scan', express.text({ limit: '2mb' }), (req, res) => {
+app.post('/scan', rateLimit(30, 60_000), express.text({ limit: '2mb' }), (req, res) => {
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
   res.json(scanLogWithContext(req.body || '', d.set));
 });
 
-app.post('/check/bulk', express.json({ limit: '1mb' }), (req, res) => {
+app.post('/check/bulk', rateLimit(120, 60_000), express.json({ limit: '1mb' }), (req, res) => {
   const { type, values } = req.body || {};
   if (!type || !Array.isArray(values)) return res.status(400).json({ error: 'type and values[] required' });
   if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
@@ -320,6 +338,24 @@ app.get('/export/wazuh', (req, res) => {
   const lines = [];
   for (const hash of d.set) lines.push(`${hash.toLowerCase()}:ncsa-blacklist`);
   res.send(lines.join('\n') + '\n');
+});
+
+app.get('/export/csv/:type', (req, res) => {
+  const { type } = req.params;
+  const d = store[type];
+  if (!d) return res.status(404).send('# not found\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="ncsa-${type}.csv"`);
+  res.send([type, ...[...d.set]].join('\n') + '\n');
+});
+
+app.get('/export/json', (req, res) => {
+  const out = {};
+  for (const [type, d] of Object.entries(store)) {
+    if (d) out[type] = { feed: d.meta.feed, generated_at: d.meta.generated_at, total: d.meta.total, data: [...d.set] };
+  }
+  res.setHeader('Content-Disposition', 'attachment; filename="ncsa-blacklist.json"');
+  res.json(out);
 });
 
 app.get('/watch', (req, res) => {

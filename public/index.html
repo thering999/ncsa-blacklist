@@ -166,6 +166,12 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 .news-headline a { color: var(--text); text-decoration: none; font-size: 13px; }
 .news-headline a:hover { color: var(--primary); text-decoration: underline; }
 .news-id { color: var(--text-muted); font-size: 11px; white-space: nowrap; font-family: sans-serif; }
+/* Sticky section nav */
+.page-nav { position: sticky; top: 56px; z-index: 90; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; overflow-x: auto; scrollbar-width: none; box-shadow: 0 2px 4px rgba(0,0,0,.06); margin: 0 -20px 20px; padding: 0 20px; }
+.page-nav::-webkit-scrollbar { display: none; }
+.nav-link { padding: 9px 13px; font-size: 12px; color: var(--text-muted); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
+.nav-link:hover, .nav-link.active { color: var(--primary); border-bottom-color: var(--primary); }
+
 .net-bar-wrap { display: flex; align-items: center; gap: 8px; }
 .net-bar { height: 10px; background: #1a56db22; border-radius: 2px; position: relative; flex: 1; }
 .net-bar-fill { height: 100%; background: var(--primary); border-radius: 2px; transition: width .4s; }
@@ -240,14 +246,30 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
       </div>
     </div>
   </div>
-  <div id="integrityWarn" style="display:none;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;border-radius:6px;padding:8px 14px;font-size:13px;margin-bottom:16px"></div>
+  <div id="integrityWarn" style="display:none;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;border-radius:6px;padding:8px 14px;font-size:13px;margin-bottom:8px"></div>
+  <div id="newSinceVisit" style="display:none;background:var(--success-bg);border:1px solid #6ee7b7;color:var(--success);border-radius:6px;padding:8px 14px;font-size:13px;margin-bottom:16px;display:none;cursor:pointer" onclick="this.style.display='none'"></div>
 
-  <div class="card">
+  <nav class="page-nav" id="pageNav">
+    <a class="nav-link" href="#sec-recent">🕒 Recent</a>
+    <a class="nav-link" href="#sec-lookup">🔍 Lookup</a>
+    <a class="nav-link" href="#sec-cidr">🌐 CIDR</a>
+    <a class="nav-link" href="#sec-bulk">📋 Bulk</a>
+    <a class="nav-link" href="#sec-search">🔎 Search</a>
+    <a class="nav-link" href="#sec-scan">📂 Scan</a>
+    <a class="nav-link" href="#sec-export">⬇️ Export</a>
+    <a class="nav-link" href="#sec-watch">👁️ Watch</a>
+    <a class="nav-link" href="#sec-news">📰 News</a>
+    <a class="nav-link" href="#sec-networks">🌐 Networks</a>
+    <a class="nav-link" href="#sec-trend">📈 Trend</a>
+    <a class="nav-link" href="#sec-about">ℹ️ About</a>
+  </nav>
+
+  <div class="card" id="sec-recent">
     <h2>🕒 กิจกรรมล่าสุด (Recent Sync Changes)</h2>
     <div id="recentResult"><div class="result info"><span class="spinner"></span>กำลังโหลด...</div></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-lookup">
     <h2>🔍 ตรวจสอบรายการเดียว</h2>
     <div class="form-row">
       <input id="value" placeholder="IP / domain / SHA256 hash — ตรวจจับประเภทอัตโนมัติ" onkeydown="if(event.key==='Enter')checkOne()" style="font-family:monospace">
@@ -256,7 +278,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <div id="checkResult"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-cidr">
     <h2>🌐 ตรวจสอบ IP Range (CIDR)</h2>
     <div class="form-row">
       <input id="cidrInput" placeholder="เช่น 1.10.214.0/24 หรือ 23.129.64.0/22" style="font-family:monospace" onkeydown="if(event.key==='Enter')cidrCheck()">
@@ -265,7 +287,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <div id="cidrResult"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-bulk">
     <h2>📋 ตรวจสอบหลายรายการ</h2>
     <div class="form-row" style="margin-bottom:8px">
       <select id="bulkType">
@@ -279,7 +301,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <div id="bulkResult"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-search">
     <h2>🔎 ค้นหาใน Blacklist</h2>
     <div class="form-row">
       <select id="searchType">
@@ -293,8 +315,13 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <div id="searchResult"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-scan">
     <h2>📂 สแกน Log</h2>
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <label style="font-size:13px;color:var(--text-muted)">อัปโหลดไฟล์:</label>
+      <input type="file" id="scanFile" accept=".log,.txt,.csv,text/*" style="font-size:13px;color:var(--text)" onchange="loadScanFile(event)">
+      <span style="font-size:12px;color:var(--text-muted)">หรือ paste ข้างล่าง</span>
+    </div>
     <textarea class="log-input" id="logText" rows="7" placeholder="วาง access log / firewall log ที่มี IP ลงตรงนี้..."></textarea>
     <div class="form-row" style="margin-top:8px">
       <button onclick="scanLog()" id="scanBtn">สแกน</button>
@@ -302,7 +329,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <div id="scanResult"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-export">
     <h2>⬇️ Export Blocklist</h2>
     <div class="export-grid">
       <a class="export-btn" href="/export/iptables" download="ncsa-iptables.sh">
@@ -320,10 +347,30 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
         <strong>Wazuh CDB</strong>
         <span class="export-sub">SIEM hash list</span>
       </a>
+      <a class="export-btn" href="/export/csv/ip" download="ncsa-ip.csv">
+        <span class="export-icon">📄</span>
+        <strong>IP CSV</strong>
+        <span class="export-sub">plain list, one per line</span>
+      </a>
+      <a class="export-btn" href="/export/csv/domain" download="ncsa-domain.csv">
+        <span class="export-icon">📄</span>
+        <strong>Domain CSV</strong>
+        <span class="export-sub">plain list, one per line</span>
+      </a>
+      <a class="export-btn" href="/export/csv/hash" download="ncsa-hash.csv">
+        <span class="export-icon">📄</span>
+        <strong>Hash CSV</strong>
+        <span class="export-sub">SHA256 list, one per line</span>
+      </a>
+      <a class="export-btn" href="/export/json" download="ncsa-blacklist.json">
+        <span class="export-icon">{ }</span>
+        <strong>JSON (all feeds)</strong>
+        <span class="export-sub">machine-readable bundle</span>
+      </a>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-watch">
     <h2>👁️ Watch List</h2>
     <div id="watchAuthGate"></div>
     <div id="watchAddForm" style="display:none">
@@ -340,23 +387,23 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <table class="data-table" id="watchTable"></table>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-news">
     <h2>📰 ข่าวสารภัยคุกคาม <span id="newsSource" style="font-size:11px;font-weight:400;color:var(--text-muted)"></span></h2>
     <div id="newsResult"><div class="result info"><span class="spinner"></span>กำลังโหลด...</div></div>
   </div>
 
-  <div class="card" id="aboutCard" style="display:none">
+  <div class="card" id="sec-about" style="display:none">
     <h2>ℹ️ เกี่ยวกับแหล่งข้อมูล</h2>
     <p class="about-desc" id="aboutDesc"></p>
     <dl class="about-grid" id="aboutGrid"></dl>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-networks">
     <h2>🌐 วิเคราะห์ IP Networks (Top /24)</h2>
     <div id="networksResult"><div class="result info"><span class="spinner"></span>กำลังวิเคราะห์...</div></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="sec-trend">
     <h2>📈 แนวโน้ม (30 รอบล่าสุด)</h2>
     <div class="tab-row">
       <button class="tab-btn active" onclick="switchHistory('ip',this)">IP</button>
@@ -373,6 +420,31 @@ let adminToken = localStorage.getItem('ncsa_admin_token') || '';
 
 // --- Settings ---
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
+
+// --- File upload for log scan ---
+function loadScanFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => { document.getElementById('logText').value = ev.target.result; };
+  reader.readAsText(file, 'utf-8');
+}
+
+// --- Section nav IntersectionObserver ---
+(function initNav() {
+  const obs = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+        const lnk = document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+        if (lnk) { lnk.classList.add('active'); lnk.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }); }
+      }
+    }
+  }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[id^="sec-"]').forEach(el => obs.observe(el));
+  });
+})();
 
 // --- Dark mode ---
 function toggleDark() {
@@ -445,6 +517,19 @@ async function loadStats() {
     document.getElementById('statHashMeta').innerHTML = statMetaHtml(data.hash);
     const latest = [data.ip, data.domain, data.hash].filter(Boolean).map(d => d.generated_at).sort().pop();
     if (latest) document.getElementById('headerUpdated').textContent = 'Updated: ' + latest.slice(0, 10);
+    // "New since last visit" banner
+    const prevKey = 'ncsa_last_totals';
+    const prev = JSON.parse(localStorage.getItem(prevKey) || 'null');
+    const curr = { ip: data.ip?.total, domain: data.domain?.total, hash: data.hash?.total };
+    localStorage.setItem(prevKey, JSON.stringify(curr));
+    if (prev) {
+      const diffs = [];
+      if (curr.ip && prev.ip && curr.ip > prev.ip) diffs.push(`IP +${(curr.ip - prev.ip).toLocaleString()}`);
+      if (curr.domain && prev.domain && curr.domain > prev.domain) diffs.push(`Domain +${(curr.domain - prev.domain).toLocaleString()}`);
+      if (curr.hash && prev.hash && curr.hash > prev.hash) diffs.push(`Hash +${(curr.hash - prev.hash).toLocaleString()}`);
+      const el = document.getElementById('newSinceVisit');
+      if (diffs.length && el) { el.textContent = `🆕 มีรายการใหม่ตั้งแต่เยี่ยมชมครั้งล่าสุด: ${diffs.join(', ')} — คลิกเพื่อปิด`; el.style.display = 'block'; }
+    }
     // Integrity check: warn if file.entries ≠ total for any feed
     const broken = ['ip','domain','hash'].filter(t => data[t]?.integrity_ok === false);
     const intEl = document.getElementById('integrityWarn');
@@ -578,7 +663,7 @@ async function loadInfo() {
     const info = await fetch('/info').then(r => r.json());
     const ip = info.ip;
     if (!ip) return;
-    document.getElementById('aboutCard').style.display = 'block';
+    document.getElementById('sec-about').style.display = 'block';
     document.getElementById('aboutDesc').textContent = ip.description || '';
     const rows = [
       ['Publisher', `<a href="${esc(ip.homepage)}" target="_blank" rel="noreferrer">${esc(ip.publisher)}</a>`],
