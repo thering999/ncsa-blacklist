@@ -569,8 +569,20 @@ app.get('/metrics', (req, res) => {
     '# HELP ncsa_sync_last_run_timestamp Unix timestamp of last sync',
     '# TYPE ncsa_sync_last_run_timestamp gauge',
     `ncsa_sync_last_run_timestamp ${syncTs}`,
-    '',
+    '# HELP ncsa_feed_file_age_seconds Seconds since feed data file was last written (-1 if missing)',
+    '# TYPE ncsa_feed_file_age_seconds gauge',
+    '# HELP ncsa_feed_up Feed file present and fresher than 25h (1=ok, 0=stale/missing)',
+    '# TYPE ncsa_feed_up gauge',
   ];
+  const nowMs = Date.now();
+  for (const t of Object.keys(FEEDS)) {
+    const f = path.join(DATA_DIR, `${t}.json`);
+    let age = -1, up = 0;
+    try { age = Math.round((nowMs - fs.statSync(f).mtimeMs) / 1000); up = age < 25 * 3600 ? 1 : 0; } catch {}
+    lines.push(`ncsa_feed_file_age_seconds{type="${t}"} ${age}`);
+    lines.push(`ncsa_feed_up{type="${t}"} ${up}`);
+  }
+  lines.push('');
   res.set('Content-Type', 'text/plain; version=0.0.4');
   res.send(lines.join('\n'));
 });
@@ -617,5 +629,27 @@ app.post('/scan/csv', rateLimit(30, 60_000), express.text({ limit: '2mb' }), (re
   res.send(csv);
 });
 
+app.get('/admin/feed-health', requireAdmin, (req, res) => {
+  const nowMs = Date.now();
+  const feeds = {};
+  for (const t of Object.keys(FEEDS)) {
+    const f = path.join(DATA_DIR, `${t}.json`);
+    const d = store[t];
+    let file_age_seconds = null, last_modified = null, file_size_kb = null, status = 'missing';
+    try {
+      const stat = fs.statSync(f);
+      file_age_seconds = Math.round((nowMs - stat.mtimeMs) / 1000);
+      last_modified = new Date(stat.mtimeMs).toISOString();
+      file_size_kb = Math.round(stat.size / 1024);
+      status = file_age_seconds < 25 * 3600 ? 'ok' : 'stale';
+    } catch {}
+    feeds[t] = { status, entries: d ? d.set.size : null, file_age_seconds, last_modified, file_size_kb, url: FEEDS[t] };
+  }
+  res.json({ feeds });
+});
+
 const PORT = process.env.PORT || 3939;
-app.listen(PORT, () => console.log(`ncsa-blacklist API on :${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`ncsa-blacklist API on :${PORT}`));
+}
+module.exports = { app };

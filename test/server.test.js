@@ -1,0 +1,206 @@
+const { test, before, after } = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// Must set DATA_DIR before requiring server (paths.js reads env at load time)
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ncsa-server-test-'));
+process.env.DATA_DIR = tmpDir;
+
+function fixture(type, data) {
+  return {
+    feed: type,
+    generated_at: new Date().toISOString(),
+    valid_for_days: 7,
+    total: data.length,
+    data,
+    file: { sha256: 'abc123', entries: data.length },
+  };
+}
+
+const HASH = 'a'.repeat(64);
+fs.writeFileSync(path.join(tmpDir, 'ip.json'), JSON.stringify(fixture('ip', ['1.2.3.4', '5.6.7.8'])));
+fs.writeFileSync(path.join(tmpDir, 'domain.json'), JSON.stringify(fixture('domain', ['evil.com', 'bad.org'])));
+fs.writeFileSync(path.join(tmpDir, 'hash.json'), JSON.stringify(fixture('hash', [HASH])));
+
+const { app } = require('../src/server');
+
+let server, baseUrl;
+
+before(() => new Promise((resolve) => {
+  server = app.listen(0, '127.0.0.1', () => {
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
+    resolve();
+  });
+}));
+
+after(() => new Promise((resolve) => {
+  server.close(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    resolve();
+  });
+}));
+
+async function get(p) {
+  const res = await fetch(baseUrl + p);
+  const ct = res.headers.get('content-type') || '';
+  return { status: res.status, body: ct.includes('json') ? await res.json() : await res.text() };
+}
+
+async function post(p, body, text = false) {
+  const res = await fetch(baseUrl + p, {
+    method: 'POST',
+    headers: { 'Content-Type': text ? 'text/plain' : 'application/json' },
+    body: text ? body : JSON.stringify(body),
+  });
+  const ct = res.headers.get('content-type') || '';
+  return { status: res.status, body: ct.includes('json') ? await res.json() : await res.text() };
+}
+
+test('GET /healthz returns ok', async () => {
+  const { status, body } = await get('/healthz');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.ok, true);
+});
+
+test('GET /stats returns feed counts', async () => {
+  const { status, body } = await get('/stats');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.ip.total, 2);
+  assert.strictEqual(body.domain.total, 2);
+  assert.strictEqual(body.hash.total, 1);
+});
+
+test('GET /info returns feed metadata', async () => {
+  const { status, body } = await get('/info');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.ip.feed, 'ip');
+});
+
+test('GET /check/auto/ blacklisted IP', async () => {
+  const { status, body } = await get('/check/auto/1.2.3.4');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.blacklisted, true);
+  assert.strictEqual(body.type, 'ip');
+});
+
+test('GET /check/auto/ clean IP', async () => {
+  const { body } = await get('/check/auto/9.9.9.9');
+  assert.strictEqual(body.blacklisted, false);
+});
+
+test('GET /check/auto/ blacklisted domain', async () => {
+  const { body } = await get('/check/auto/evil.com');
+  assert.strictEqual(body.blacklisted, true);
+  assert.strictEqual(body.type, 'domain');
+});
+
+test('GET /check/auto/ parent-domain match', async () => {
+  const { body } = await get('/check/auto/sub.evil.com');
+  assert.strictEqual(body.blacklisted, true);
+  assert.strictEqual(body.matchType, 'parent');
+});
+
+test('GET /check/auto/ blacklisted hash', async () => {
+  const { body } = await get(`/check/auto/${HASH}`);
+  assert.strictEqual(body.blacklisted, true);
+  assert.strictEqual(body.type, 'hash');
+});
+
+test('GET /check/:type/:value - domain lookup', async () => {
+  const { status, body } = await get('/check/domain/bad.org');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.blacklisted, true);
+});
+
+test('POST /check/bulk auto-detects types', async () => {
+  const { status, body } = await post('/check/bulk', { type: 'auto', values: ['1.2.3.4', '9.9.9.9', 'evil.com'] });
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.results[0].blacklisted, true);
+  assert.strictEqual(body.results[1].blacklisted, false);
+  assert.strictEqual(body.results[2].blacklisted, true);
+});
+
+test('POST /check/bulk rejects > 10000 values', async () => {
+  const { status } = await post('/check/bulk', { values: new Array(10001).fill('1.2.3.4') });
+  assert.strictEqual(status, 400);
+});
+
+test('POST /check/cidr finds hits in range', async () => {
+  const { status, body } = await post('/check/cidr', { cidr: '1.2.3.0/24' });
+  assert.strictEqual(status, 200);
+  assert.ok(body.hits.some((h) => h.ip === '1.2.3.4'));
+});
+
+test('POST /check/cidr rejects too-large range', async () => {
+  const { status } = await post('/check/cidr', { cidr: '0.0.0.0/15' });
+  assert.strictEqual(status, 400);
+});
+
+test('POST /check/cidr rejects invalid CIDR', async () => {
+  const { status } = await post('/check/cidr', { cidr: 'not-a-cidr' });
+  assert.strictEqual(status, 400);
+});
+
+test('GET /search returns matching results', async () => {
+  const { status, body } = await get('/search?type=ip&q=1.2.3');
+  assert.strictEqual(status, 200);
+  assert.ok(body.results.includes('1.2.3.4'));
+});
+
+test('GET /search rejects short query', async () => {
+  const { status } = await get('/search?type=ip&q=ab');
+  assert.strictEqual(status, 400);
+});
+
+test('POST /scan finds blacklisted IPs in log text', async () => {
+  const { status, body } = await post('/scan', 'Connection from 1.2.3.4 to server', true);
+  assert.strictEqual(status, 200);
+  assert.ok(body.hits.includes('1.2.3.4'));
+});
+
+test('POST /scan returns zero hits for clean text', async () => {
+  const { body } = await post('/scan', 'Connection from 9.9.9.9 only', true);
+  assert.strictEqual(body.hits.length, 0);
+});
+
+test('GET /analyze/countries returns breakdown', async () => {
+  const { status, body } = await get('/analyze/countries');
+  assert.strictEqual(status, 200);
+  assert.ok(typeof body.total_ips === 'number');
+  assert.ok(Array.isArray(body.top));
+});
+
+test('GET /analyze/networks returns top /24 networks', async () => {
+  const { status, body } = await get('/analyze/networks');
+  assert.strictEqual(status, 200);
+  assert.ok(typeof body.total_networks === 'number');
+});
+
+test('GET /analyze/asns returns ASN breakdown', async () => {
+  const { status, body } = await get('/analyze/asns');
+  assert.strictEqual(status, 200);
+  assert.ok(Array.isArray(body.top));
+});
+
+test('GET /watch returns array', async () => {
+  const { status, body } = await get('/watch');
+  assert.strictEqual(status, 200);
+  assert.ok(Array.isArray(body));
+});
+
+test('GET /metrics returns Prometheus text', async () => {
+  const res = await fetch(baseUrl + '/metrics');
+  const text = await res.text();
+  assert.strictEqual(res.status, 200);
+  assert.ok(text.includes('ncsa_store_size'));
+  assert.ok(text.includes('ncsa_feed_up'));
+  assert.ok(text.includes('ncsa_feed_file_age_seconds'));
+});
+
+test('GET /history returns array', async () => {
+  const { status, body } = await get('/history');
+  assert.strictEqual(status, 200);
+  assert.ok(Array.isArray(body));
+});
