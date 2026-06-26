@@ -186,12 +186,23 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 .net-bar-fill { height: 100%; background: var(--primary); border-radius: 2px; transition: width .4s; }
 .net-count { font-size: 12px; color: var(--text-muted); white-space: nowrap; font-family: sans-serif; }
 
-@media (max-width: 600px) {
-  .stats-grid { grid-template-columns: 1fr; }
+@media (max-width: 768px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
   .export-grid { grid-template-columns: repeat(2, 1fr); }
-  main { padding: 14px 10px; }
-  .card { padding: 14px; }
-  .settings-panel { width: 100%; }
+  .form-row { flex-direction: column; }
+  .form-row input, .form-row select, .form-row textarea { width: 100%; }
+  .page-nav { gap: 0; overflow-x: auto; }
+  .nav-link { font-size: 11px; padding: 6px 8px; white-space: nowrap; }
+  .net-bar { display: none; }
+}
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .export-grid { grid-template-columns: 1fr; }
+  main { padding: 10px 8px; }
+  .card { padding: 12px; }
+  .settings-panel { width: 100%; left: 0; right: 0; }
+  header { padding: 0 10px; }
+  .header-logo span:first-child { font-size: 15px; }
 }
 </style>
 </head>
@@ -310,6 +321,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
     <h2>📋 ตรวจสอบหลายรายการ</h2>
     <div class="form-row" style="margin-bottom:8px">
       <select id="bulkType">
+        <option value="auto">Auto-detect</option>
         <option value="ip">IP</option>
         <option value="domain">Domain</option>
         <option value="hash">Hash (SHA256)</option>
@@ -351,6 +363,7 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
 
   <div class="card" id="sec-export">
     <h2>⬇️ Export Blocklist</h2>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">คลิก Download หรือ Copy เพื่อคัดลอกเนื้อหาโดยตรง</p>
     <div class="export-grid">
       <a class="export-btn" href="/export/iptables" download="ncsa-iptables.sh">
         <span class="export-icon">🔥</span>
@@ -388,6 +401,12 @@ textarea.log-input:focus { outline: 2px solid var(--primary); border-color: tran
         <span class="export-sub">machine-readable bundle</span>
       </a>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn btn-ghost" onclick="copyExport('/export/csv/ip','IP list')" style="font-size:12px">📋 Copy IP list</button>
+      <button class="btn btn-ghost" onclick="copyExport('/export/csv/domain','Domain list')" style="font-size:12px">📋 Copy Domain list</button>
+      <button class="btn btn-ghost" onclick="copyExport('/export/csv/hash','Hash list')" style="font-size:12px">📋 Copy Hash list</button>
+    </div>
+    <div id="exportCopyStatus" style="font-size:12px;margin-top:6px;color:var(--text-muted)"></div>
   </div>
 
   <div class="card" id="sec-watch">
@@ -832,6 +851,31 @@ function copyText(text, btn) {
   });
 }
 
+// --- Copy export content ---
+async function copyExport(url, label) {
+  const out = document.getElementById('exportCopyStatus');
+  out.textContent = `กำลังโหลด ${label}...`;
+  try {
+    const text = await fetch(url).then(r => r.text());
+    await navigator.clipboard.writeText(text);
+    const lines = text.trim().split('\n').length;
+    out.textContent = `✓ คัดลอก ${label} แล้ว (${lines.toLocaleString()} บรรทัด)`;
+    setTimeout(() => out.textContent = '', 4000);
+  } catch (e) { out.textContent = `❌ ${e.message}`; }
+}
+
+// --- ?cidr= permalink ---
+(function initCidrPermalink() {
+  const params = new URLSearchParams(window.location.search);
+  const cidr = params.get('cidr');
+  if (cidr) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('cidrInput');
+      if (el) { el.value = cidr; cidrCheck().then(() => document.getElementById('sec-cidr').scrollIntoView({ behavior: 'smooth', block: 'start' })); }
+    });
+  }
+})();
+
 // --- Bulk file upload ---
 function loadBulkFile(e) {
   const file = e.target.files[0];
@@ -895,13 +939,20 @@ async function checkOne() {
     const parentNote = (d.matchType === 'parent')
       ? ` <span style="font-size:12px;opacity:.8">(parent: <code>${esc(d.matched)}</code>)</span>` : '';
     const geoNote = (d.geo && d.type === 'ip')
-      ? `<div style="margin-top:6px;font-size:12px;color:var(--text-muted)">🌍 ${esc(d.geo.country || '?')}${d.geo.city ? ' · ' + esc(d.geo.city) : ''}${d.geo.as ? ' · ' + esc(d.geo.as) : ''}</div>`
+      ? `<div style="margin-top:4px;font-size:12px;color:var(--text-muted)">🌍 ${esc(d.geo.country || '?')}${d.geo.city ? ' · ' + esc(d.geo.city) : ''}${d.geo.as ? ' · ' + esc(d.geo.as) : ''}</div>`
       : '';
+    const rdnsNote = d.rdns ? `<div style="margin-top:2px;font-size:12px;color:var(--text-muted)">🔀 rDNS: <code>${esc(d.rdns)}</code></div>` : '';
+    const riskColor = d.risk >= 70 ? 'var(--danger)' : d.risk >= 40 ? 'var(--warning)' : 'var(--success)';
+    const riskNote = (d.risk !== null && d.risk !== undefined)
+      ? `<div style="margin-top:4px;font-size:12px">Risk: <strong style="color:${riskColor}">${d.risk}/100</strong></div>` : '';
+    const feedsNote = (d.feeds && d.feeds.length > 1)
+      ? `<div style="margin-top:2px;font-size:12px;color:var(--text-muted)">พบใน feeds: ${d.feeds.map(f => `<span style="background:var(--bg);padding:1px 5px;border-radius:3px;border:1px solid var(--border)">${esc(f)}</span>`).join(' ')}</div>` : '';
     const copyBtn = `<button class="copy-btn" onclick="copyText('${value.replace(/'/g, "\\'")}',this)">copy</button>`;
     const shareBtn = `<button class="copy-btn" onclick="copyText(location.href,this)" title="คัดลอก URL นี้">🔗</button>`;
+    const extra = geoNote + rdnsNote + riskNote + feedsNote;
     out.innerHTML = d.blacklisted
-      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${copyBtn}${shareBtn}${parentNote}${geoNote}</div>`
-      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${copyBtn}${shareBtn}${geoNote}</div>`;
+      ? `<div class="result hit">⚠️ <strong>พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${copyBtn}${shareBtn}${parentNote}${extra}</div>`
+      : `<div class="result clean">✅ <strong>ไม่พบใน blacklist [${typeLabel}]:</strong> ${esc(value)}${copyBtn}${shareBtn}${parentNote}${extra}</div>`;
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }
@@ -984,31 +1035,69 @@ async function scanLog() {
 }
 
 // --- Search ---
-async function doSearch() {
+let _searchPage = 1;
+async function doSearch(page) {
   const type = document.getElementById('searchType').value;
   const q = document.getElementById('searchQ').value.trim();
   const out = document.getElementById('searchResult');
   if (q.length < 3) { out.innerHTML = '<div class="result warn">ต้องพิมพ์อย่างน้อย 3 ตัวอักษร</div>'; return; }
+  if (!page) { page = 1; _searchPage = 1; }
   const btn = document.getElementById('searchBtn');
   btn.disabled = true;
   out.innerHTML = '<div class="result info"><span class="spinner"></span>กำลังค้นหา...</div>';
   try {
-    const res = await fetch(`/search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
+    const res = await fetch(`/search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}&page=${page}&limit=100`);
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || res.statusText);
-    if (d.count === 0) {
+    if (d.total === 0) {
       out.innerHTML = `<div class="result clean">✅ ไม่พบ "${esc(q)}" ใน ${type} blacklist</div>`;
     } else {
-      const cap = d.capped ? ` (แสดง 100 รายการแรก)` : '';
-      const rows = d.results.map(v => `<tr><td>${esc(v)}</td></tr>`).join('');
-      out.innerHTML = `<div class="result hit">⚠️ พบ <strong>${d.count}</strong> รายการที่ตรงกับ "${esc(q)}"${cap}</div>
-        <table class="data-table"><thead><tr><th>${type}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      const rows = d.results.map((v, i) => `<tr><td style="color:var(--text-muted);font-size:11px;width:40px">${(page-1)*100+i+1}</td><td onclick="fillLookup('${esc(v)}')" style="cursor:pointer;font-family:monospace" title="ตรวจสอบ">${esc(v)}</td><td><button class="copy-btn" onclick="copyText('${v.replace(/'/g,"\\'")}',this)">copy</button></td></tr>`).join('');
+      const pagination = d.pages > 1 ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:12px;color:var(--text-muted)">หน้า ${d.page}/${d.pages} (${d.total.toLocaleString()} รายการ)</span>
+        ${d.page > 1 ? `<button class="btn btn-ghost" onclick="doSearch(${d.page-1})" style="font-size:12px;padding:3px 10px">← ก่อนหน้า</button>` : ''}
+        ${d.page < d.pages ? `<button class="btn btn-ghost" onclick="doSearch(${d.page+1})" style="font-size:12px;padding:3px 10px">ถัดไป →</button>` : ''}
+      </div>` : '';
+      out.innerHTML = `<div class="result hit" style="margin-bottom:6px">⚠️ พบ <strong>${d.total.toLocaleString()}</strong> รายการที่ตรงกับ "${esc(q)}"</div>
+        <table class="data-table"><thead><tr><th>#</th><th>${type}</th><th></th></tr></thead><tbody>${rows}</tbody></table>${pagination}`;
     }
   } catch (e) {
     out.innerHTML = `<div class="result warn">❌ ${esc(e.message)}</div>`;
   }
   btn.disabled = false;
 }
+
+function fillLookup(value) {
+  document.getElementById('value').value = value;
+  document.getElementById('sec-lookup').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  checkOne();
+}
+
+// Keyboard nav ↑↓Enter in search input
+document.addEventListener('DOMContentLoaded', () => {
+  const sq = document.getElementById('searchQ');
+  if (sq) {
+    sq.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const rows = document.querySelectorAll('#searchResult tbody tr');
+        if (rows.length) rows[0].querySelector('td:nth-child(2)').focus();
+      }
+    });
+  }
+  const sr = document.getElementById('searchResult');
+  if (sr) {
+    sr.addEventListener('keydown', e => {
+      const focused = document.activeElement;
+      const rows = [...document.querySelectorAll('#searchResult tbody tr td:nth-child(2)')];
+      const idx = rows.indexOf(focused);
+      if (e.key === 'ArrowDown' && idx < rows.length - 1) { e.preventDefault(); rows[idx+1].focus(); }
+      if (e.key === 'ArrowUp' && idx > 0) { e.preventDefault(); rows[idx-1].focus(); }
+      if (e.key === 'ArrowUp' && idx === 0) { e.preventDefault(); document.getElementById('searchQ').focus(); }
+      if (e.key === 'Enter' && idx >= 0) { fillLookup(focused.textContent); }
+    });
+  }
+});
 
 // --- Reload ---
 async function reloadData() {

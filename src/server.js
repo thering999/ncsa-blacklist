@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const dns = require('dns').promises;
 const express = require('express');
 const { loadAll } = require('./store');
 const { scanLog, scanLogWithContext } = require('./scan');
@@ -24,9 +25,40 @@ function rateLimit(maxReq, windowMs) {
     if (now > e.reset) { e.n = 0; e.reset = now + windowMs; }
     e.n++;
     _rateMap.set(key, e);
+    res.set('X-RateLimit-Limit', maxReq);
+    res.set('X-RateLimit-Remaining', Math.max(0, maxReq - e.n));
+    res.set('X-RateLimit-Reset', new Date(e.reset).toISOString());
     if (e.n > maxReq) return res.status(429).json({ error: 'rate limit exceeded', reset: new Date(e.reset).toISOString() });
     next();
   };
+}
+
+// --- Reverse DNS (2s timeout) ---
+async function reverseDns(ip) {
+  try {
+    const names = await Promise.race([
+      dns.reverse(ip),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000)),
+    ]);
+    return Array.isArray(names) && names.length ? names[0] : null;
+  } catch { return null; }
+}
+
+// --- Risk score 0-100 ---
+const HIGH_RISK_CC = new Set(['CN','RU','KP','IR','BY','CU','SY','VE','NI','MM']);
+function riskScore(ip, blacklisted, geo) {
+  let score = 0;
+  if (blacklisted) score += 50;
+  if (geo?.country && HIGH_RISK_CC.has(geo.country)) score += 15;
+  if (IPV4_RE && IPV4_RE.test(ip) && store.ip) {
+    const prefix = ip.split('.').slice(0, 3).join('.');
+    let density = 0;
+    for (const e of store.ip.set) { if (e.startsWith(prefix + '.')) density++; }
+    if (density > 50) score += 20;
+    else if (density > 10) score += 12;
+    else if (density > 2) score += 5;
+  }
+  return Math.min(100, score);
 }
 // Prune stale rate entries every 5 min
 setInterval(() => { const now = Date.now(); for (const [k, v] of _rateMap) if (now > v.reset) _rateMap.delete(k); }, 5 * 60_000);
@@ -188,15 +220,22 @@ function autoDetectType(value) {
   return 'domain';
 }
 
-app.get('/check/auto/:value', (req, res) => {
+app.get('/check/auto/:value', async (req, res) => {
   const { value } = req.params;
   const type = autoDetectType(value);
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
-  if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value) });
+
+  // Multi-feed: check all feeds for this value
+  const feeds = [];
+  for (const [t, fd] of Object.entries(store)) { if (fd && fd.set.has(value)) feeds.push(t); }
+
+  if (type === 'domain') return res.json({ type, value, ...domainCheck(d.set, value), feeds });
   const blacklisted = d.set.has(value);
   const geo = type === 'ip' ? geoLookup(value) : null;
-  res.json({ type, value, blacklisted, matched: value, matchType: 'exact', geo });
+  const rdns = type === 'ip' ? await reverseDns(value) : null;
+  const risk = type === 'ip' ? riskScore(value, blacklisted, geo) : null;
+  res.json({ type, value, blacklisted, matched: value, matchType: 'exact', geo, rdns, risk, feeds });
 });
 
 app.get('/check/:type/:value', (req, res) => {
@@ -274,18 +313,19 @@ app.post('/scan', rateLimit(30, 60_000), express.text({ limit: '2mb' }), (req, r
 
 app.post('/check/bulk', rateLimit(120, 60_000), express.json({ limit: '1mb' }), (req, res) => {
   const { type, values } = req.body || {};
-  if (!type || !Array.isArray(values)) return res.status(400).json({ error: 'type and values[] required' });
-  if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
+  if (!Array.isArray(values)) return res.status(400).json({ error: 'values[] required' });
+  if (type && type !== 'auto' && !VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be auto or one of: ${[...VALID_TYPES].join(', ')}` });
   if (values.length > 10000) return res.status(400).json({ error: 'max 10000 values per request' });
-  const d = store[type];
-  if (!d) return res.status(503).json({ error: `${type} data not loaded` });
-  res.json({
-    type, results: values.map((v) => {
-      const s = String(v);
-      if (type === 'domain') return { value: s, ...domainCheck(d.set, s) };
-      return { value: s, blacklisted: d.set.has(s), matched: s, matchType: 'exact' };
-    }),
+
+  const results = values.map((v) => {
+    const s = String(v).trim();
+    const t = (type === 'auto' || !type) ? autoDetectType(s) : type;
+    const d = store[t];
+    if (!d) return { value: s, type: t, error: 'data not loaded' };
+    if (t === 'domain') return { value: s, type: t, ...domainCheck(d.set, s) };
+    return { value: s, type: t, blacklisted: d.set.has(s), matched: s, matchType: 'exact' };
   });
+  res.json({ type: type || 'auto', results });
 });
 
 app.get('/recent', (req, res) => {
@@ -318,17 +358,20 @@ app.get('/news', async (req, res) => {
 });
 
 app.get('/search', (req, res) => {
-  const { type, q } = req.query;
+  const { type, q, page = '1', limit = '100' } = req.query;
   if (!type || !q) return res.status(400).json({ error: 'type and q required' });
   if (!VALID_TYPES.has(type)) return res.status(400).json({ error: `type must be one of: ${[...VALID_TYPES].join(', ')}` });
   if (q.length < 3) return res.status(400).json({ error: 'q must be at least 3 characters' });
   const d = store[type];
   if (!d) return res.status(503).json({ error: `${type} data not loaded` });
-  const results = [];
-  for (const v of d.set) {
-    if (v.includes(q)) { results.push(v); if (results.length >= 100) break; }
-  }
-  res.json({ type, q, count: results.length, capped: results.length === 100, results });
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const lim = Math.min(500, Math.max(10, parseInt(limit) || 100));
+  const all = [];
+  for (const v of d.set) { if (v.includes(q)) all.push(v); }
+  const total = all.length;
+  const start = (pageNum - 1) * lim;
+  const results = all.slice(start, start + lim);
+  res.json({ type, q, total, page: pageNum, limit: lim, pages: Math.ceil(total / lim), results });
 });
 
 app.post('/reload', requireAdmin, (req, res) => {
@@ -378,6 +421,47 @@ app.post('/admin/webhook-test', requireAdmin, express.json(), async (req, res) =
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
+});
+
+app.get('/admin/summary', requireAdmin, async (req, res) => {
+  const days = parseInt(req.query.days) || 7;
+  const since = new Date(Date.now() - days * 86400_000).toISOString();
+  let entries = [];
+  try {
+    const lines = fs.readFileSync(HISTORY_FILE, 'utf8').trim().split('\n').filter(Boolean);
+    entries = lines.map(l => JSON.parse(l)).filter(e => e.date >= since);
+  } catch {}
+  const summary = {};
+  for (const e of entries) {
+    if (!summary[e.type]) summary[e.type] = { syncs: 0, total_added: 0, total_removed: 0, latest_total: 0 };
+    summary[e.type].syncs++;
+    summary[e.type].total_added += e.added || 0;
+    summary[e.type].total_removed += e.removed || 0;
+    summary[e.type].latest_total = e.total || summary[e.type].latest_total;
+  }
+  const store_sizes = {};
+  for (const [t, d] of Object.entries(store)) store_sizes[t] = d ? d.set.size : 0;
+  const text = [
+    `NCSA Blacklist — ${days}-day summary (${new Date().toISOString().slice(0,10)})`,
+    '',
+    ...Object.entries(summary).map(([t, s]) =>
+      `[${t}] syncs:${s.syncs} +${s.total_added} -${s.total_removed} current:${s.latest_total}`),
+    '',
+    `Store: IP ${store_sizes.ip || 0} / domain ${store_sizes.domain || 0} / hash ${store_sizes.hash || 0}`,
+  ].join('\n');
+
+  const send = req.query.send === 'true';
+  if (send && process.env.SMTP_HOST && process.env.SMTP_TO) {
+    const { notify } = require('./notify');
+    // send via email directly
+    let nodemailer; try { nodemailer = require('nodemailer'); } catch {}
+    if (nodemailer) {
+      const t = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: parseInt(process.env.SMTP_PORT || '587'), secure: process.env.SMTP_SECURE === 'true', auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined });
+      try { await t.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to: process.env.SMTP_TO, subject: `[NCSA] Weekly Blacklist Summary`, text }); }
+      catch (e) { return res.status(502).json({ error: `email failed: ${e.message}`, summary }); }
+    }
+  }
+  res.json({ days, since, summary, store_sizes, text, email_sent: send });
 });
 
 app.get('/history', (req, res) => {
