@@ -5,7 +5,7 @@ const { loadAll } = require('./store');
 const { scanLog, scanLogWithContext } = require('./scan');
 const watchlist = require('./watchlist');
 const { DATA_DIR } = require('./paths');
-const { FEEDS } = require('./fetch');
+const { FEEDS, RECENT_FILE } = require('./fetch');
 
 const VALID_TYPES = new Set(Object.keys(FEEDS));
 
@@ -231,6 +231,29 @@ app.post('/check/bulk', express.json({ limit: '1mb' }), (req, res) => {
       return { value: s, blacklisted: d.set.has(s), matched: s, matchType: 'exact' };
     }),
   });
+});
+
+app.get('/recent', (req, res) => {
+  const { type, limit = 15 } = req.query;
+  const lim = Math.min(parseInt(limit) || 15, 50);
+  if (!fs.existsSync(RECENT_FILE)) return res.json({ count: 0, entries: [] });
+  let entries = fs.readFileSync(RECENT_FILE, 'utf8').trim().split('\n').filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
+    .reverse();
+  if (type && VALID_TYPES.has(type)) entries = entries.filter(e => e.type === type);
+  entries = entries.slice(0, lim).map(e => ({
+    date: e.date,
+    type: e.type,
+    total: e.total,
+    added_count: e.added.length,
+    removed_count: e.removed.length,
+    // Enrich first 20 added IPs with GeoIP
+    added_sample: e.type === 'ip'
+      ? e.added.slice(0, 20).map(ip => ({ ip, geo: geoLookup(ip) }))
+      : e.added.slice(0, 20).map(v => ({ value: v })),
+    removed_sample: e.removed.slice(0, 10).map(v => ({ value: v })),
+  }));
+  res.json({ count: entries.length, entries });
 });
 
 app.get('/news', async (req, res) => {

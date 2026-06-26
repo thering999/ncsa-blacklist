@@ -12,6 +12,19 @@ const FEEDS = {
 };
 
 const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
+const RECENT_FILE = path.join(DATA_DIR, 'recent.jsonl');
+const MAX_RECENT = 120; // keep last 120 sync records (40 per feed type × 3)
+
+function appendRecent(entry) {
+  let lines = [];
+  if (fs.existsSync(RECENT_FILE)) {
+    lines = fs.readFileSync(RECENT_FILE, 'utf8').trim().split('\n').filter(Boolean);
+  }
+  lines.push(JSON.stringify(entry));
+  if (lines.length > MAX_RECENT) lines = lines.slice(-MAX_RECENT);
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(RECENT_FILE, lines.join('\n') + '\n');
+}
 
 function appendHistory(entry) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -55,6 +68,7 @@ async function fetchFeed(type, url) {
   const watched = watchlist.load().filter((w) => w.type === type);
   const watchHits = watched.filter((w) => added.includes(w.value)).map((w) => w.value);
 
+  const now = new Date().toISOString();
   const entry = {
     type,
     total: json.total,
@@ -63,7 +77,18 @@ async function fetchFeed(type, url) {
     generated_at: json.generated_at,
     sha256: newSha256,
   };
-  appendHistory({ date: new Date().toISOString(), ...entry });
+  appendHistory({ date: now, ...entry });
+
+  // Only save diff values when there was prior data (skip first-ever fetch)
+  if (prevValues.length > 0 && (added.length > 0 || removed.length > 0)) {
+    appendRecent({
+      date: now,
+      type,
+      added: added.slice(0, 500),
+      removed: removed.slice(0, 200),
+      total: json.total,
+    });
+  }
 
   return { ...entry, watchHits };
 }
@@ -86,4 +111,4 @@ if (require.main === module) {
   fetchAll();
 }
 
-module.exports = { fetchAll, FEEDS, DATA_DIR };
+module.exports = { fetchAll, FEEDS, DATA_DIR, RECENT_FILE };
