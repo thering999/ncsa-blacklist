@@ -1202,6 +1202,101 @@ select.input{cursor:pointer}
     </div>
   </div>
 
+  <!-- Pentest Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🎯 Penetration Test Tracker — CTAM+ ข้อ 16</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto;font-size:.7rem" onclick="showAddPentest()">+ บันทึก Pentest</button>
+    </div>
+    <div style="margin-bottom:10px;padding:10px;background:rgba(255,165,0,.05);border:1px solid rgba(255,165,0,.2);border-radius:7px;font-size:.72rem;color:var(--text2)">
+      CTAM+ ข้อ 16: ต้องทดสอบเจาะระบบ (Pentest) <strong style="color:var(--orange)">อย่างน้อย 1 ครั้ง/ปี</strong> ครอบคลุมระบบสำคัญและเว็บแอปพลิเคชัน
+    </div>
+    <div id="pentest-list" style="display:flex;flex-direction:column;gap:8px"><div class="empty">ยังไม่มีบันทึก Pentest</div></div>
+  </div>
+
+  <!-- Vendor Risk Assessment -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🏢 Third-party / Vendor Risk</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto;font-size:.7rem" onclick="showAddVendor()">+ เพิ่ม Vendor</button>
+    </div>
+    <div id="vendor-list" style="display:flex;flex-direction:column;gap:6px"><div class="empty">ยังไม่มีข้อมูล Vendor</div></div>
+  </div>
+
+  <!-- Pentest Modal -->
+  <div id="pentest-modal" style="display:none;position:fixed;inset:0;z-index:9003;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:22px;max-width:460px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px"><strong>บันทึก Penetration Test</strong><button class="btn btn-ghost btn-sm" onclick="document.getElementById('pentest-modal').style.display='none'">✕</button></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ผู้ดำเนินการ (Tester)</label><input class="input" id="pt-tester" placeholder="บริษัท / ทีมภายใน" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">วันที่เริ่ม</label><input class="input" id="pt-start" type="date" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">วันที่สิ้นสุด</label><input class="input" id="pt-end" type="date" style="width:100%;margin-top:4px"></div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ขอบเขต (Scope)</label><textarea class="input" id="pt-scope" rows="2" placeholder="เช่น เว็บไซต์หน่วยงาน, API Gateway, Internal Network" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">Critical Findings</label><input class="input" id="pt-crit" type="number" min="0" value="0" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">High</label><input class="input" id="pt-high" type="number" min="0" value="0" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">Medium/Low</label><input class="input" id="pt-med" type="number" min="0" value="0" style="width:100%;margin-top:4px"></div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">สรุปผล / การแก้ไข</label><textarea class="input" id="pt-result" rows="2" placeholder="สรุปช่องโหว่สำคัญและสถานะการแก้ไข" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">สถานะ</label>
+          <select class="input" id="pt-status" style="width:100%;margin-top:4px">
+            <option value="completed">✅ เสร็จสิ้น + แก้ไขแล้ว</option>
+            <option value="inprogress">🔄 กำลังดำเนินการ</option>
+            <option value="pending">⏳ รอแก้ไข</option>
+            <option value="accepted">⚠ ยอมรับความเสี่ยง</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('pentest-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="savePentest()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vendor Modal -->
+  <div id="vendor-modal" style="display:none;position:fixed;inset:0;z-index:9004;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:22px;max-width:440px;width:calc(100% - 32px)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px"><strong>เพิ่ม Third-party / Vendor</strong><button class="btn btn-ghost btn-sm" onclick="document.getElementById('vendor-modal').style.display='none'">✕</button></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อ Vendor / บริษัท</label><input class="input" id="vd-name" placeholder="เช่น บริษัท Software XYZ" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">บริการที่ใช้</label><input class="input" id="vd-service" placeholder="เช่น Cloud Hosting, HIS System, CCTV" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">ระดับการเข้าถึง</label>
+            <select class="input" id="vd-access" style="width:100%;margin-top:4px">
+              <option value="high">🔴 สูง (Admin/Direct DB)</option>
+              <option value="medium">🟡 ปานกลาง (VPN/Remote)</option>
+              <option value="low">🟢 ต่ำ (จำกัด/API)</option>
+            </select>
+          </div>
+          <div><label style="font-size:.72rem;color:var(--text3)">ระดับความเสี่ยง</label>
+            <select class="input" id="vd-risk" style="width:100%;margin-top:4px">
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">วันหมดสัญญา</label><input class="input" id="vd-expire" type="date" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">มี NDA/DPA?</label>
+          <select class="input" id="vd-dpa" style="width:100%;margin-top:4px">
+            <option value="yes">✅ มี NDA + DPA</option>
+            <option value="nda">✅ มีแค่ NDA</option>
+            <option value="no">❌ ยังไม่มี</option>
+          </select>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">หมายเหตุ</label><input class="input" id="vd-note" placeholder="ข้อสังเกต/ข้อตกลงพิเศษ" style="width:100%;margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('vendor-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveVendor()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
 </section>
 
   <!-- IRP -->
@@ -6407,6 +6502,119 @@ async function loadSocAlerts() {
   } catch { document.getElementById('soc-alerts').innerHTML = '<div class="empty">Failed to load</div>'; }
 }
 
+// ── Pentest Tracker ──
+const PT_KEY='ncsa_pentests'; const VD_KEY='ncsa_vendors';
+function getPentests(){try{return JSON.parse(localStorage.getItem(PT_KEY)||'[]');}catch{return[];}}
+function getVendors(){try{return JSON.parse(localStorage.getItem(VD_KEY)||'[]');}catch{return[];}}
+function savePentests(a){localStorage.setItem(PT_KEY,JSON.stringify(a));}
+function saveVendors(a){localStorage.setItem(VD_KEY,JSON.stringify(a));}
+
+function showAddPentest(){
+  const now=new Date().toISOString().slice(0,10);
+  document.getElementById('pt-start').value=now;
+  document.getElementById('pt-end').value=now;
+  ['pt-tester','pt-scope','pt-result'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['pt-crit','pt-high','pt-med'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='0';});
+  document.getElementById('pt-status').value='completed';
+  document.getElementById('pentest-modal').style.display='flex';
+}
+
+function savePentest(){
+  const tester=document.getElementById('pt-tester').value.trim();
+  const scope=document.getElementById('pt-scope').value.trim();
+  if(!tester||!scope){toast('กรุณากรอกผู้ทดสอบและขอบเขต','warn');return;}
+  const arr=getPentests();
+  arr.unshift({id:Date.now(),tester,start:document.getElementById('pt-start').value,end:document.getElementById('pt-end').value,
+    scope,crit:parseInt(document.getElementById('pt-crit').value)||0,
+    high:parseInt(document.getElementById('pt-high').value)||0,
+    med:parseInt(document.getElementById('pt-med').value)||0,
+    result:document.getElementById('pt-result').value.trim(),
+    status:document.getElementById('pt-status').value,
+    created:new Date().toISOString()});
+  savePentests(arr);
+  document.getElementById('pentest-modal').style.display='none';
+  renderPentestList(); toast('บันทึก Pentest แล้ว','ok');
+}
+
+function deletePentest(id){if(!confirm('ลบ?'))return;savePentests(getPentests().filter(p=>p.id!==id));renderPentestList();toast('ลบแล้ว','ok');}
+
+function renderPentestList(){
+  const el=document.getElementById('pentest-list'); if(!el)return;
+  const arr=getPentests();
+  if(!arr.length){el.innerHTML='<div class="empty">ยังไม่มีบันทึก Pentest</div>';return;}
+  const thisYear=new Date().getFullYear();
+  const yearPt=arr.filter(p=>new Date(p.start).getFullYear()===thisYear);
+  const ctamOk=yearPt.length>=1;
+  el.innerHTML=`<div style="margin-bottom:8px;padding:8px 12px;background:${ctamOk?'rgba(0,230,118,.08)':'rgba(250,204,21,.08)'};border:1px solid ${ctamOk?'rgba(0,230,118,.25)':'rgba(250,204,21,.25)'};border-radius:8px;font-size:.72rem">
+    <span style="color:${ctamOk?'var(--green)':'var(--yellow)'}">${ctamOk?'✅':'⚠'}</span> ปีนี้ทำ Pentest <strong>${yearPt.length} ครั้ง</strong> — CTAM+ ข้อ 16: <span style="color:${ctamOk?'var(--green)':'var(--yellow)'}">${ctamOk?'ผ่าน':'ยังไม่ผ่าน'}</span>
+  </div>` + arr.map(p=>{
+    const sColor={completed:'var(--green)',inprogress:'var(--cyan)',pending:'var(--orange)',accepted:'var(--text3)'}[p.status]||'var(--text3)';
+    return `<div style="padding:12px;background:rgba(255,255,255,.03);border:1px solid var(--card-b);border-radius:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <span style="font-size:.85rem;font-weight:700;color:var(--orange)">🎯 ${esc(p.tester)}</span>
+        <span style="font-size:.65rem;color:var(--text3)">${p.start}${p.end&&p.end!==p.start?' → '+p.end:''}</span>
+        <span style="margin-left:auto;font-size:.68rem;font-weight:700;color:${sColor}">${p.status}</span>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red);padding:1px 5px;font-size:.6rem" onclick="deletePentest(${p.id})">🗑</button>
+      </div>
+      <div style="font-size:.7rem;color:var(--text3);margin-bottom:6px">📍 Scope: ${esc(p.scope)}</div>
+      <div style="display:flex;gap:10px;font-size:.72rem">
+        ${p.crit?`<span style="color:var(--red);font-weight:700">🔴 Critical: ${p.crit}</span>`:''}
+        ${p.high?`<span style="color:var(--orange);font-weight:700">🟠 High: ${p.high}</span>`:''}
+        ${p.med?`<span style="color:var(--yellow)">🟡 Med/Low: ${p.med}</span>`:''}
+        ${!p.crit&&!p.high&&!p.med?'<span style="color:var(--green)">✅ ไม่พบช่องโหว่สำคัญ</span>':''}
+      </div>
+      ${p.result?`<div style="margin-top:6px;font-size:.68rem;color:var(--text3)">💡 ${esc(p.result)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function showAddVendor(){
+  ['vd-name','vd-service','vd-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('vd-access').value='medium';
+  document.getElementById('vd-risk').value='medium';
+  document.getElementById('vd-dpa').value='no';
+  document.getElementById('vd-expire').value='';
+  document.getElementById('vendor-modal').style.display='flex';
+}
+
+function saveVendor(){
+  const name=document.getElementById('vd-name').value.trim();
+  if(!name){toast('กรุณากรอกชื่อ Vendor','warn');return;}
+  const arr=getVendors();
+  arr.unshift({id:Date.now(),name,service:document.getElementById('vd-service').value.trim(),
+    access:document.getElementById('vd-access').value,risk:document.getElementById('vd-risk').value,
+    expire:document.getElementById('vd-expire').value,dpa:document.getElementById('vd-dpa').value,
+    note:document.getElementById('vd-note').value.trim(),created:new Date().toISOString()});
+  saveVendors(arr);
+  document.getElementById('vendor-modal').style.display='none';
+  renderVendorList(); toast('เพิ่ม Vendor แล้ว','ok');
+}
+
+function deleteVendor(id){if(!confirm('ลบ?'))return;saveVendors(getVendors().filter(v=>v.id!==id));renderVendorList();toast('ลบแล้ว','ok');}
+
+function renderVendorList(){
+  const el=document.getElementById('vendor-list'); if(!el)return;
+  const arr=getVendors();
+  if(!arr.length){el.innerHTML='<div class="empty">ยังไม่มีข้อมูล Vendor</div>';return;}
+  const RISK_C={critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--green)'};
+  const DPA_LABEL={yes:'✅ มี NDA+DPA',nda:'⚠ มีแค่ NDA',no:'❌ ไม่มี NDA/DPA'};
+  el.innerHTML=arr.map(v=>`
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:rgba(255,255,255,.03);border:1px solid ${RISK_C[v.risk]||'var(--card-b)'}33;border-radius:8px">
+      <span style="font-size:1.2rem;flex-shrink:0">🏢</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <strong style="font-size:.82rem">${esc(v.name)}</strong>
+          <span style="font-size:.65rem;padding:1px 6px;border-radius:8px;background:${RISK_C[v.risk]||'var(--card-b)'}22;color:${RISK_C[v.risk]||'var(--text3)'};font-weight:700">${v.risk?.toUpperCase()}</span>
+          <span style="font-size:.65rem;color:${v.dpa==='yes'?'var(--green)':v.dpa==='nda'?'var(--yellow)':'var(--red)'}">${DPA_LABEL[v.dpa]||'-'}</span>
+          ${v.expire?`<span style="font-size:.62rem;color:var(--text3);margin-left:auto">หมดสัญญา: ${v.expire}</span>`:''}
+        </div>
+        <div style="font-size:.7rem;color:var(--text3);margin-top:3px">${esc(v.service||'')} | เข้าถึง: <span style="color:${RISK_C[v.access]||'var(--text3)'}">${v.access}</span></div>
+        ${v.note?`<div style="font-size:.65rem;color:var(--text3);margin-top:2px">${esc(v.note)}</div>`:''}
+      </div>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:.65rem;flex-shrink:0" onclick="deleteVendor(${v.id})">🗑</button>
+    </div>`).join('');
+}
+
 // ── CTAM+ Report Generator ──
 function generateCtamReport(){
   const cfg=getCfg();
@@ -7133,6 +7341,7 @@ function renderThreatActors(){
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
   renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
+  renderPentestList(); renderVendorList();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
@@ -7156,6 +7365,10 @@ function renderThreatActors(){
       if (im) im.style.display = 'none';
       const dm = document.getElementById('drill-modal');
       if (dm) dm.style.display = 'none';
+      const ptm = document.getElementById('pentest-modal');
+      if (ptm) ptm.style.display = 'none';
+      const vdm = document.getElementById('vendor-modal');
+      if (vdm) vdm.style.display = 'none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
