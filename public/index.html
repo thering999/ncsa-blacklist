@@ -2195,6 +2195,16 @@ select.input{cursor:pointer}
         <div id="vuln-breakdown" style="display:flex;flex-direction:column;gap:6px"><div class="empty" style="font-size:.72rem">กำลังโหลด…</div></div>
       </div>
     </div>
+
+    <!-- NIST CSF Assessment -->
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">🏗 NIST Cybersecurity Framework Assessment</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="renderNistCsf()">↺</button>
+      </div>
+      <div id="nist-csf-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px"></div>
+      <div style="margin-top:12px;font-size:.68rem;color:var(--text3)">คะแนนประมาณจากข้อมูลที่บันทึกไว้ในระบบ — คลิกแต่ละ Pillar เพื่อดูรายละเอียด</div>
+    </div>
   </section>
 
   <!-- Integrations -->
@@ -6744,6 +6754,108 @@ function renderVendorList(){
     </div>`).join('');
 }
 
+// ── NIST CSF Assessment ──
+function renderNistCsf(){
+  const el=document.getElementById('nist-csf-grid'); if(!el)return;
+  const cfg=getCfg();
+  const ctamDone=(cfg.ctamDone||[]).filter(Boolean).length;
+  const kpiMinDone=(cfg.kpiMin||[]).filter(Boolean).length;
+  const hasWazuh=cfg.wazuhIP&&cfg.wazuhIP!=='WAZUH-SERVER';
+  const hasMisp=cfg.mispUrl&&cfg.mispUrl!=='https://MISP-SERVER';
+  const hasAssets=(cfg.assets||[]).length>0;
+  const hasVulns=(cfg.vulns||[]).length>0;
+  const hasPatches=(cfg.patches||[]).length>0;
+  const hasDrills=getDrills().length>0;
+  const hasPentest=getPentests().length>0;
+  const hasPolicy=(cfg.policies||[]).length>0;
+  const hasPdpa=(cfg.pdpaAssets||[]).length>0;
+  const hasIncidents=getIncidents().length>0;
+  const has2fa=(cfg.twofa||[]).length>0;
+  const hasTraining=(cfg.training||[]).length>0;
+  const hasRisk=(cfg.risks||[]).length>0;
+  const hasBackup=(cfg.backups||[]).length>0;
+  const hasSsl=(cfg.sslDomains||[]).length>0;
+  const PILLARS=[
+    {
+      id:'identify',icon:'🔍',name:'Identify',color:'var(--cyan)',
+      checks:[
+        {label:'Asset Inventory (CTAM+12)',ok:hasAssets},
+        {label:'Vulnerability Assessment',ok:hasVulns},
+        {label:'Risk Assessment',ok:hasRisk},
+        {label:'PDPA Data Classification',ok:hasPdpa},
+        {label:'Vendor Risk Management',ok:getVendors().length>0},
+      ]
+    },
+    {
+      id:'protect',icon:'🛡',name:'Protect',color:'var(--green)',
+      checks:[
+        {label:'Access Control / 2FA',ok:has2fa},
+        {label:'Security Awareness Training',ok:hasTraining},
+        {label:'Data Protection / Backup 3-2-1',ok:hasBackup},
+        {label:'Patch Management',ok:hasPatches},
+        {label:'Policy & Procedure',ok:hasPolicy},
+        {label:'SSL Certificate Monitoring',ok:hasSsl},
+      ]
+    },
+    {
+      id:'detect',icon:'📡',name:'Detect',color:'var(--yellow)',
+      checks:[
+        {label:'SIEM (Wazuh) Configured',ok:hasWazuh},
+        {label:'MISP Threat Intel',ok:hasMisp},
+        {label:'CTAM+ ≥14/17 ผ่าน',ok:ctamDone>=14},
+        {label:'Network Monitoring',ok:kpiMinDone>=4},
+        {label:'KPI Minimum ≥6/7',ok:kpiMinDone>=6},
+      ]
+    },
+    {
+      id:'respond',icon:'🚨',name:'Respond',color:'var(--orange)',
+      checks:[
+        {label:'Incident Response Plan',ok:true},
+        {label:'Incident Log ≥1 บันทึก',ok:hasIncidents},
+        {label:'BCP/DR Drill ปีนี้',ok:hasDrills},
+        {label:'IR Tickets/Tracking',ok:(cfg.tickets||[]).length>0},
+        {label:'Threat Hunting Queries',ok:true},
+      ]
+    },
+    {
+      id:'recover',icon:'♻',name:'Recover',color:'var(--purple)',
+      checks:[
+        {label:'Backup 3-2-1 (CTAM+1)',ok:hasBackup},
+        {label:'Penetration Test (CTAM+16)',ok:hasPentest},
+        {label:'After Action Review',ok:hasDrills},
+        {label:'Lessons Learned Documentation',ok:hasIncidents},
+        {label:'CTAM+ 17/17 ผ่าน',ok:ctamDone>=17},
+      ]
+    },
+  ];
+  el.innerHTML=PILLARS.map(p=>{
+    const passed=p.checks.filter(c=>c.ok).length;
+    const total=p.checks.length;
+    const pct=Math.round((passed/total)*100);
+    const maturity=pct>=80?'Managed':pct>=60?'Defined':pct>=40?'Repeatable':pct>=20?'Initial':'Partial';
+    const matColor=pct>=80?'var(--green)':pct>=60?'var(--cyan)':pct>=40?'var(--yellow)':pct>=20?'var(--orange)':'var(--red)';
+    return `<div style="border:1px solid ${p.color}33;border-radius:10px;padding:14px;background:${p.color}08">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:1.3rem">${p.icon}</span>
+        <div>
+          <div style="font-weight:700;color:${p.color};font-size:.88rem">${p.name}</div>
+          <div style="font-size:.62rem;color:${matColor};font-weight:600">${maturity} (${pct}%)</div>
+        </div>
+        <div style="margin-left:auto;font-size:1.1rem;font-weight:900;color:${p.color}">${passed}/${total}</div>
+      </div>
+      <div style="background:rgba(255,255,255,.07);border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px">
+        <div style="width:${pct}%;background:${p.color};height:100%;transition:width .5s;border-radius:6px"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        ${p.checks.map(c=>`<div style="font-size:.65rem;color:${c.ok?'var(--text2)':'var(--text3)'};display:flex;align-items:center;gap:4px">
+          <span style="font-size:.7rem;flex-shrink:0">${c.ok?'✅':'○'}</span>
+          <span style="${!c.ok?'opacity:.6':''}">${esc(c.label)}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // ── CTAM+ Report Generator ──
 function generateCtamReport(){
   const cfg=getCfg();
@@ -7470,7 +7582,7 @@ function renderThreatActors(){
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
   renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
-  renderPentestList(); renderVendorList();
+  renderPentestList(); renderVendorList(); renderNistCsf();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
