@@ -1268,6 +1268,66 @@ select.input{cursor:pointer}
       <div class="card" style="--accent:var(--cyan)"><div class="card-title" style="color:var(--cyan)">🧹 Eradication</div><div style="font-size:.78rem;line-height:1.8;color:var(--text2)">□ Remove malware + persistence mechanism<br>□ Block C2 domain ใน dnsmasq/DNS<br>□ Add IOCs → MISP event<br>□ Deploy Suricata rule สำหรับ signature<br>□ Full AV scan ทั้ง network segment</div></div>
     </div>
   </div>
+
+  <!-- Incident Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">📅 Incident Log & Timeline</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="showAddIncident()">+ บันทึกเหตุการณ์</button>
+    </div>
+    <div id="incident-timeline" style="position:relative;padding-left:24px;border-left:2px solid var(--card-b)">
+      <div class="empty">ยังไม่มีเหตุการณ์ที่บันทึก</div>
+    </div>
+  </div>
+
+  <!-- Incident Modal -->
+  <div id="incident-modal" style="display:none;position:fixed;inset:0;z-index:9001;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:24px;max-width:480px;width:calc(100% - 32px)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <strong>บันทึกเหตุการณ์ Incident</strong>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('incident-modal').style.display='none'">✕</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ประเภทเหตุการณ์</label>
+          <select class="input" id="inc-type" style="width:100%;margin-top:4px">
+            <option value="ransomware">🔐 Ransomware</option>
+            <option value="web">🌐 Web Attack</option>
+            <option value="breach">🕵 Data Breach</option>
+            <option value="ddos">⚡ DDoS</option>
+            <option value="malware">🦠 Malware</option>
+            <option value="phishing">📧 Phishing</option>
+            <option value="other">📋 อื่น ๆ</option>
+          </select>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">วันที่/เวลาเกิดเหตุ (T0)</label><input class="input" id="inc-date" type="datetime-local" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ระบบที่กระทบ</label><input class="input" id="inc-system" placeholder="เช่น HIS Server, เว็บไซต์ สสจ." style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">รายละเอียด</label><textarea class="input" id="inc-detail" rows="2" placeholder="สรุปเหตุการณ์" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">ความรุนแรง</label>
+            <select class="input" id="inc-sev" style="width:100%;margin-top:4px">
+              <option value="low">🟢 Low</option>
+              <option value="medium">🟡 Medium</option>
+              <option value="high" selected>🟠 High</option>
+              <option value="critical">🔴 Critical</option>
+            </select>
+          </div>
+          <div><label style="font-size:.72rem;color:var(--text3)">สถานะ</label>
+            <select class="input" id="inc-status" style="width:100%;margin-top:4px">
+              <option value="open">Open</option>
+              <option value="investigating">Investigating</option>
+              <option value="contained">Contained</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('incident-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveIncident()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   </section>
 
   <!-- SOC -->
@@ -1315,6 +1375,31 @@ select.input{cursor:pointer}
         <div class="stat-card" style="--accent:var(--yellow);padding:14px 16px">
           <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Training %</div>
           <div class="stat-val" id="sm-training-pct" style="font-size:1.8rem;color:var(--yellow)">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security Health Score -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">🏥 Cyber Health Score</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="renderSecurityScore()">↺</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <div style="position:relative;width:120px;height:120px;flex-shrink:0">
+          <canvas id="score-donut" width="120" height="120"></canvas>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <div id="score-pct" style="font-size:1.8rem;font-weight:800;color:var(--cyan)">—</div>
+            <div style="font-size:.6rem;color:var(--text3)">คะแนน</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <div id="score-bars" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+        <div id="score-badge" style="text-align:center;padding:14px 20px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--card-b);min-width:110px">
+          <div id="score-grade" style="font-size:2rem;font-weight:900">—</div>
+          <div id="score-label" style="font-size:.7rem;color:var(--text3);margin-top:2px">ระดับความมั่นคง</div>
+          <div id="score-recs" style="font-size:.62rem;color:var(--yellow);margin-top:6px;text-align:left"></div>
         </div>
       </div>
     </div>
@@ -6085,6 +6170,165 @@ async function loadSocAlerts() {
   } catch { document.getElementById('soc-alerts').innerHTML = '<div class="empty">Failed to load</div>'; }
 }
 
+// ── Incident Tracker ──
+const INC_KEY='ncsa_incidents';
+const INC_TYPE_ICON={ransomware:'🔐',web:'🌐',breach:'🕵',ddos:'⚡',malware:'🦠',phishing:'📧',other:'📋'};
+const INC_SEV_COLOR={low:'var(--green)',medium:'var(--yellow)',high:'var(--orange)',critical:'var(--red)'};
+const INC_STATUS_LABEL={open:'Open',investigating:'Investigating',contained:'Contained',resolved:'✅ Resolved'};
+
+function getIncidents(){try{return JSON.parse(localStorage.getItem(INC_KEY)||'[]');}catch{return[];}}
+function saveIncidents(arr){localStorage.setItem(INC_KEY,JSON.stringify(arr));}
+
+function showAddIncident(){
+  document.getElementById('inc-date').value=new Date().toISOString().slice(0,16);
+  ['inc-system','inc-detail'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('inc-type').value='ransomware';
+  document.getElementById('inc-sev').value='high';
+  document.getElementById('inc-status').value='open';
+  document.getElementById('incident-modal').style.display='flex';
+}
+
+function saveIncident(){
+  const type=document.getElementById('inc-type').value;
+  const date=document.getElementById('inc-date').value;
+  const system=document.getElementById('inc-system').value.trim();
+  const detail=document.getElementById('inc-detail').value.trim();
+  const sev=document.getElementById('inc-sev').value;
+  const status=document.getElementById('inc-status').value;
+  if(!system&&!detail){toast('กรุณากรอกข้อมูล','warn');return;}
+  const arr=getIncidents();
+  arr.unshift({id:Date.now(),type,date,system,detail,sev,status,created:new Date().toISOString()});
+  saveIncidents(arr);
+  document.getElementById('incident-modal').style.display='none';
+  renderIncidentTimeline();
+  toast('บันทึกเหตุการณ์แล้ว','ok');
+}
+
+function deleteIncident(id){
+  if(!confirm('ลบเหตุการณ์นี้?'))return;
+  saveIncidents(getIncidents().filter(i=>i.id!==id));
+  renderIncidentTimeline();
+  toast('ลบแล้ว','ok');
+}
+
+function updateIncidentStatus(id,status){
+  const arr=getIncidents(); const inc=arr.find(i=>i.id===id);
+  if(inc){inc.status=status;saveIncidents(arr);renderIncidentTimeline();}
+}
+
+function renderIncidentTimeline(){
+  const el=document.getElementById('incident-timeline'); if(!el)return;
+  const arr=getIncidents();
+  if(!arr.length){el.innerHTML='<div class="empty">ยังไม่มีเหตุการณ์ที่บันทึก</div>';return;}
+  el.innerHTML=arr.map(inc=>{
+    const sc=INC_SEV_COLOR[inc.sev]||'var(--text3)';
+    const dt=inc.date?new Date(inc.date).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):'';
+    return `<div style="position:relative;margin-bottom:18px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid ${sc}33;border-radius:8px">
+      <div style="position:absolute;left:-29px;top:12px;width:12px;height:12px;border-radius:50%;background:${sc};box-shadow:0 0 8px ${sc}"></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <span style="font-size:1rem">${INC_TYPE_ICON[inc.type]||'📋'}</span>
+        <strong style="color:${sc};font-size:.85rem">${inc.type?.toUpperCase()}</strong>
+        <span style="font-size:.7rem;background:${sc}22;color:${sc};padding:1px 7px;border-radius:8px;font-weight:700">${inc.sev?.toUpperCase()}</span>
+        <span style="margin-left:auto;font-size:.65rem;color:var(--text3)">${dt}</span>
+      </div>
+      ${inc.system?`<div style="font-size:.75rem;font-weight:600;color:var(--text2);margin-bottom:3px">📍 ${esc(inc.system)}</div>`:''}
+      ${inc.detail?`<div style="font-size:.73rem;color:var(--text3);margin-bottom:6px">${esc(inc.detail)}</div>`:''}
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:.68rem;color:var(--text3)">สถานะ:</span>
+        <select style="font-size:.65rem;background:var(--bg);border:1px solid var(--card-b);color:var(--text1);border-radius:4px;padding:1px 4px" onchange="updateIncidentStatus(${inc.id},this.value)">
+          ${['open','investigating','contained','resolved'].map(s=>`<option value="${s}"${inc.status===s?' selected':''}>${INC_STATUS_LABEL[s]}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--red);padding:1px 7px;font-size:.65rem" onclick="deleteIncident(${inc.id})">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Security Health Score ──
+function renderSecurityScore(){
+  const cfg=getCfg();
+  const ctamDone=(cfg.ctamDone||[]).filter(Boolean).length;
+  const ctamPct=Math.round((ctamDone/17)*100);
+  const kpiMinDone=(cfg.kpiMin||[]).filter(Boolean).length;
+  const kpiMinPct=Math.round((kpiMinDone/7)*100);
+  const kpiMaxDone=(cfg.kpiMax||[]).filter(Boolean).length;
+  const kpiMaxPct=Math.round((kpiMaxDone/8)*100);
+  const vulns=(cfg.vulns||[]);
+  const openVulns=vulns.filter(v=>v.status==='open').length;
+  const critVulns=vulns.filter(v=>v.severity==='critical'&&v.status==='open').length;
+  const vulnPenalty=Math.min(openVulns*3+critVulns*10,50);
+  const vulnScore=Math.max(0,100-vulnPenalty);
+  const training=(cfg.training||[]);
+  const trainPct=training.length?Math.round((training.filter(t=>t.done).length/training.length)*100):100;
+  const patches=(cfg.patches||[]);
+  const patchPct=patches.length?Math.round((patches.filter(p=>p.status==='done').length/patches.length)*100):100;
+  const risks=(cfg.risks||[]);
+  const critRisks=risks.filter(r=>r.likelihood*r.impact>=15&&r.status==='open').length;
+  const riskPenalty=Math.min(critRisks*8,40);
+  const riskScore=Math.max(0,100-riskPenalty);
+  // Weighted: CTAM 30%, KPI-Min 20%, Vuln 20%, Training 10%, Patch 10%, Risk 10%
+  const components=[
+    {label:'CTAM+ 2569',pct:ctamPct,weight:.30,color:'var(--cyan)'},
+    {label:'KPI Minimum',pct:kpiMinPct,weight:.20,color:'var(--green)'},
+    {label:'Vulnerability',pct:vulnScore,weight:.20,color:'var(--orange)'},
+    {label:'Training',pct:trainPct,weight:.10,color:'var(--yellow)'},
+    {label:'Patch',pct:patchPct,weight:.10,color:'#a78bfa'},
+    {label:'Risk Control',pct:riskScore,weight:.10,color:'var(--red)'},
+  ];
+  const total=Math.round(components.reduce((s,c)=>s+c.pct*c.weight,0));
+  // Grade
+  let grade,gColor,gLabel;
+  if(total>=90){grade='A+';gColor='var(--cyan)';gLabel='ดีเยี่ยม'}
+  else if(total>=80){grade='A';gColor='var(--green)';gLabel='ดีมาก'}
+  else if(total>=70){grade='B';gColor='var(--yellow)';gLabel='ดี'}
+  else if(total>=60){grade='C';gColor='var(--orange)';gLabel='พอใช้'}
+  else{grade='D';gColor='var(--red)';gLabel='ต้องปรับปรุง'}
+  // Score number
+  const scoreEl=document.getElementById('score-pct');
+  if(scoreEl){scoreEl.textContent=total;scoreEl.style.color=gColor;}
+  // Grade badge
+  const gradeEl=document.getElementById('score-grade');
+  const labelEl=document.getElementById('score-label');
+  const recsEl=document.getElementById('score-recs');
+  if(gradeEl){gradeEl.textContent=grade;gradeEl.style.color=gColor;}
+  if(labelEl)labelEl.textContent=gLabel;
+  // Recommendations
+  const recs=[];
+  if(ctamPct<100) recs.push(`⚠ CTAM+ ${17-ctamDone} ข้อยังไม่ผ่าน`);
+  if(kpiMinPct<100) recs.push(`⚠ KPI Min ${7-kpiMinDone} ข้อยังไม่ผ่าน`);
+  if(critVulns>0) recs.push(`🔴 Critical vuln ${critVulns} รายการ`);
+  if(critRisks>0) recs.push(`🔴 Risk สูงมาก ${critRisks} รายการ`);
+  if(recsEl) recsEl.innerHTML=recs.slice(0,3).map(r=>`<div style="margin-top:2px">${r}</div>`).join('');
+  // Progress bars
+  const barsEl=document.getElementById('score-bars');
+  if(barsEl) barsEl.innerHTML=components.map(c=>`
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font-size:.68rem;color:var(--text3);width:90px;flex-shrink:0">${c.label}</div>
+      <div style="flex:1;background:rgba(255,255,255,.07);border-radius:8px;height:7px;overflow:hidden">
+        <div style="width:${c.pct}%;background:${c.color};height:100%;border-radius:8px;transition:width .6s ease"></div>
+      </div>
+      <div style="font-size:.7rem;font-weight:700;color:${c.color};width:32px;text-align:right">${c.pct}%</div>
+    </div>`).join('');
+  // Donut chart
+  const canvas=document.getElementById('score-donut'); if(!canvas)return;
+  const ctx2=canvas.getContext('2d'); const W=120,H=120,R=52,lw=14;
+  ctx2.clearRect(0,0,W,H);
+  let start=-Math.PI/2;
+  components.forEach(c=>{
+    const slice=(c.pct*c.weight/100)*Math.PI*2;
+    ctx2.beginPath(); ctx2.arc(W/2,H/2,R,start,start+slice);
+    ctx2.strokeStyle=c.color; ctx2.lineWidth=lw; ctx2.lineCap='round';
+    ctx2.stroke(); start+=slice;
+  });
+  // Gray remainder
+  const used=components.reduce((s,c)=>s+c.pct*c.weight/100,0);
+  if(used<1){
+    ctx2.beginPath(); ctx2.arc(W/2,H/2,R,start,start+(1-used)*Math.PI*2);
+    ctx2.strokeStyle='rgba(255,255,255,.07)'; ctx2.lineWidth=lw; ctx2.lineCap='butt';
+    ctx2.stroke();
+  }
+}
+
 // ── Risk Assessment ──
 const RISK_COLORS = ['','#22c55e','#86efac','#facc15','#f97316','#ef4444'];
 const RISK_LABELS = ['','น้อยมาก','น้อย','ปานกลาง','สูง','สูงมาก'];
@@ -6246,9 +6490,10 @@ function renderThreatActors(){
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
   renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries();
-  updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts();
+  updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore();
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
+  renderIncidentTimeline();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
@@ -6268,6 +6513,8 @@ function renderThreatActors(){
       if (wm) wm.style.display = 'none';
       const rm = document.getElementById('risk-modal');
       if (rm) rm.style.display = 'none';
+      const im = document.getElementById('incident-modal');
+      if (im) im.style.display = 'none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
