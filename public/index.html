@@ -2217,6 +2217,7 @@ select.input{cursor:pointer}
         <button class="int-tab" onclick="switchIntTab(this,'nas')">💾 NAS / Storage</button>
         <button class="int-tab" onclick="switchIntTab(this,'webmon')">🌍 Web Monitor</button>
         <button class="int-tab" onclick="switchIntTab(this,'api')">💻 API / Code</button>
+        <button class="int-tab" onclick="switchIntTab(this,'geofence');renderGeofencePanel()">🌏 Geofence</button>
       </div>
 
       <!-- Wazuh / SIEM -->
@@ -3533,6 +3534,36 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
             <span style="font-size:.68rem;color:var(--text3)">บังคับ sync feed ทันที (ต้องการ admin token)</span>
           </div>
           <div class="int-desc" style="margin-top:8px">LINE Notify: ตั้งค่า token ใน Settings ⚙️ แล้วกด Test — แจ้งเตือนได้ทันทีโดยไม่ต้อง restart server</div>
+        </div>
+      </div>
+
+      <!-- Geofence Panel -->
+      <div class="int-panel" id="int-geofence" style="display:none">
+        <div class="int-desc"><strong style="color:var(--cyan)">🌏 Geofence Country Block Policy</strong> — กำหนดนโยบายบล็อกประเทศต้นทาง ใช้ร่วมกับ FortiGate/iptables/nginx</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+          <div>
+            <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;font-weight:600">ตั้งค่า Block Policy</div>
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="addGeoBlock('CN')">+CN</button>
+              <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="addGeoBlock('RU')">+RU</button>
+              <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="addGeoBlock('KP')">+KP</button>
+              <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="addGeoBlock('IR')">+IR</button>
+              <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="addGeoBlock('BY')">+BY</button>
+              <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="addGeoBlock('VN')">+VN</button>
+              <input class="input" id="geo-cc-input" placeholder="CC (เช่น US)" style="width:70px;font-size:.75rem">
+              <button class="btn btn-primary btn-sm" style="font-size:.65rem" onclick="addGeoBlock(document.getElementById('geo-cc-input').value.toUpperCase().trim())">+</button>
+            </div>
+            <div id="geo-block-list" style="display:flex;flex-wrap:wrap;gap:4px;min-height:40px;padding:8px;background:rgba(255,255,255,.03);border:1px solid var(--card-b);border-radius:6px;margin-bottom:8px"></div>
+            <button class="btn btn-ghost btn-sm" onclick="genGeoBlockConfig()">⟳ Generate Config</button>
+          </div>
+          <div>
+            <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;font-weight:600">สถิติตาม Country (Feed data)</div>
+            <div id="geo-stats" style="font-size:.72rem;color:var(--text3)">กด "↺" ในหัว Threat Intel Summary เพื่อโหลด</div>
+          </div>
+        </div>
+        <div class="code-block" id="geo-config-block" style="margin-top:12px;display:none">
+          <div class="code-actions"><button class="btn btn-ghost btn-sm" onclick="copyCode('geo-config-block')">⎘ Copy</button></div>
+          <pre id="geo-config-pre"></pre>
         </div>
       </div>
 
@@ -6500,6 +6531,104 @@ async function loadSocAlerts() {
     }).join('');
     el.innerHTML = alerts || '<div class="empty">No alerts</div>';
   } catch { document.getElementById('soc-alerts').innerHTML = '<div class="empty">Failed to load</div>'; }
+}
+
+// ── Geofence Policy ──
+const GEO_KEY='ncsa_geofence';
+function getGeoBlocks(){try{return JSON.parse(localStorage.getItem(GEO_KEY)||'[]');}catch{return[];}}
+function saveGeoBlocks(a){localStorage.setItem(GEO_KEY,JSON.stringify(a));}
+
+function addGeoBlock(cc){
+  if(!cc||cc.length!==2){toast('Country code ต้อง 2 ตัวอักษร','warn');return;}
+  const arr=getGeoBlocks();
+  if(arr.includes(cc)){toast(cc+' มีอยู่แล้ว','warn');return;}
+  arr.push(cc); saveGeoBlocks(arr);
+  renderGeoBlockList();
+  document.getElementById('geo-cc-input').value='';
+}
+
+function removeGeoBlock(cc){
+  saveGeoBlocks(getGeoBlocks().filter(c=>c!==cc));
+  renderGeoBlockList();
+}
+
+function renderGeofencePanel(){
+  renderGeoBlockList();
+  loadGeoStats();
+}
+
+function renderGeoBlockList(){
+  const el=document.getElementById('geo-block-list'); if(!el)return;
+  const arr=getGeoBlocks();
+  if(!arr.length){el.innerHTML='<span style="font-size:.7rem;color:var(--text3)">ยังไม่มีประเทศในรายการ</span>';return;}
+  el.innerHTML=arr.map(cc=>`<span style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:16px;padding:2px 10px;font-size:.72rem;font-weight:700;color:var(--red);cursor:pointer" onclick="removeGeoBlock('${cc}')" title="คลิกเพื่อลบ">${cc} ✕</span>`).join('');
+}
+
+async function loadGeoStats(){
+  const el=document.getElementById('geo-stats'); if(!el)return;
+  try {
+    const data=await apiFetch('/analyze/countries').then(r=>r.json());
+    const arr=(Array.isArray(data)?data:(data.countries||data.data||[])).slice(0,10);
+    const blocked=getGeoBlocks();
+    const maxC=arr[0]?.count||1;
+    el.innerHTML=arr.map(c=>{
+      const cc=c.country||c.cc||'??';
+      const isBlocked=blocked.includes(cc);
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <div style="font-size:.68rem;width:24px;font-weight:700;color:${isBlocked?'var(--red)':'var(--text2)'}">${cc}</div>
+        <div style="flex:1;background:rgba(255,255,255,.07);border-radius:3px;height:5px"><div style="width:${Math.round(c.count/maxC*100)}%;background:${isBlocked?'var(--red)':'rgba(255,255,255,.3)'};height:100%"></div></div>
+        <div style="font-size:.62rem;color:var(--text3);width:36px;text-align:right">${fmt(c.count)}</div>
+        ${isBlocked?'<span style="font-size:.6rem;color:var(--red)">🚫</span>':'<button class="btn btn-ghost btn-sm" style="padding:0 4px;font-size:.6rem;color:var(--text3)" onclick="addGeoBlock(\''+cc+'\')">+Block</button>'}
+      </div>`;
+    }).join('');
+  } catch { el.innerHTML='<div class="empty" style="font-size:.72rem">ไม่สามารถโหลดข้อมูลได้</div>'; }
+}
+
+function genGeoBlockConfig(){
+  const arr=getGeoBlocks(); if(!arr.length){toast('ยังไม่มีประเทศในรายการ','warn');return;}
+  const cfg=getCfg();
+  const ccList=arr.join(',');
+  const config=`# ── FortiGate Geo-Block Policy ──
+# สร้าง Address Group per country แล้ว deny ใน Policy
+config firewall address
+${arr.map(cc=>`  edit "GEO-${cc}"
+    set type geography
+    set country "${cc}"
+  next`).join('\n')}
+end
+config firewall addrgrp
+  edit "GEO-BLOCK-LIST"
+    set member ${arr.map(cc=>`"GEO-${cc}"`).join(' ')}
+  next
+end
+config firewall policy
+  edit 100
+    set name "NCSA-GEO-BLOCK"
+    set srcintf "wan1"
+    set dstintf "any"
+    set srcaddr "GEO-BLOCK-LIST"
+    set dstaddr "all"
+    set action deny
+    set schedule "always"
+    set service "ALL"
+    set logtraffic all
+  next
+end
+
+# ── iptables (Linux) ──
+# ติดตั้ง: apt install xtables-addons-common geoip-database
+${arr.map(cc=>`iptables -A INPUT -m geoip --src-cc ${cc} -j DROP`).join('\n')}
+
+# ── nginx geo block ──
+geo $block_country {
+  default 0;
+${arr.map(cc=>`  # ${cc} — see maxmind/geoip2 data`).join('\n')}
+}`;
+  const pre=document.getElementById('geo-config-pre');
+  const block=document.getElementById('geo-config-block');
+  if(pre) pre.textContent=config;
+  if(block) block.style.display='block';
+  toast('Generate config แล้ว','ok');
 }
 
 // ── Pentest Tracker ──
