@@ -1993,6 +1993,45 @@ select.input{cursor:pointer}
       </div>
       <div id="gap-items" style="margin-top:12px;display:flex;flex-direction:column;gap:4px"></div>
     </div>
+
+    <!-- Threat Intel Summary -->
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">🌐 Threat Intelligence Summary</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="loadThreatIntelSummary()">↺</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+        <div>
+          <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;font-weight:600">🏴 Top Attacking Countries</div>
+          <div id="ti-countries" style="display:flex;flex-direction:column;gap:4px"><div class="empty" style="font-size:.72rem">Loading…</div></div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;font-weight:600">📡 Top Attacking ASNs</div>
+          <div id="ti-asns" style="display:flex;flex-direction:column;gap:4px"><div class="empty" style="font-size:.72rem">Loading…</div></div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;font-weight:600">📈 IOC Trend (7 วัน)</div>
+          <canvas id="ti-trend" height="90" style="width:100%"></canvas>
+          <div id="ti-trend-stats" style="margin-top:6px;font-size:.68rem;color:var(--text3)"></div>
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;font-weight:600">⚡ Quick IOC Lookup</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <input class="input" id="ti-ioc-input" placeholder="IP / Domain / Hash" style="font-size:.75rem">
+            <select class="input" id="ti-ioc-type" style="font-size:.75rem">
+              <option value="ip">IP Address</option>
+              <option value="domain">Domain</option>
+              <option value="hash">File Hash</option>
+            </select>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" style="font-size:.7rem;flex:1" onclick="lookupIocQuick()">🔍 Lookup</button>
+              <button class="btn btn-primary btn-sm" style="font-size:.7rem;flex:1" onclick="submitToMisp()">🕷 → MISP</button>
+            </div>
+            <div id="ti-ioc-result" style="font-size:.68rem;color:var(--text3);word-break:break-all"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- Integrations -->
@@ -2249,6 +2288,32 @@ select.input{cursor:pointer}
 <span class="cm"># Log: C:\Program Files (x86)\ossec-agent\ossec.log</span></pre>
             </div>
           </div>
+        </div>
+        <!-- Wazuh Live REST API -->
+        <div style="margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.07)">
+          <div class="int-desc"><strong style="color:var(--cyan)">⚡ Wazuh Live Alerts</strong> — ดึง alert โดยตรงจาก Wazuh REST API (ต้องการ API user + CORS headers)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0">
+            <div><div class="setting-label" style="font-size:.68rem;margin-bottom:4px">Wazuh API URL</div><input class="input mono" id="wazuh-api-url" placeholder="https://WAZUH-SERVER:55000" style="width:100%"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end">
+              <div><div class="setting-label" style="font-size:.68rem;margin-bottom:4px">Username</div><input class="input" id="wazuh-api-user" placeholder="wazuh-wui"></div>
+              <div><div class="setting-label" style="font-size:.68rem;margin-bottom:4px">Password</div><input class="input" id="wazuh-api-pass" type="password" placeholder="••••••••"></div>
+              <button class="btn btn-primary btn-sm" onclick="loadWazuhLive()" style="white-space:nowrap">⟳ Fetch</button>
+            </div>
+          </div>
+          <div id="wazuh-live-status" style="font-size:.72rem;color:var(--text3);margin-bottom:6px"></div>
+          <div id="wazuh-live-alerts" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,.07);border-radius:8px;display:none">
+            <table style="width:100%;border-collapse:collapse;font-size:.72rem">
+              <thead><tr style="border-bottom:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.2)">
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:700">Lvl</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:700">Rule</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:700">Description</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:700">Agent</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:700">Time</th>
+              </tr></thead>
+              <tbody id="wazuh-live-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.63rem;color:rgba(255,255,255,.22);margin-top:5px">⚠ Credentials ไม่ได้บันทึก — กรอกใหม่ทุก session</div>
         </div>
       </div>
 
@@ -2693,6 +2758,29 @@ print(f<span class="str">'{len(hits)}/{len(ips)} MISP IOCs confirmed in NCSA bla
 <span class="kw">for</span> h <span class="kw">in</span> hits:
   print(f<span class="str">'  ✓ {h["value"]} — feeds: {h.get("feeds","?")}'</span>)</pre>
           </div>
+        </div>
+        <!-- MISP Live Events -->
+        <div style="margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.07)">
+          <div class="int-desc"><strong style="color:var(--cyan)">🕷 MISP Live Events</strong> — ดึง event จาก MISP REST API โดยตรง</div>
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin:10px 0;align-items:end">
+            <div><div class="setting-label" style="font-size:.68rem;margin-bottom:4px">MISP URL</div><input class="input mono" id="misp-live-url" placeholder="https://MISP-SERVER" style="width:100%"></div>
+            <div><div class="setting-label" style="font-size:.68rem;margin-bottom:4px">API Key</div><input class="input mono" id="misp-live-key" type="password" placeholder="api-key..." style="width:180px"></div>
+            <button class="btn btn-primary btn-sm" onclick="loadMispEvents()" style="white-space:nowrap">⟳ Fetch</button>
+          </div>
+          <div id="misp-live-status" style="font-size:.72rem;color:var(--text3);margin-bottom:6px"></div>
+          <div id="misp-live-events" style="max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,.07);border-radius:8px;display:none">
+            <table style="width:100%;border-collapse:collapse;font-size:.72rem">
+              <thead><tr style="border-bottom:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.2)">
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:700">ID</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:700">Event</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:700">Threat Level</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:700">Attrs</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:700">Date</th>
+              </tr></thead>
+              <tbody id="misp-live-tbody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:.63rem;color:rgba(255,255,255,.22);margin-top:5px">⚠ API key ไม่ได้บันทึก — กรอกใหม่ทุก session เพื่อความปลอดภัย</div>
         </div>
       </div>
 
@@ -5940,6 +6028,87 @@ const KPI_MAX = [
   'Security Policy: IRP+DPO+นโยบาย อนุมัติผู้บริหาร',
 ];
 
+async function loadWazuhLive() {
+  const url = (document.getElementById('wazuh-api-url')?.value||'').trim();
+  const user = (document.getElementById('wazuh-api-user')?.value||'').trim();
+  const pass = (document.getElementById('wazuh-api-pass')?.value||'').trim();
+  const status = document.getElementById('wazuh-live-status');
+  const tbl = document.getElementById('wazuh-live-alerts');
+  const tbody = document.getElementById('wazuh-live-tbody');
+  if (!url||!user||!pass) { if(status) status.textContent='⚠ กรุณากรอก URL, Username และ Password'; return; }
+  if (status) status.textContent = '⏳ กำลัง authenticate...';
+  try {
+    const authRes = await fetch(url+'/security/user/authenticate', {
+      method:'POST',
+      headers:{'Authorization':'Basic '+btoa(user+':'+pass),'Content-Type':'application/json'}
+    });
+    if (!authRes.ok) throw new Error('Auth failed: HTTP '+authRes.status);
+    const authData = await authRes.json();
+    const token = authData?.data?.token;
+    if (!token) throw new Error('ไม่พบ token ใน response');
+    if (status) status.textContent = '⏳ ดึง alerts ล่าสุด...';
+    const alertRes = await fetch(url+'/alerts?limit=50&sort=-timestamp', {
+      headers:{'Authorization':'Bearer '+token}
+    });
+    if (!alertRes.ok) throw new Error('Alert fetch failed: HTTP '+alertRes.status);
+    const alertData = await alertRes.json();
+    const alerts = alertData?.data?.affected_items || alertData?.data?.items || [];
+    if (status) status.textContent = `✓ ${alerts.length} alerts · ${new Date().toLocaleTimeString('th-TH')}`;
+    if (tbody) tbody.innerHTML = alerts.map(a => {
+      const lvl = a.rule?.level||0;
+      const lColor = lvl>=12?'var(--red)':lvl>=8?'var(--orange)':lvl>=4?'var(--yellow)':'var(--text3)';
+      const ts = a.timestamp ? new Date(a.timestamp).toLocaleString('th-TH') : '—';
+      const desc = (a.rule?.description||'—').replace(/</g,'&lt;');
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,.04)" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background=''">
+        <td style="padding:5px 8px;color:${lColor};font-weight:700">${lvl}</td>
+        <td style="padding:5px 8px;color:var(--cyan);font-family:monospace">${a.rule?.id||'—'}</td>
+        <td style="padding:5px 8px;color:var(--text2);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${desc}">${desc}</td>
+        <td style="padding:5px 8px;color:var(--text3)">${a.agent?.name||'—'}</td>
+        <td style="padding:5px 8px;color:var(--text3);text-align:right;font-size:.65rem">${ts}</td>
+      </tr>`;
+    }).join('');
+    if (tbl) tbl.style.display = 'block';
+  } catch(e) {
+    if (status) status.textContent = '❌ '+e.message+' (ตรวจสอบ CORS / URL / credentials)';
+  }
+}
+
+async function loadMispEvents() {
+  const url = (document.getElementById('misp-live-url')?.value||'').trim();
+  const key = (document.getElementById('misp-live-key')?.value||'').trim();
+  const status = document.getElementById('misp-live-status');
+  const tbl = document.getElementById('misp-live-events');
+  const tbody = document.getElementById('misp-live-tbody');
+  if (!url||!key) { if(status) status.textContent='⚠ กรุณากรอก MISP URL และ API Key'; return; }
+  if (status) status.textContent = '⏳ กำลังดึง MISP events...';
+  try {
+    const res = await fetch(url+'/events/index', {
+      headers:{'Authorization':key,'Accept':'application/json','Content-Type':'application/json'}
+    });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : (data.response||data.Event||[]);
+    if (status) status.textContent = `✓ ${list.length} events · ${new Date().toLocaleTimeString('th-TH')}`;
+    const tLabel = {'1':'🔴 High','2':'🟠 Medium','3':'🟡 Low','4':'⚪ Undefined'};
+    const tColor = {'1':'var(--red)','2':'var(--orange)','3':'var(--yellow)','4':'var(--text3)'};
+    if (tbody) tbody.innerHTML = list.slice(0,50).map(ev => {
+      const e = ev.Event||ev;
+      const tl = String(e.threat_level_id||'4');
+      const info = (e.info||'—').replace(/</g,'&lt;');
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,.04)" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background=''">
+        <td style="padding:5px 8px;color:var(--cyan);font-family:monospace">${e.id||'—'}</td>
+        <td style="padding:5px 8px;color:var(--text2);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${info}">${info}</td>
+        <td style="padding:5px 8px;color:${tColor[tl]};font-weight:600;white-space:nowrap">${tLabel[tl]||'—'}</td>
+        <td style="padding:5px 8px;color:var(--text3);text-align:right">${e.attribute_count||'—'}</td>
+        <td style="padding:5px 8px;color:var(--text3);text-align:right;font-size:.65rem">${e.date||'—'}</td>
+      </tr>`;
+    }).join('');
+    if (tbl) tbl.style.display = 'block';
+  } catch(e) {
+    if (status) status.textContent = '❌ '+e.message+' (ตรวจสอบ CORS / URL / API key)';
+  }
+}
+
 function renderFwIntegration() {
   const cfg = getCfg();
   const fwType = cfg.firewallType || 'fortigate';
@@ -6168,6 +6337,101 @@ async function loadSocAlerts() {
     }).join('');
     el.innerHTML = alerts || '<div class="empty">No alerts</div>';
   } catch { document.getElementById('soc-alerts').innerHTML = '<div class="empty">Failed to load</div>'; }
+}
+
+// ── Threat Intel Summary ──
+async function loadThreatIntelSummary(){
+  // Countries
+  try {
+    const data=await apiFetch('/analyze/countries').then(r=>r.json());
+    const arr=Array.isArray(data)?data:(data.countries||data.data||[]);
+    const top=arr.slice(0,7);
+    const maxC=top[0]?.count||1;
+    const countriesEl=document.getElementById('ti-countries');
+    if(countriesEl) countriesEl.innerHTML=top.map(c=>`
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="font-size:.72rem;width:28px;color:var(--text2)">${c.country||c.cc||'??'}</div>
+        <div style="flex:1;background:rgba(255,255,255,.07);border-radius:4px;height:6px;overflow:hidden">
+          <div style="width:${Math.round((c.count/maxC)*100)}%;background:var(--red);height:100%"></div>
+        </div>
+        <div style="font-size:.65rem;color:var(--text3);width:36px;text-align:right">${fmt(c.count)}</div>
+      </div>`).join('')||'<div class="empty" style="font-size:.72rem">ไม่มีข้อมูล</div>';
+  } catch { document.getElementById('ti-countries').innerHTML='<div class="empty" style="font-size:.72rem">Error</div>'; }
+  // ASNs
+  try {
+    const data=await apiFetch('/analyze/asns').then(r=>r.json());
+    const arr=Array.isArray(data)?data:(data.asns||data.data||[]);
+    const top=arr.slice(0,7);
+    const maxA=top[0]?.count||1;
+    const asnsEl=document.getElementById('ti-asns');
+    if(asnsEl) asnsEl.innerHTML=top.map(a=>`
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="font-size:.65rem;width:50px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.org||a.name||'')}">AS${a.asn}</div>
+        <div style="flex:1;background:rgba(255,255,255,.07);border-radius:4px;height:6px;overflow:hidden">
+          <div style="width:${Math.round((a.count/maxA)*100)}%;background:var(--orange);height:100%"></div>
+        </div>
+        <div style="font-size:.65rem;color:var(--text3);width:36px;text-align:right">${fmt(a.count)}</div>
+      </div>`).join('')||'<div class="empty" style="font-size:.72rem">ไม่มีข้อมูล</div>';
+  } catch { document.getElementById('ti-asns').innerHTML='<div class="empty" style="font-size:.72rem">Error</div>'; }
+  // IOC Trend chart from /recent
+  try {
+    const raw=await apiFetch('/recent').then(r=>r.json());
+    const entries=(Array.isArray(raw)?raw:(raw.entries||[])).slice(0,7).reverse();
+    drawTiTrend(entries);
+  } catch {}
+}
+
+function drawTiTrend(entries){
+  const canvas=document.getElementById('ti-trend'); if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.offsetWidth||300; const H=90;
+  canvas.width=W; canvas.height=H;
+  ctx.clearRect(0,0,W,H);
+  if(!entries.length)return;
+  const vals=entries.map(e=>e.added_count||e.total||0);
+  const mx=Math.max(...vals,1);
+  const pts=vals.map((v,i)=>({x:i/(vals.length-1||1)*W,y:H-8-(v/mx)*(H-20)}));
+  // Fill
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'rgba(0,229,255,.3)'); grad.addColorStop(1,'rgba(0,229,255,0)');
+  ctx.beginPath(); ctx.moveTo(0,H); pts.forEach(p=>ctx.lineTo(p.x,p.y)); ctx.lineTo(W,H); ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+  // Line
+  ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+  ctx.strokeStyle='var(--cyan)'; ctx.lineWidth=2; ctx.stroke();
+  // Dots
+  pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fillStyle='var(--cyan)';ctx.fill();});
+  // Stats
+  const total=vals.reduce((s,v)=>s+v,0);
+  const statsEl=document.getElementById('ti-trend-stats');
+  if(statsEl) statsEl.textContent=`รวม ${fmt(total)} IOC ใน ${entries.length} รอบล่าสุด`;
+}
+
+async function lookupIocQuick(){
+  const val=document.getElementById('ti-ioc-input')?.value.trim(); if(!val)return;
+  const type=document.getElementById('ti-ioc-type')?.value;
+  const resEl=document.getElementById('ti-ioc-result');
+  resEl.textContent='🔍 กำลังตรวจสอบ…';
+  try {
+    if(type==='ip'){
+      const inBl=await apiFetch(`/check?ip=${encodeURIComponent(val)}`).then(r=>r.json());
+      const listed=inBl.listed||inBl.blacklisted||false;
+      resEl.innerHTML=`<span style="color:${listed?'var(--red)':'var(--green)'}">${listed?'🔴 อยู่ใน Blacklist':'🟢 ไม่พบ IP นี้'}</span> | <a href="https://www.virustotal.com/gui/ip-address/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">VT</a> <a href="https://www.shodan.io/host/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">Shodan</a> <a href="https://www.abuseipdb.com/check/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">AbuseIPDB</a>`;
+    } else {
+      resEl.innerHTML=`<a href="https://www.virustotal.com/gui/search/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">VirusTotal ↗</a> | <a href="https://otx.alienvault.com/indicator/${type}/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">OTX ↗</a>`;
+    }
+  } catch { resEl.textContent='Error checking IOC'; }
+}
+
+function submitToMisp(){
+  const val=document.getElementById('ti-ioc-input')?.value.trim(); if(!val){toast('กรุณากรอก IOC','warn');return;}
+  const cfg=getCfg();
+  const mispUrl=cfg.mispUrl&&cfg.mispUrl!=='https://MISP-SERVER'?cfg.mispUrl:'';
+  if(!mispUrl){toast('กรุณาตั้งค่า MISP URL ในการตั้งค่าก่อน','warn');return;}
+  const url=`${mispUrl}/events/add`;
+  document.getElementById('ti-ioc-result').innerHTML=`<span style="color:var(--yellow)">📋 คัดลอก IOC แล้ว — เพิ่มใน MISP Event ที่ <a href="${esc(mispUrl)}/events/index" target="_blank" style="color:var(--cyan)">${esc(mispUrl)}</a></span>`;
+  navigator.clipboard?.writeText(val);
+  toast('คัดลอก IOC แล้ว — เพิ่มใน MISP Event','ok');
 }
 
 // ── Incident Tracker ──
@@ -6490,7 +6754,7 @@ function renderThreatActors(){
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
   renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries();
-  updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore();
+  updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
   renderIncidentTimeline();
