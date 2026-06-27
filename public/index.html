@@ -1390,6 +1390,45 @@ select.input{cursor:pointer}
       </div>
     </div>
 
+    <!-- Incident Ticket Logger -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">🎫 Incident Ticket Logger</div>
+        <span id="ticket-open-badge" style="font-size:.65rem;background:rgba(255,23,68,.15);color:var(--red);padding:2px 8px;border-radius:10px;font-weight:700">Open: 0</span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="showAddTicket()">+ เปิด Ticket</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="exportTickets()">⬇ CSV</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:rgba(0,229,255,.05);font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">
+            <th style="padding:6px 10px;text-align:left">#</th><th style="padding:6px 10px;text-align:left">หัวเรื่อง</th><th style="padding:6px 10px;text-align:left">ประเภท</th><th style="padding:6px 10px;text-align:left">Severity</th><th style="padding:6px 10px;text-align:left">ผู้รับผิดชอบ</th><th style="padding:6px 10px;text-align:left">สถานะ</th><th style="padding:6px 10px;text-align:left">วันที่</th><th style="padding:6px 4px"></th>
+          </tr></thead>
+          <tbody id="ticket-tbody"><tr id="ticket-empty"><td colspan="8" style="padding:20px;text-align:center;color:var(--text3);font-size:.8rem">ยังไม่มี Incident — คลิก "+ เปิด Ticket"</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="ticket-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+      <div style="background:var(--card-bg);border:1px solid rgba(0,229,255,.3);border-radius:14px;padding:24px;max-width:500px;width:calc(100% - 32px)">
+        <div style="font-size:1rem;font-weight:800;color:var(--cyan);margin-bottom:16px">🎫 Incident Ticket</div>
+        <input type="hidden" id="ticket-edit-idx" value="-1">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">หัวเรื่อง *</div><input class="input" id="tk-title" placeholder="Ransomware detected on server-213"></div>
+          <div class="setting-row"><div class="setting-label">ประเภท</div><select class="input" id="tk-type"><option value="malware">🦠 Malware</option><option value="phishing">🎣 Phishing</option><option value="unauthorized">🚪 Unauthorized Access</option><option value="ddos">💥 DDoS</option><option value="leak">💧 Data Leak</option><option value="vuln">🔍 Vulnerability</option><option value="other">📋 อื่นๆ</option></select></div>
+          <div class="setting-row"><div class="setting-label">Severity</div><select class="input" id="tk-severity"><option value="critical">🔴 CRITICAL</option><option value="high">🟠 HIGH</option><option value="medium">🟡 MEDIUM</option><option value="low">🟢 LOW</option></select></div>
+          <div class="setting-row"><div class="setting-label">ผู้รับผิดชอบ</div><input class="input" id="tk-owner" placeholder="ชื่อ IT/SOC"></div>
+          <div class="setting-row"><div class="setting-label">สถานะ</div><select class="input" id="tk-status"><option value="open">🔴 Open</option><option value="investigating">🟡 Investigating</option><option value="contained">🟠 Contained</option><option value="resolved">🟢 Resolved</option><option value="closed">⚫ Closed</option></select></div>
+          <div class="setting-row"><div class="setting-label">วันที่พบ</div><input class="input" id="tk-date" type="datetime-local"></div>
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">รายละเอียด</div><textarea class="input" id="tk-desc" rows="3" placeholder="รายละเอียดเหตุการณ์..." style="resize:vertical;font-size:.8rem"></textarea></div>
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">IOC (IP/Domain/Hash)</div><input class="input mono" id="tk-ioc" placeholder="103.253.72.41, evil.com, abc123..."></div>
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">Action Taken</div><textarea class="input" id="tk-action" rows="2" placeholder="การดำเนินการ เช่น Block IP, isolate host..." style="resize:vertical;font-size:.8rem"></textarea></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('ticket-modal').style.display='none'">ยกเลิก</button>
+          <button class="btn btn-primary" onclick="saveTicket()">💾 บันทึก</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Cyber KPI Scorecard -->
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -2922,6 +2961,7 @@ const CFG_DEFAULT = {
   sslDomains: [],
   portScans: [],
   fwLog: [],
+  tickets: [],
   mispUrl: 'https://MISP-SERVER',
   firewallType: 'fortigate',
   firewallIP: 'FIREWALL-IP',
@@ -3740,6 +3780,7 @@ document.addEventListener('keydown', e => {
     const sm=document.getElementById('ssl-modal');if(sm)sm.style.display='none';
     const pm=document.getElementById('port-modal');if(pm)pm.style.display='none';
     const fm=document.getElementById('fw-log-modal');if(fm)fm.style.display='none';
+    const tktm=document.getElementById('ticket-modal');if(tktm)tktm.style.display='none';
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
@@ -3916,6 +3957,70 @@ async function loadWazuhAlerts(){
       <div style="color:var(--text3);font-size:.68rem;margin-top:4px">เปิด Wazuh → Discover → filter agent.name: <strong>${cfg.wazuhAgent||'agent'}</strong></div>
     </div>`;
   }
+}
+
+// ── Incident Ticket Logger ──
+const TK_TYPE_LABEL={malware:'🦠 Malware',phishing:'🎣 Phishing',unauthorized:'🚪 Unauthorized',ddos:'💥 DDoS',leak:'💧 Data Leak',vuln:'🔍 Vulnerability',other:'📋 อื่นๆ'};
+const TK_STATUS_LABEL={open:'🔴 Open',investigating:'🟡 Investigating',contained:'🟠 Contained',resolved:'🟢 Resolved',closed:'⚫ Closed'};
+function renderTickets(){
+  const cfg=getCfg(),list=Array.isArray(cfg.tickets)?cfg.tickets:[];
+  const tbody=document.getElementById('ticket-tbody');if(!tbody)return;
+  const empty=document.getElementById('ticket-empty');
+  if(!list.length){empty&&(empty.style.display='');tbody.querySelectorAll('tr:not(#ticket-empty)').forEach(r=>r.remove());
+    const badge=document.getElementById('ticket-open-badge');if(badge)badge.textContent='Open: 0';return;}
+  empty&&(empty.style.display='none');tbody.querySelectorAll('tr:not(#ticket-empty)').forEach(r=>r.remove());
+  let openCount=0;
+  list.slice().reverse().forEach((t,ri)=>{
+    const i=list.length-1-ri;
+    if(t.status==='open'||t.status==='investigating'||t.status==='contained')openCount++;
+    const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--card-b);font-size:.73rem';
+    const sev=SEV_COLOR[t.severity]||'var(--text1)';
+    tr.innerHTML=`<td style="padding:6px 10px;color:var(--text3);font-family:monospace">#${list.length-ri}</td>
+      <td style="padding:6px 10px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.title||'')}">${esc(t.title||'—')}</td>
+      <td style="padding:6px 10px">${TK_TYPE_LABEL[t.type]||t.type||'—'}</td>
+      <td style="padding:6px 10px;color:${sev};font-weight:700">${SEV_LABEL[t.severity]||'—'}</td>
+      <td style="padding:6px 10px">${esc(t.owner||'—')}</td>
+      <td style="padding:6px 10px">${TK_STATUS_LABEL[t.status]||t.status||'—'}</td>
+      <td style="padding:6px 10px;color:var(--text3);font-size:.68rem;white-space:nowrap">${t.date?t.date.replace('T',' ').slice(0,16):'—'}</td>
+      <td style="padding:6px 4px;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" style="font-size:.62rem;padding:1px 6px" onclick="editTicket(${i})">✏</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.62rem;padding:1px 6px;color:var(--red)" onclick="deleteTicket(${i})">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  const badge=document.getElementById('ticket-open-badge');if(badge)badge.textContent='Open: '+openCount;
+}
+function showAddTicket(){
+  document.getElementById('ticket-edit-idx').value='-1';
+  ['tk-title','tk-owner','tk-ioc','tk-desc','tk-action'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const td=document.getElementById('tk-date');if(td)td.value=new Date().toISOString().slice(0,16);
+  document.getElementById('tk-type').value='malware';document.getElementById('tk-severity').value='high';document.getElementById('tk-status').value='open';
+  document.getElementById('ticket-modal').style.display='flex';
+}
+function editTicket(idx){
+  const cfg=getCfg(),t=(cfg.tickets||[])[idx];if(!t)return;showAddTicket();
+  document.getElementById('ticket-edit-idx').value=idx;
+  document.getElementById('tk-title').value=t.title||'';document.getElementById('tk-type').value=t.type||'other';
+  document.getElementById('tk-severity').value=t.severity||'medium';document.getElementById('tk-owner').value=t.owner||'';
+  document.getElementById('tk-status').value=t.status||'open';document.getElementById('tk-date').value=t.date||'';
+  document.getElementById('tk-desc').value=t.desc||'';document.getElementById('tk-ioc').value=t.ioc||'';
+  document.getElementById('tk-action').value=t.action||'';
+}
+function saveTicket(){
+  const title=document.getElementById('tk-title').value.trim();if(!title){toast('กรอกหัวเรื่องก่อน','err');return;}
+  const t={title,type:document.getElementById('tk-type').value,severity:document.getElementById('tk-severity').value,owner:document.getElementById('tk-owner').value.trim(),status:document.getElementById('tk-status').value,date:document.getElementById('tk-date').value,desc:document.getElementById('tk-desc').value.trim(),ioc:document.getElementById('tk-ioc').value.trim(),action:document.getElementById('tk-action').value.trim()};
+  const cfg=getCfg();if(!Array.isArray(cfg.tickets))cfg.tickets=[];
+  const idx=parseInt(document.getElementById('ticket-edit-idx').value);
+  if(idx>=0)cfg.tickets[idx]=t;else cfg.tickets.push(t);
+  saveCfg(cfg);document.getElementById('ticket-modal').style.display='none';renderTickets();toast(idx>=0?'อัพเดทแล้ว':'เปิด Ticket แล้ว','ok');
+}
+function deleteTicket(idx){const cfg=getCfg();(cfg.tickets||[]).splice(idx,1);saveCfg(cfg);renderTickets();toast('ลบแล้ว','ok');}
+function exportTickets(){
+  const cfg=getCfg(),v=Array.isArray(cfg.tickets)?cfg.tickets:[];if(!v.length){toast('ไม่มี ticket','err');return;}
+  const hdr='#,วันที่,หัวเรื่อง,ประเภท,Severity,ผู้รับผิดชอบ,สถานะ,IOC,การดำเนินการ';
+  const rows=v.map((t,i)=>[i+1,t.date,t.title,t.type,t.severity,t.owner,t.status,t.ioc,t.action].map(f=>`"${String(f||'').replace(/"/g,'""')}"`).join(','));
+  const blob=new Blob(['﻿'+hdr+'\n'+rows.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='incident-tickets.csv';a.click();
 }
 
 // ── Firewall Block Log ──
@@ -4835,7 +4940,7 @@ async function loadSocAlerts() {
   loadFreshnessBar();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
-  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog();
+  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets();
   loadSocMetrics(); loadDarkWebMonitor(); loadWazuhAlerts();
   renderComplianceGap();
   loadSocAlerts();
