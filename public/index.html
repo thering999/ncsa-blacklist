@@ -1598,6 +1598,73 @@ select.input{cursor:pointer}
       </div>
     </div>
 
+    <!-- Network Change Log -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">🌐 Network Change Log</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="showAddNetChange()">+ บันทึกการเปลี่ยนแปลง</button>
+      </div>
+      <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px">บันทึกการเปลี่ยนแปลง Network Config — Firewall rules, VLAN, route, ACL</div>
+      <div id="netchange-list" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto">
+        <div style="padding:14px;text-align:center;color:var(--text3);font-size:.82rem">ยังไม่มีรายการ</div>
+      </div>
+    </div>
+    <div id="netchange-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+      <div style="background:var(--card-bg);border:1px solid rgba(0,229,255,.2);border-radius:14px;padding:24px;max-width:480px;width:calc(100% - 32px)">
+        <div style="font-size:1rem;font-weight:800;color:var(--cyan);margin-bottom:16px">🌐 Network Change</div>
+        <input type="hidden" id="nc-edit-idx" value="-1">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">รายละเอียดการเปลี่ยนแปลง *</div><input class="input" id="nc-desc" placeholder="เพิ่ม firewall rule block port 23, VLAN segmentation"></div>
+          <div class="setting-row"><div class="setting-label">ประเภท</div><select class="input" id="nc-type"><option value="fw">Firewall Rule</option><option value="vlan">VLAN</option><option value="route">Route/BGP</option><option value="acl">ACL</option><option value="dns">DNS</option><option value="other">อื่นๆ</option></select></div>
+          <div class="setting-row"><div class="setting-label">อุปกรณ์</div><input class="input" id="nc-device" placeholder="FortiGate-120G, Switch L3"></div>
+          <div class="setting-row"><div class="setting-label">วันที่</div><input class="input" id="nc-date" type="datetime-local"></div>
+          <div class="setting-row"><div class="setting-label">ผู้ดำเนินการ</div><input class="input" id="nc-by" placeholder="ชื่อ IT"></div>
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">สาเหตุ / Ticket</div><input class="input" id="nc-reason" placeholder="ลด attack surface, ตาม IR ticket #5"></div>
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">Rollback Plan</div><input class="input" id="nc-rollback" placeholder="ลบ rule หรือ restore config จาก backup"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('netchange-modal').style.display='none'">ยกเลิก</button>
+          <button class="btn btn-primary" onclick="saveNetChange()">💾 บันทึก</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOC Executive Summary -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">📊 SOC Executive Summary</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="genExecSummary()">📄 สร้างรายงาน Executive</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="genExecSummary('print')">🖨 Print</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px" id="exec-summary-grid">
+        <div style="padding:12px;border-radius:8px;border:1px solid var(--card-b);text-align:center">
+          <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase">Open Tickets</div>
+          <div id="exec-tickets" style="font-size:1.8rem;font-weight:800;color:var(--red)">0</div>
+        </div>
+        <div style="padding:12px;border-radius:8px;border:1px solid var(--card-b);text-align:center">
+          <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase">Open Vulns</div>
+          <div id="exec-vulns" style="font-size:1.8rem;font-weight:800;color:var(--orange)">0</div>
+        </div>
+        <div style="padding:12px;border-radius:8px;border:1px solid var(--card-b);text-align:center">
+          <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase">CTAM+</div>
+          <div id="exec-ctam" style="font-size:1.8rem;font-weight:800;color:var(--cyan)">0/17</div>
+        </div>
+        <div style="padding:12px;border-radius:8px;border:1px solid var(--card-b);text-align:center">
+          <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase">KPI ขั้นต่ำ</div>
+          <div id="exec-kpi" style="font-size:1.8rem;font-weight:800;color:var(--green)">0/7</div>
+        </div>
+        <div style="padding:12px;border-radius:8px;border:1px solid var(--card-b);text-align:center">
+          <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase">Training</div>
+          <div id="exec-training" style="font-size:1.8rem;font-weight:800;color:var(--yellow)">0%</div>
+        </div>
+        <div style="padding:12px;border-radius:8px;border:1px solid var(--card-b);text-align:center">
+          <div style="font-size:.65rem;color:var(--text3);text-transform:uppercase">FW Blocks</div>
+          <div id="exec-fwblocks" style="font-size:1.8rem;font-weight:800;color:var(--purple)">0</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:.72rem;color:var(--text3)">อัพเดตอัตโนมัติจากข้อมูลที่บันทึกไว้ทั้งหมด</div>
+    </div>
+
     <!-- Cyber KPI Scorecard -->
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -3136,6 +3203,7 @@ const CFG_DEFAULT = {
   pdpaAssets: [],
   twofa: [],
   policies: [],
+  netChanges: [],
   mispUrl: 'https://MISP-SERVER',
   firewallType: 'fortigate',
   firewallIP: 'FIREWALL-IP',
@@ -3960,6 +4028,7 @@ document.addEventListener('keydown', e => {
     const pdm=document.getElementById('pdpa-asset-modal');if(pdm)pdm.style.display='none';
     const tfam=document.getElementById('twofa-modal');if(tfam)tfam.style.display='none';
     const polm=document.getElementById('policy-modal');if(polm)polm.style.display='none';
+    const ncm=document.getElementById('netchange-modal');if(ncm)ncm.style.display='none';
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
@@ -4136,6 +4205,119 @@ async function loadWazuhAlerts(){
       <div style="color:var(--text3);font-size:.68rem;margin-top:4px">เปิด Wazuh → Discover → filter agent.name: <strong>${cfg.wazuhAgent||'agent'}</strong></div>
     </div>`;
   }
+}
+
+// ── Network Change Log ──
+const NC_TYPE={fw:'Firewall Rule',vlan:'VLAN',route:'Route/BGP',acl:'ACL',dns:'DNS',other:'อื่นๆ'};
+function renderNetChanges(){
+  const cfg=getCfg(),list=Array.isArray(cfg.netChanges)?cfg.netChanges:[];
+  const el=document.getElementById('netchange-list');if(!el)return;
+  if(!list.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--text3);font-size:.82rem">ยังไม่มีรายการ</div>';return;}
+  el.innerHTML=list.slice().reverse().map((n,ri)=>{
+    const i=list.length-1-ri;
+    return `<div style="padding:8px 12px;border-radius:8px;border:1px solid var(--card-b);font-size:.73rem;position:relative">
+      <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+        <span style="font-size:.65rem;background:rgba(0,229,255,.1);color:var(--cyan);padding:2px 6px;border-radius:4px;white-space:nowrap">${NC_TYPE[n.type]||n.type||''}</span>
+        <span style="font-weight:600;flex:1">${esc(n.desc||'')}</span>
+        <span style="color:var(--text3);font-size:.65rem;white-space:nowrap">${n.date?n.date.replace('T',' ').slice(0,16):''}</span>
+        <button class="btn btn-ghost btn-sm" style="font-size:.62rem;padding:1px 6px;color:var(--red)" onclick="deleteNetChange(${i})">✕</button>
+      </div>
+      <div style="margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">
+        ${n.device?`<span style="color:var(--text3);font-size:.65rem">📦 ${esc(n.device)}</span>`:''}
+        ${n.by?`<span style="color:var(--text3);font-size:.65rem">👤 ${esc(n.by)}</span>`:''}
+        ${n.reason?`<span style="color:var(--text2);font-size:.65rem">📋 ${esc(n.reason)}</span>`:''}
+      </div>
+      ${n.rollback?`<div style="margin-top:3px;color:var(--text3);font-size:.65rem">↩ ${esc(n.rollback)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function showAddNetChange(){
+  document.getElementById('nc-edit-idx').value='-1';
+  ['nc-desc','nc-device','nc-by','nc-reason','nc-rollback'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const nd=document.getElementById('nc-date');if(nd)nd.value=new Date().toISOString().slice(0,16);
+  document.getElementById('nc-type').value='fw';
+  document.getElementById('netchange-modal').style.display='flex';
+}
+function saveNetChange(){
+  const desc=document.getElementById('nc-desc').value.trim();if(!desc){toast('กรอกรายละเอียดก่อน','err');return;}
+  const n={desc,type:document.getElementById('nc-type').value,device:document.getElementById('nc-device').value.trim(),date:document.getElementById('nc-date').value,by:document.getElementById('nc-by').value.trim(),reason:document.getElementById('nc-reason').value.trim(),rollback:document.getElementById('nc-rollback').value.trim()};
+  const cfg=getCfg();if(!Array.isArray(cfg.netChanges))cfg.netChanges=[];cfg.netChanges.push(n);
+  saveCfg(cfg);document.getElementById('netchange-modal').style.display='none';renderNetChanges();toast('บันทึกแล้ว','ok');
+}
+function deleteNetChange(idx){const cfg=getCfg();(cfg.netChanges||[]).splice(idx,1);saveCfg(cfg);renderNetChanges();toast('ลบแล้ว','ok');}
+
+// ── SOC Executive Summary ──
+function updateExecSummary(){
+  const cfg=getCfg();
+  const tickets=(cfg.tickets||[]).filter(t=>t.status==='open'||t.status==='investigating'||t.status==='contained').length;
+  const vulns=(cfg.vulns||[]).filter(v=>v.status==='open'||v.status==='inprogress').length;
+  const ctamDone=CTAM_ITEMS.filter(i=>i.done).length;
+  const kpiMin=Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
+  const training=(cfg.training||[]),trPct=training.length?Math.round(training.filter(t=>t.status==='done').length/training.length*100):0;
+  const fwBlocks=(cfg.fwLog||[]).length;
+  const s=id=>document.getElementById(id);
+  if(s('exec-tickets')){s('exec-tickets').textContent=tickets;s('exec-tickets').style.color=tickets>0?'var(--red)':'var(--green)';}
+  if(s('exec-vulns')){s('exec-vulns').textContent=vulns;s('exec-vulns').style.color=vulns>5?'var(--red)':vulns>0?'var(--orange)':'var(--green)';}
+  if(s('exec-ctam'))s('exec-ctam').textContent=ctamDone+'/17';
+  if(s('exec-kpi')){s('exec-kpi').textContent=kpiMin+'/7';s('exec-kpi').style.color=kpiMin===7?'var(--green)':kpiMin>=5?'var(--yellow)':'var(--red)';}
+  if(s('exec-training')){s('exec-training').textContent=trPct+'%';s('exec-training').style.color=trPct>=80?'var(--green)':trPct>=50?'var(--yellow)':'var(--red)';}
+  if(s('exec-fwblocks'))s('exec-fwblocks').textContent=fwBlocks;
+}
+async function genExecSummary(mode='open'){
+  const cfg=getCfg();
+  let stats={ip:{total:0},domain:{total:0},hash:{total:0}};
+  try{const r=await apiFetch('/stats');stats=await r.json();}catch{}
+  const now=new Date().toLocaleString('th-TH',{dateStyle:'full',timeStyle:'short'});
+  const ctamDone=CTAM_ITEMS.filter(i=>i.done).length;
+  const kpiMin=Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
+  const kpiMax=Array.isArray(cfg.kpiMax)?cfg.kpiMax.filter(Boolean).length:0;
+  const openTickets=(cfg.tickets||[]).filter(t=>['open','investigating','contained'].includes(t.status));
+  const openVulns=(cfg.vulns||[]).filter(v=>v.status==='open'||v.status==='inprogress');
+  const training=(cfg.training||[]),trPct=training.length?Math.round(training.filter(t=>t.status==='done').length/training.length*100):0;
+  const fwCount=(cfg.fwLog||[]).length;
+  const totalBl=(stats.ip?.total||0)+(stats.domain?.total||0)+(stats.hash?.total||0);
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>SOC Executive Summary</title>
+  <style>body{font-family:TH Sarabun New,sans-serif;padding:30px 40px;max-width:900px;margin:0 auto;font-size:13pt;color:#1a1a2e}
+  h1{color:#1e3a5f;border-bottom:4px solid #c0392b;padding-bottom:10px;font-size:20pt}
+  h2{color:#c0392b;font-size:14pt;margin-top:24px;margin-bottom:8px}
+  .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 0}
+  .kpi-box{border:1px solid #ccc;border-radius:8px;padding:12px;text-align:center}
+  .kpi-val{font-size:28pt;font-weight:900;line-height:1.1}
+  .kpi-label{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.05em}
+  .green{color:#1a7a1a}.red{color:#c0392b}.orange{color:#e67e22}.yellow{color:#d4ac0d}
+  table{width:100%;border-collapse:collapse;margin:8px 0;font-size:11pt}
+  th,td{border:1px solid #ddd;padding:6px 10px;text-align:left}th{background:#f5f5f5;font-weight:700}
+  .footer{margin-top:40px;border-top:1px solid #ccc;padding-top:12px;font-size:9pt;color:#999}
+  @media print{body{padding:10px}}</style></head><body>
+  <h1>รายงานสรุปผู้บริหาร — Cybersecurity Status</h1>
+  <p><strong>${esc(cfg.orgName||'หน่วยงาน')}</strong>${cfg.department?' — '+esc(cfg.department):''} | ปีงบประมาณ ${cfg.fiscal||'—'}</p>
+  <p style="color:#666;font-size:10pt">จัดทำ: ${now}</p>
+  <h2>ภาพรวม Cybersecurity KPI</h2>
+  <div class="kpi-grid">
+    <div class="kpi-box"><div class="kpi-label">Open Incidents</div><div class="kpi-val ${openTickets.length?'red':'green'}">${openTickets.length}</div></div>
+    <div class="kpi-box"><div class="kpi-label">Open Vulnerabilities</div><div class="kpi-val ${openVulns.length>5?'red':openVulns.length?'orange':'green'}">${openVulns.length}</div></div>
+    <div class="kpi-box"><div class="kpi-label">CTAM+ 2569</div><div class="kpi-val ${ctamDone===17?'green':'orange'}">${ctamDone}/17</div></div>
+    <div class="kpi-box"><div class="kpi-label">KPI ขั้นต่ำ</div><div class="kpi-val ${kpiMin===7?'green':kpiMin>=5?'yellow':'red'}">${kpiMin}/7</div></div>
+    <div class="kpi-box"><div class="kpi-label">KPI ขั้นสูง</div><div class="kpi-val">${kpiMax}/8</div></div>
+    <div class="kpi-box"><div class="kpi-label">Training ผ่าน</div><div class="kpi-val ${trPct>=80?'green':trPct>=50?'yellow':'red'}">${trPct}%</div></div>
+  </div>
+  <h2>NCSA Threat Intelligence</h2>
+  <table><tr><th>ประเภท IOC</th><th>จำนวน</th></tr>
+  <tr><td>IP Blacklist</td><td>${(stats.ip?.total||0).toLocaleString()}</td></tr>
+  <tr><td>Domain Blacklist</td><td>${(stats.domain?.total||0).toLocaleString()}</td></tr>
+  <tr><td>Hash Blacklist</td><td>${(stats.hash?.total||0).toLocaleString()}</td></tr>
+  <tr><td><strong>รวม IOC</strong></td><td><strong>${totalBl.toLocaleString()}</strong></td></tr></table>
+  <h2>Incident Tickets ที่ยังเปิดอยู่ (${openTickets.length})</h2>
+  ${openTickets.length?`<table><tr><th>#</th><th>หัวเรื่อง</th><th>Severity</th><th>สถานะ</th><th>ผู้รับผิดชอบ</th></tr>
+  ${openTickets.map((t,i)=>`<tr><td>${i+1}</td><td>${esc(t.title)}</td><td>${esc(t.severity?.toUpperCase())}</td><td>${esc(t.status)}</td><td>${esc(t.owner||'—')}</td></tr>`).join('')}</table>`:'<p style="color:#1a7a1a">ไม่มี Incident ที่เปิดอยู่ ✅</p>'}
+  <h2>ช่องโหว่ที่ยังไม่ได้แก้ไข (${openVulns.length})</h2>
+  ${openVulns.length?`<table><tr><th>CVE</th><th>ระบบ</th><th>Severity</th><th>กำหนด</th></tr>
+  ${openVulns.map(v=>`<tr><td>${esc(v.cve)}</td><td>${esc(v.asset)}</td><td>${esc(v.severity?.toUpperCase())}</td><td>${esc(v.due||'—')}</td></tr>`).join('')}</table>`:'<p style="color:#1a7a1a">ไม่มีช่องโหว่ที่ค้างอยู่ ✅</p>'}
+  <h2>Firewall Block Log (${fwCount} รายการ)</h2>
+  <p>${fwCount} IP ถูก block โดย ${esc(cfg.firewallType||'Firewall')} — ดู dashboard สำหรับรายละเอียด</p>
+  <div class="footer">สร้างโดย NCSA Blacklist Dashboard · ${now} · หน่วยงาน: ${esc(cfg.orgName||'—')}</div>
+  </body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();if(mode==='print')w.print();
 }
 
 // ── 2FA/MFA Status ──
@@ -5397,8 +5579,8 @@ async function loadSocAlerts() {
   loadFreshnessBar();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
-  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderHuntQueries();
-  loadSocMetrics(); loadDarkWebMonitor(); loadWazuhAlerts();
+  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries();
+  updateExecSummary(); loadSocMetrics(); loadDarkWebMonitor(); loadWazuhAlerts();
   renderComplianceGap();
   loadSocAlerts();
   loadTicker();
