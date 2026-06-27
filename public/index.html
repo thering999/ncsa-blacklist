@@ -584,6 +584,22 @@ select.input{cursor:pointer}
 .conn-ok{background:var(--green);box-shadow:0 0 6px var(--green)}
 .conn-err{background:var(--red);box-shadow:0 0 6px var(--red)}
 .conn-unk{background:var(--text3)}
+@media (max-width: 600px) {
+  .nav-links { gap:4px; }
+  .nav-links a { font-size:.7rem; padding:4px 8px; }
+  .grid-2 { grid-template-columns:1fr !important; }
+  .stat-val { font-size:2rem; }
+  .hero-title { font-size:1.4rem; }
+  #feed-freshness { flex-wrap:wrap; gap:6px; font-size:.68rem; }
+  #feed-freshness span { display:none; }
+  #feed-freshness span:first-child, #feed-freshness #ff-ip, #feed-freshness #ff-sync { display:inline; }
+  .wizard-box { padding:20px 16px; }
+  .int-tabs { flex-wrap:wrap; }
+  .int-tab { font-size:.68rem; padding:4px 8px; }
+  table { font-size:.72rem; }
+  .card { padding:16px; }
+  .section-h { flex-direction:column; align-items:flex-start; gap:8px; }
+}
 </style>
 </head>
 <body>
@@ -1013,7 +1029,7 @@ select.input{cursor:pointer}
         <tbody id="asset-tbody">
           <tr id="asset-empty-row">
             <td colspan="10" style="padding:32px;text-align:center;color:var(--text3);font-size:.85rem">
-              ยังไม่มี Asset — คลิก "+ เพิ่ม Asset" เพื่อเริ่มต้น
+              ยังไม่มี Asset — คลิก "+ เพิ่ม Asset" หรือนำเข้าจาก Excel ทะเบียนครุภัณฑ์ IT (CTAM+ ข้อ 12)
             </td>
           </tr>
         </tbody>
@@ -1064,6 +1080,16 @@ select.input{cursor:pointer}
       <div class="card" style="--accent:var(--purple)"><div class="card-title" style="color:var(--purple)">⏱ PDPA Timeline</div><div style="font-size:.78rem;line-height:1.8;color:var(--text2)"><strong style="color:var(--red)">T+72h:</strong> แจ้ง PDPC (สำนักงาน คปด.)<br><strong style="color:var(--orange)">T+1d:</strong> แจ้ง ICT MOPH + ผู้บริหาร<br><strong style="color:var(--yellow)">T+7d:</strong> แจ้งผู้ที่ได้รับผลกระทบ<br><strong style="color:var(--cyan)">T+30d:</strong> ส่ง Full Incident Report<br>□ ระบุว่ารั่วไหลข้อมูลอะไร / จำนวนกี่ราย</div></div>
       <div class="card" style="--accent:var(--red)"><div class="card-title" style="color:var(--red)">🔒 Containment</div><div style="font-size:.78rem;line-height:1.8;color:var(--text2)">□ ปิด endpoint ที่รั่วไหลทันที<br>□ Revoke API keys / tokens ที่ expose<br>□ Reset passwords ทุก affected account<br>□ Enable MFA (Cisco DUO) บนทุก service<br>□ เก็บ evidence อย่าลบ logs</div></div>
       <div class="card" style="--accent:var(--green)"><div class="card-title" style="color:var(--green)">📋 Documentation</div><div style="font-size:.78rem;line-height:1.8;color:var(--text2)">□ บันทึก: เวลา, ระบบที่กระทบ, ข้อมูลที่รั่ว<br>□ Chain of custody สำหรับ forensic evidence<br>□ DPO (Data Protection Officer) รับทราบ<br>□ กรณีข้อมูลสุขภาพ → แจ้ง สธ. ด้วย<br>□ ประสาน NCSA หากมีผลกระทบ Critical infra</div></div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="int-desc"><strong style="color:var(--purple)">PDPA Breach Notification Template</strong> — แบบฟอร์มแจ้งเหตุ สคส./PDPC</div>
+      <div class="code-block" id="code-pdpa-report">
+        <div class="code-actions">
+          <button class="btn btn-ghost btn-sm" onclick="genPdpaReport()">🔄 Generate</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyCode('code-pdpa-report')">⎘ Copy</button>
+        </div>
+        <pre id="pre-pdpa-report">คลิก Generate เพื่อสร้างแบบฟอร์มจากข้อมูลหน่วยงาน</pre>
+      </div>
     </div>
   </div>
 
@@ -3666,6 +3692,54 @@ function exportAssets() {
   URL.revokeObjectURL(url);
 }
 
+function genPdpaReport() {
+  const cfg = getCfg();
+  const now = new Date();
+  const thDate = now.toLocaleDateString('th-TH', {year:'numeric',month:'long',day:'numeric'});
+  const thTime = now.toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'});
+  const txt = `แบบแจ้งเหตุละเมิดข้อมูลส่วนบุคคล (PDPA Breach Notification)
+================================================================
+หน่วยงาน    : ${cfg.orgName}${cfg.department?' ('+cfg.department+')':''}
+วันที่แจ้ง   : ${thDate} เวลา ${thTime} น.
+ผู้แจ้ง      : [ชื่อ DPO / ผู้รับผิดชอบ]
+เบอร์ติดต่อ  : [เบอร์โทรศัพท์]
+
+1. รายละเอียดเหตุการณ์
+   วันเวลาที่เกิดเหตุ : [ระบุ]
+   วันเวลาที่ตรวจพบ  : [ระบุ]
+   ประเภทข้อมูลที่รั่ว : □ ชื่อ-นามสกุล  □ เลขบัตรประชาชน  □ ข้อมูลสุขภาพ
+                       □ ที่อยู่  □ เบอร์โทร  □ อื่นๆ [ระบุ]
+   จำนวนผู้ได้รับผล  : ประมาณ [จำนวน] คน/รายการ
+
+2. สาเหตุเบื้องต้น
+   [อธิบายสาเหตุ เช่น SQL Injection / Unauthorized Access / ข้อมูลหลุดจากระบบ X]
+
+3. ผลกระทบที่คาดว่าจะเกิดขึ้น
+   [ความเสี่ยงต่อเจ้าของข้อมูล เช่น การฉ้อโกง การเปิดเผยข้อมูลสุขภาพ]
+
+4. มาตรการแก้ไขเบื้องต้น
+   □ Isolate ระบบที่ได้รับผลกระทบแล้ว
+   □ Reset credentials ของ account ที่เกี่ยวข้องแล้ว
+   □ แจ้ง ICT กระทรวงสาธารณสุขแล้ว
+   □ เก็บหลักฐาน (logs, forensic) ไว้แล้ว
+
+5. แผนดำเนินการต่อ
+   T+72h  : แจ้ง สคส. (PDPC) — ตามมาตรา 37 พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ.2562
+   T+7d   : แจ้งเจ้าของข้อมูล (กรณีความเสี่ยงสูง)
+   T+30d  : ส่งรายงานฉบับสมบูรณ์
+
+6. ข้อมูลระบบที่เกี่ยวข้อง
+   Wazuh SIEM : ${cfg.wazuhIP}
+   Firewall   : ${cfg.firewallIP||'[IP]'}
+   ระบบที่ถูก  : [ชื่อระบบ / IP]
+
+================================================================
+แบบฟอร์มนี้สร้างโดย NCSA Blacklist Dashboard
+ส่งไปที่: pdpc.go.th | ICT MOPH: ict.moph.go.th/th/extension/1277`;
+  const pre = document.getElementById('pre-pdpa-report');
+  if (pre) pre.textContent = txt;
+}
+
 async function testWebhook() {
   const url = document.getElementById('wh-test-url').value.trim();
   if (!url) { toast('ใส่ Webhook URL ก่อน','err'); return; }
@@ -4049,8 +4123,32 @@ async function loadSocAlerts() {
   renderCtam(); renderKpi(); renderAssets();
   loadSocAlerts();
   loadTicker();
+  // Auto-refresh
+  const refreshSecs = parseInt(localStorage.getItem('auto_refresh') || '0');
+  if (refreshSecs > 0) {
+    setInterval(() => {
+      loadStats(); loadFreshnessBar(); loadFeedHealth(); loadRecent(); loadSocAlerts();
+    }, refreshSecs * 1000);
+  }
   let rt;
   window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => drawChart(_historyType), 150); });
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      hideAddAsset();
+      const wm = document.getElementById('wizard-modal');
+      if (wm) wm.style.display = 'none';
+      closeSettings();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      document.getElementById('lookup-input')?.focus();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
+      e.preventDefault();
+      loadStats(); loadFreshnessBar(); toast('Refreshed','ok');
+    }
+  });
   setTimeout(() => document.querySelectorAll('.card').forEach(card => {
     card.addEventListener('mousemove', e => {
       const rect = card.getBoundingClientRect();
