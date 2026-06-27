@@ -635,6 +635,7 @@ select.input{cursor:pointer}
     <a href="#watchlist" onclick="navTo(this,'#watchlist')">👁 Watch/Allow</a>
     <a href="#exports" onclick="navTo(this,'#exports')">⬇ Export</a>
     <a href="#news" onclick="navTo(this,'#news')">📰 News</a>
+    <a href="#risk" onclick="navTo(this,'#risk')">⚠ Risk</a>
   </nav>
   <div class="nav-right">
     <div class="live-dot pulse" title="Live"></div>
@@ -3287,6 +3288,112 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
     </div>
   </section>
 
+  <!-- Risk Assessment -->
+  <section id="risk" style="display:none;margin-bottom:24px">
+    <div class="section-h">
+      <h2 class="section-title"><span class="section-accent"></span>Risk Assessment Matrix</h2>
+      <button class="btn btn-primary btn-sm" onclick="showAddRisk()">+ เพิ่มความเสี่ยง</button>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:12px">🎯 Risk Matrix 5×5 — Likelihood vs Impact</div>
+      <div style="overflow-x:auto">
+        <table id="risk-matrix-table" style="border-collapse:collapse;min-width:500px;width:100%">
+          <thead><tr>
+            <th style="padding:6px;font-size:.68rem;color:var(--text3);text-align:center;border:1px solid var(--card-b)">Likelihood ↓ / Impact →</th>
+            <th style="padding:6px;font-size:.68rem;color:var(--green);text-align:center;border:1px solid var(--card-b)">1 น้อยมาก</th>
+            <th style="padding:6px;font-size:.68rem;color:var(--green);text-align:center;border:1px solid var(--card-b)">2 น้อย</th>
+            <th style="padding:6px;font-size:.68rem;color:var(--yellow);text-align:center;border:1px solid var(--card-b)">3 ปานกลาง</th>
+            <th style="padding:6px;font-size:.68rem;color:var(--orange);text-align:center;border:1px solid var(--card-b)">4 สูง</th>
+            <th style="padding:6px;font-size:.68rem;color:var(--red);text-align:center;border:1px solid var(--card-b)">5 สูงมาก</th>
+          </tr></thead>
+          <tbody id="risk-matrix-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:12px">📋 Risk Register</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+          <thead><tr style="border-bottom:1px solid var(--card-b)">
+            <th style="padding:8px;text-align:left;color:var(--text3);font-weight:600">ความเสี่ยง</th>
+            <th style="padding:8px;text-align:center;color:var(--text3);font-weight:600">โอกาส</th>
+            <th style="padding:8px;text-align:center;color:var(--text3);font-weight:600">ผลกระทบ</th>
+            <th style="padding:8px;text-align:center;color:var(--text3);font-weight:600">คะแนน</th>
+            <th style="padding:8px;text-align:center;color:var(--text3);font-weight:600">ระดับ</th>
+            <th style="padding:8px;text-align:left;color:var(--text3);font-weight:600">มาตรการ</th>
+            <th style="padding:8px;text-align:center;color:var(--text3);font-weight:600">สถานะ</th>
+            <th style="padding:8px;text-align:center;color:var(--text3);font-weight:600"></th>
+          </tr></thead>
+          <tbody id="risk-table-body"><tr><td colspan="8" class="empty">ไม่มีข้อมูลความเสี่ยง</td></tr></tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px"><button class="btn btn-ghost btn-sm" onclick="exportRisks()">📥 Export CSV</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">🕵 Threat Actor Profiles — ภัยคุกคามที่พบบ่อย (Thai Health Sector)</div>
+      <div id="threat-actors-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px"></div>
+    </div>
+  </section>
+
+  <!-- Risk Modal -->
+  <div id="risk-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:24px;max-width:500px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <strong id="risk-modal-title">เพิ่มความเสี่ยง</strong>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('risk-modal').style.display='none'">✕</button>
+      </div>
+      <input type="hidden" id="r-idx" value="-1">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อความเสี่ยง *</label><input class="input" id="r-name" placeholder="เช่น Ransomware โจมตีระบบ HIS" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">โอกาสเกิด (1-5)</label>
+            <select class="input" id="r-likelihood" style="width:100%;margin-top:4px">
+              <option value="1">1 — น้อยมาก (&lt;5%)</option>
+              <option value="2">2 — น้อย (5-25%)</option>
+              <option value="3" selected>3 — ปานกลาง (25-50%)</option>
+              <option value="4">4 — สูง (50-75%)</option>
+              <option value="5">5 — สูงมาก (&gt;75%)</option>
+            </select>
+          </div>
+          <div><label style="font-size:.72rem;color:var(--text3)">ผลกระทบ (1-5)</label>
+            <select class="input" id="r-impact" style="width:100%;margin-top:4px">
+              <option value="1">1 — น้อยมาก</option>
+              <option value="2">2 — น้อย</option>
+              <option value="3" selected>3 — ปานกลาง</option>
+              <option value="4">4 — สูง</option>
+              <option value="5">5 — วิกฤต</option>
+            </select>
+          </div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">หมวดหมู่</label>
+          <select class="input" id="r-category" style="width:100%;margin-top:4px">
+            <option value="cyber">🛡 Cyber Security</option>
+            <option value="pdpa">🔒 PDPA / ข้อมูลส่วนบุคคล</option>
+            <option value="infra">🏗 Infrastructure</option>
+            <option value="human">👤 Human / Social Engineering</option>
+            <option value="supply">📦 Supply Chain</option>
+            <option value="physical">🏢 Physical Security</option>
+            <option value="compliance">📋 Compliance</option>
+          </select>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">มาตรการจัดการ</label><textarea class="input" id="r-control" rows="2" placeholder="เช่น ติดตั้ง EDR, Backup 3-2-1, ซ้อมแผน BCP" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">สถานะ</label>
+          <select class="input" id="r-status" style="width:100%;margin-top:4px">
+            <option value="open">Open — ยังไม่ดำเนินการ</option>
+            <option value="mitigating">Mitigating — กำลังดำเนินการ</option>
+            <option value="accepted">Accepted — ยอมรับความเสี่ยง</option>
+            <option value="closed">Closed — ปิดความเสี่ยงแล้ว</option>
+          </select>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">หมายเหตุ</label><input class="input" id="r-note" placeholder="หมายเหตุเพิ่มเติม" style="width:100%;margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('risk-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveRisk()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -3335,6 +3442,7 @@ const CFG_DEFAULT = {
   topoNodes: [],
   topoEdges: [],
   lineToken: '',
+  risks: [],
 };
 function getCfg() {
   try {
@@ -5977,6 +6085,157 @@ async function loadSocAlerts() {
   } catch { document.getElementById('soc-alerts').innerHTML = '<div class="empty">Failed to load</div>'; }
 }
 
+// ── Risk Assessment ──
+const RISK_COLORS = ['','#22c55e','#86efac','#facc15','#f97316','#ef4444'];
+const RISK_LABELS = ['','น้อยมาก','น้อย','ปานกลาง','สูง','สูงมาก'];
+const RISK_STATUS_COLORS = {open:'var(--red)',mitigating:'var(--yellow)',accepted:'var(--text3)',closed:'var(--green)'};
+
+function RISK_LEVEL(l,i){const s=l*i;return s<=4?'Low':s<=9?'Medium':s<=16?'High':'Critical';}
+function RISK_CELL_COLOR(l,i){const s=l*i;return s<=4?'rgba(34,197,94,.18)':s<=9?'rgba(250,204,21,.22)':s<=16?'rgba(249,115,22,.26)':'rgba(239,68,68,.3)';}
+function RISK_LEVEL_COLOR(lvl){return lvl==='Critical'?'var(--red)':lvl==='High'?'var(--orange)':lvl==='Medium'?'var(--yellow)':'var(--green)';}
+
+function renderRiskMatrix(){
+  const cfg=getCfg(); const risks=cfg.risks||[];
+  const body=document.getElementById('risk-matrix-body'); if(!body)return;
+  let rows='';
+  for(let l=5;l>=1;l--){
+    rows+=`<tr><td style="padding:6px;font-size:.72rem;color:${RISK_COLORS[l]};font-weight:600;border:1px solid var(--card-b);text-align:center">${l} ${RISK_LABELS[l]}</td>`;
+    for(let i=1;i<=5;i++){
+      const score=l*i; const bg=RISK_CELL_COLOR(l,i);
+      const count=risks.filter(r=>r.likelihood==l&&r.impact==i).length;
+      const lvl=RISK_LEVEL(l,i);
+      rows+=`<td onclick="filterRiskMatrix(${l},${i})" style="padding:8px;text-align:center;border:1px solid var(--card-b);background:${bg};cursor:pointer;border-radius:4px;min-width:70px">
+        <div style="font-size:.8rem;font-weight:700;color:${RISK_LEVEL_COLOR(lvl)}">${score}</div>
+        <div style="font-size:.6rem;color:var(--text3)">${lvl}</div>
+        ${count?`<div style="margin-top:2px;background:rgba(255,255,255,.15);border-radius:10px;padding:1px 5px;font-size:.6rem;font-weight:700">${count} รายการ</div>`:''}
+      </td>`;
+    }
+    rows+='</tr>';
+  }
+  body.innerHTML=rows;
+}
+
+let _riskFilter=null;
+function filterRiskMatrix(l,i){
+  _riskFilter=(_riskFilter&&_riskFilter[0]===l&&_riskFilter[1]===i)?null:[l,i];
+  renderRisks();
+}
+
+function renderRisks(){
+  const cfg=getCfg(); let risks=cfg.risks||[];
+  if(_riskFilter) risks=risks.filter(r=>r.likelihood==_riskFilter[0]&&r.impact==_riskFilter[1]);
+  const body=document.getElementById('risk-table-body'); if(!body)return;
+  if(!risks.length){body.innerHTML='<tr><td colspan="8" class="empty">ไม่มีข้อมูลความเสี่ยง'+((_riskFilter)?' (ล้างตัวกรอง: คลิก Cell อีกครั้ง)':'')+' </td></tr>';return;}
+  const CAT_LABEL={cyber:'🛡 Cyber',pdpa:'🔒 PDPA',infra:'🏗 Infra',human:'👤 Human',supply:'📦 Supply',physical:'🏢 Physical',compliance:'📋 Compliance'};
+  body.innerHTML=risks.map((r,idx)=>{
+    const real_idx=(cfg.risks||[]).indexOf(r); // might differ if filtered
+    const score=r.likelihood*r.impact; const lvl=RISK_LEVEL(r.likelihood,r.impact);
+    const sColor=RISK_STATUS_COLORS[r.status]||'var(--text3)';
+    return `<tr style="border-bottom:1px solid var(--card-b)">
+      <td style="padding:8px"><div style="font-weight:600;font-size:.8rem">${esc(r.name)}</div><div style="font-size:.68rem;color:var(--text3)">${CAT_LABEL[r.category]||r.category}</div></td>
+      <td style="padding:8px;text-align:center"><span style="color:${RISK_COLORS[r.likelihood]};font-weight:700">${r.likelihood}</span></td>
+      <td style="padding:8px;text-align:center"><span style="color:${RISK_COLORS[r.impact]};font-weight:700">${r.impact}</span></td>
+      <td style="padding:8px;text-align:center"><span style="font-weight:800;font-size:.95rem;color:${RISK_LEVEL_COLOR(lvl)}">${score}</span></td>
+      <td style="padding:8px;text-align:center"><span class="tag" style="background:${RISK_LEVEL_COLOR(lvl)}22;color:${RISK_LEVEL_COLOR(lvl)};border:1px solid ${RISK_LEVEL_COLOR(lvl)}44">${lvl}</span></td>
+      <td style="padding:8px;font-size:.72rem;max-width:180px;color:var(--text2)">${esc(r.control||'-')}</td>
+      <td style="padding:8px;text-align:center"><span style="font-size:.7rem;font-weight:600;color:${sColor}">${r.status||'open'}</span></td>
+      <td style="padding:8px;text-align:center;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:.65rem" onclick="editRisk(${real_idx})">✏</button>
+        <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:.65rem;color:var(--red)" onclick="deleteRisk(${real_idx})">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function showAddRisk(){
+  document.getElementById('risk-modal-title').textContent='เพิ่มความเสี่ยง';
+  document.getElementById('r-idx').value='-1';
+  ['r-name','r-note'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('r-likelihood').value='3';
+  document.getElementById('r-impact').value='3';
+  document.getElementById('r-category').value='cyber';
+  document.getElementById('r-status').value='open';
+  document.getElementById('risk-modal').style.display='flex';
+}
+
+function editRisk(idx){
+  const cfg=getCfg(); const r=(cfg.risks||[])[idx]; if(!r)return;
+  document.getElementById('risk-modal-title').textContent='แก้ไขความเสี่ยง';
+  document.getElementById('r-idx').value=idx;
+  document.getElementById('r-name').value=r.name||'';
+  document.getElementById('r-likelihood').value=r.likelihood||3;
+  document.getElementById('r-impact').value=r.impact||3;
+  document.getElementById('r-category').value=r.category||'cyber';
+  document.getElementById('r-control').value=r.control||'';
+  document.getElementById('r-status').value=r.status||'open';
+  document.getElementById('r-note').value=r.note||'';
+  document.getElementById('risk-modal').style.display='flex';
+}
+
+function saveRisk(){
+  const name=document.getElementById('r-name').value.trim();
+  if(!name){toast('กรุณากรอกชื่อความเสี่ยง','warn');return;}
+  const cfg=getCfg(); const risks=cfg.risks||[];
+  const entry={
+    name, likelihood:parseInt(document.getElementById('r-likelihood').value),
+    impact:parseInt(document.getElementById('r-impact').value),
+    category:document.getElementById('r-category').value,
+    control:document.getElementById('r-control').value.trim(),
+    status:document.getElementById('r-status').value,
+    note:document.getElementById('r-note').value.trim(),
+    updated:new Date().toISOString()
+  };
+  const idx=parseInt(document.getElementById('r-idx').value);
+  if(idx>=0) risks[idx]=entry; else risks.push(entry);
+  saveCfg({...cfg,risks});
+  document.getElementById('risk-modal').style.display='none';
+  renderRisks(); renderRiskMatrix();
+  toast(idx>=0?'อัปเดตแล้ว':'เพิ่มความเสี่ยงแล้ว','ok');
+}
+
+function deleteRisk(idx){
+  if(!confirm('ลบความเสี่ยงนี้?'))return;
+  const cfg=getCfg(); const risks=cfg.risks||[];
+  risks.splice(idx,1); saveCfg({...cfg,risks});
+  renderRisks(); renderRiskMatrix(); toast('ลบแล้ว','ok');
+}
+
+function exportRisks(){
+  const risks=(getCfg().risks||[]);
+  if(!risks.length){toast('ไม่มีข้อมูล','warn');return;}
+  const BOM='﻿';
+  const hdr='ชื่อความเสี่ยง,หมวด,โอกาส,ผลกระทบ,คะแนน,ระดับ,มาตรการ,สถานะ,อัปเดต';
+  const rows=risks.map(r=>[r.name,r.category,r.likelihood,r.impact,r.likelihood*r.impact,RISK_LEVEL(r.likelihood,r.impact),r.control||'',r.status,r.updated||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([BOM+hdr+'\n'+rows],{type:'text/csv;charset=utf-8'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`risk_register_${new Date().toISOString().slice(0,10)}.csv`});
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('Export CSV แล้ว','ok');
+}
+
+const THREAT_ACTORS=[
+  {name:'Ransomware Gang',icon:'💀',origin:'ต่างประเทศ (RU/DPRK)',target:'ระบบ HIS, EMR, ฐานข้อมูลผู้ป่วย',vector:'Phishing Email, RDP Brute Force, VPN Exploit',impact:'สูงมาก',color:'var(--red)',ttps:['T1566 Phishing','T1021.001 RDP','T1486 Data Encrypted for Impact']},
+  {name:'BEC / CEO Fraud',icon:'🎭',origin:'ต่างประเทศ / ในประเทศ',target:'บัญชีการเงิน, อีเมลผู้บริหาร',vector:'Spear Phishing, Account Takeover',impact:'สูง',color:'var(--orange)',ttps:['T1566.002 Spearphishing Link','T1078 Valid Accounts']},
+  {name:'Web Attacker',icon:'🌐',origin:'ทั่วโลก (Automated)',target:'เว็บไซต์ สสจ./รพ., API Gateway',vector:'SQLi, XSS, WordPress Plugin Exploit',impact:'ปานกลาง-สูง',color:'var(--yellow)',ttps:['T1190 Exploit Public-Facing App','T1059.007 JavaScript']},
+  {name:'Supply Chain Attacker',icon:'📦',origin:'ซัพพลายเออร์ซอฟต์แวร์',target:'Software Update, 3rd Party Vendor Access',vector:'Compromised Update Channel, Vendor Credential',impact:'สูงมาก',color:'var(--red)',ttps:['T1195 Supply Chain Compromise','T1199 Trusted Relationship']},
+  {name:'Insider Threat',icon:'👤',origin:'เจ้าหน้าที่ภายใน',target:'ข้อมูลผู้ป่วย, PDPA Data Leak',vector:'Privilege Abuse, USB Exfiltration',impact:'ปานกลาง-สูง',color:'var(--orange)',ttps:['T1052 Exfiltration over Physical Medium','T1213 Data from Info Repos']},
+  {name:'DDoS / Hacktivist',icon:'💥',origin:'กลุ่มแฮกติวิสต์',target:'เว็บไซต์ สาธารณสุข, ระบบ e-Service',vector:'Volumetric DDoS, HTTP Flood, DNS Amplification',impact:'ปานกลาง',color:'var(--yellow)',ttps:['T1498 Network Denial of Service','T1499 Endpoint Denial of Service']},
+];
+
+function renderThreatActors(){
+  const el=document.getElementById('threat-actors-grid'); if(!el)return;
+  el.innerHTML=THREAT_ACTORS.map(a=>`
+    <div style="background:rgba(255,255,255,.03);border:1px solid ${a.color}33;border-radius:10px;padding:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:1.4rem">${a.icon}</span>
+        <div><div style="font-weight:700;color:${a.color};font-size:.85rem">${a.name}</div><div style="font-size:.65rem;color:var(--text3)">${a.origin}</div></div>
+      </div>
+      <div style="font-size:.7rem;color:var(--text2);margin-bottom:4px"><span style="color:var(--text3)">เป้าหมาย:</span> ${a.target}</div>
+      <div style="font-size:.7rem;color:var(--text2);margin-bottom:4px"><span style="color:var(--text3)">ช่องทาง:</span> ${a.vector}</div>
+      <div style="font-size:.7rem;margin-bottom:6px"><span style="color:var(--text3)">Impact:</span> <span style="color:${a.color};font-weight:600">${a.impact}</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px">${a.ttps.map(t=>`<span style="background:rgba(255,255,255,.06);border:1px solid var(--card-b);border-radius:4px;padding:1px 5px;font-size:.6rem;font-family:monospace;color:var(--cyan)">${t}</span>`).join('')}</div>
+    </div>`).join('');
+}
+
 // Init
 (async function init() {
   applyOrgConfig();
@@ -5989,6 +6248,7 @@ async function loadSocAlerts() {
   renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries();
   updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts();
   renderComplianceGap();
+  renderRisks(); renderRiskMatrix(); renderThreatActors();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
@@ -6006,6 +6266,8 @@ async function loadSocAlerts() {
       hideAddAsset();
       const wm = document.getElementById('wizard-modal');
       if (wm) wm.style.display = 'none';
+      const rm = document.getElementById('risk-modal');
+      if (rm) rm.style.display = 'none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
