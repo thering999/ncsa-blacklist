@@ -840,6 +840,17 @@ select.input{cursor:pointer}
     <div style="font-size:.68rem;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">CTAM+ Status</div>
     <div id="s-ctam-list" style="display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto"></div>
 
+    <div style="height:1px;background:rgba(0,229,255,.1);margin:8px 0"></div>
+    <div style="font-size:.68rem;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">📱 LINE Notify</div>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:4px">
+      <div>
+        <label style="font-size:.72rem;color:var(--text3);display:block;margin-bottom:4px">LINE Notify Token</label>
+        <input class="input mono" id="s-line-token" placeholder="LINE Notify token..." style="width:100%">
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="testLineNotify()">🧪 Test</button>
+    </div>
+    <div class="setting-desc">รับ token ที่ notify-bot.line.me/th — แจ้งเตือนผ่าน LINE ได้ทันที</div>
+
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn btn-primary" style="flex:1" onclick="saveAllSettings()">💾 บันทึกทั้งหมด</button>
       <button class="btn btn-ghost btn-sm" onclick="exportOrgConfig()">⬇ Export</button>
@@ -3172,7 +3183,11 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
             <button class="btn btn-primary btn-sm" onclick="testWebhook()">📤 Send Test</button>
           </div>
           <div id="wh-test-result" style="margin-top:8px;font-size:.75rem;color:var(--text3)"></div>
-          <div class="int-desc" style="margin-top:10px">LINE Notify: ตั้งค่า <code class="mono" style="color:var(--orange)">LINE_NOTIFY_TOKEN</code> ใน .env → restart server → แจ้งเตือนอัตโนมัติเมื่อ feed อัพเดท</div>
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="triggerSync()">🔄 Force Feed Sync</button>
+            <span style="font-size:.68rem;color:var(--text3)">บังคับ sync feed ทันที (ต้องการ admin token)</span>
+          </div>
+          <div class="int-desc" style="margin-top:8px">LINE Notify: ตั้งค่า token ใน Settings ⚙️ แล้วกด Test — แจ้งเตือนได้ทันทีโดยไม่ต้อง restart server</div>
         </div>
       </div>
 
@@ -3311,6 +3326,7 @@ const CFG_DEFAULT = {
   edrType: 'crowdstrike',
   topoNodes: [],
   topoEdges: [],
+  lineToken: '',
 };
 function getCfg() {
   try {
@@ -3466,6 +3482,7 @@ function saveAllSettings() {
   cfg.orgType     = document.getElementById('s-org-type')?.value          || cfg.orgType;
   cfg.siemType    = document.getElementById('s-siem-type')?.value         || cfg.siemType;
   cfg.edrType     = document.getElementById('s-edr-type')?.value          || cfg.edrType;
+  cfg.lineToken   = document.getElementById('s-line-token')?.value.trim() || cfg.lineToken || '';
 
   // CTAM checkboxes
   cfg.ctamDone = CTAM_ITEMS.map((_, i) => {
@@ -3520,6 +3537,8 @@ function populateSettingsForm() {
   if (ss) ss.value = cfg.siemType || 'wazuh';
   const se = document.getElementById('s-edr-type');
   if (se) se.value = cfg.edrType || 'crowdstrike';
+  const slt = document.getElementById('s-line-token');
+  if (slt) slt.value = cfg.lineToken || '';
   renderTopoNodeList();
   renderKpi();
 }
@@ -5419,6 +5438,31 @@ async function testWebhook() {
   }
 }
 
+async function testLineNotify() {
+  const token = (document.getElementById('s-line-token')?.value.trim()) || getCfg().lineToken;
+  if (!token) { toast('ใส่ LINE Notify Token ก่อน','err'); return; }
+  try {
+    const fd = new FormData();
+    fd.append('message', '\n[NCSA Dashboard] ทดสอบ LINE Notify สำเร็จ ✅');
+    const r = await fetch('https://notify-api.line.me/api/notify', {
+      method:'POST', headers:{Authorization:'Bearer '+token}, body:fd
+    });
+    const d = await r.json().catch(()=>({}));
+    toast(r.ok ? 'LINE Notify: ส่งสำเร็จ ✅' : 'LINE Error: '+(d.message||r.status), r.ok?'ok':'err');
+  } catch(e) { toast('LINE Notify error: '+e.message,'err'); }
+}
+
+async function triggerSync() {
+  try {
+    const headers = {};
+    const tok = localStorage.getItem('metrics_token');
+    if (tok) headers['Authorization'] = 'Bearer '+tok;
+    const r = await fetch(apiBase()+'/admin/sync', {method:'POST', headers});
+    if (r.status === 404) { toast('Sync endpoint ไม่พบ','err'); return; }
+    toast(r.ok ? 'Sync triggered — รอ 30-60s แล้ว refresh' : 'Sync failed: HTTP '+r.status, r.ok?'ok':'err');
+  } catch(e) { toast('Sync error: '+e.message,'err'); }
+}
+
 function switchHuntTab(btn, id) {
   document.querySelectorAll('.hunt-panel').forEach(p => p.style.display = 'none');
   document.querySelectorAll('.hunt-tab').forEach(b => b.classList.remove('active'));
@@ -5741,8 +5785,9 @@ async function loadSocMetrics() {
     const cfg = getCfg();
     const now = Date.now();
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const alertsToday = Array.isArray(recent) ? recent.filter(r => r.added_at && new Date(r.added_at) >= todayStart).length : 0;
-    const newIps24h = Array.isArray(recent) ? recent.filter(r => r.added_at && (now - new Date(r.added_at)) < 86400000).length : 0;
+    const recentArr = Array.isArray(recent) ? recent : (recent.entries || []);
+    const alertsToday = recentArr.filter(r => r.date && new Date(r.date) >= todayStart).length;
+    const newIps24h = recentArr.filter(r => r.date && (now - new Date(r.date)) < 86400000).length;
     const totalBl = (stats.ip?.total||0) + (stats.domain?.total||0) + (stats.hash?.total||0);
     const feedAgeMins = info.ip?.generated_at ? Math.floor((now - new Date(info.ip.generated_at))/60000) : null;
     const feedAgeStr = feedAgeMins === null ? '—' : feedAgeMins < 60 ? feedAgeMins+'m' : feedAgeMins < 1440 ? Math.floor(feedAgeMins/60)+'h' : Math.floor(feedAgeMins/1440)+'d';
@@ -5849,8 +5894,8 @@ function renderHourlyChart(alerts) {
   const now = new Date();
   const buckets = new Array(24).fill(0);
   alerts.forEach(a => {
-    if (!a.added_at) return;
-    const diff = (now - new Date(a.added_at)) / 3600000;
+    if (!a.date && !a.added_at) return;
+    const diff = (now - new Date(a.date || a.added_at)) / 3600000;
     if (diff < 24) buckets[Math.floor(diff)]++;
   });
   const max = Math.max(...buckets, 1);
@@ -5874,21 +5919,23 @@ function renderHourlyChart(alerts) {
 // ── SOC Alerts (from recent changes) ──
 async function loadSocAlerts() {
   try {
-    const data = await apiFetch('/recent').then(r => r.json());
-    renderHourlyChart(Array.isArray(data) ? data : []);
+    const raw = await apiFetch('/recent').then(r => r.json());
+    const data = Array.isArray(raw) ? raw : (raw.entries || []);
+    renderHourlyChart(data);
     const el = document.getElementById('soc-alerts');
-    if (!Array.isArray(data) || !data.length) {
+    if (!data.length) {
       el.innerHTML = '<div class="empty">No recent alerts</div>'; return;
     }
     const alerts = data.slice(0, 8).map(d => {
-      const addCount = d.added?.length || 0;
+      const addCount = d.added_count || d.added?.length || 0;
       const sev = addCount > 100 ? '' : addCount > 10 ? 'med' : 'low';
-      const preview = (d.added || []).slice(0, 1).map(v => `<code class="mono" style="font-size:.7rem;color:var(--orange)">${esc(v)}</code>`).join('');
+      const samples = d.added_sample || d.added || [];
+      const preview = samples.slice(0, 1).map(v => `<code class="mono" style="font-size:.7rem;color:var(--orange)">${esc(v)}</code>`).join('');
       return `<div class="soc-alert ${sev}">
         <span class="soc-alert-icon">${addCount > 50 ? '🔴' : addCount > 10 ? '🟡' : '🔵'}</span>
         <div style="flex:1">
-          <div><span class="tag ${d.type}">${d.type}</span> <strong>+${addCount}</strong> new IOCs ${preview}</div>
-          <div class="soc-alert-time">${new Date(d.date).toLocaleString('th-TH')} · total ${fmt(d.total)}</div>
+          <div><span class="tag ${d.type||'ip'}">${d.type||'ip'}</span> <strong>+${addCount}</strong> new IOCs ${preview}</div>
+          <div class="soc-alert-time">${new Date(d.date||d.generated_at).toLocaleString('th-TH')} · total ${fmt(d.total||0)}</div>
         </div>
       </div>`;
     }).join('');
