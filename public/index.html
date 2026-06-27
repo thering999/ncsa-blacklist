@@ -3597,6 +3597,17 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
             <span style="font-size:.68rem;color:var(--text3)">บังคับ sync feed ทันที (ต้องการ admin token)</span>
           </div>
           <div class="int-desc" style="margin-top:8px">LINE Notify: ตั้งค่า token ใน Settings ⚙️ แล้วกด Test — แจ้งเตือนได้ทันทีโดยไม่ต้อง restart server</div>
+
+          <!-- Data Export/Import -->
+          <div style="margin-top:16px;padding:14px;background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.15);border-radius:8px">
+            <div class="card-title" style="margin-bottom:10px;color:var(--cyan)">💾 Backup / Restore Dashboard Data</div>
+            <div style="font-size:.72rem;color:var(--text2);margin-bottom:10px">Export ข้อมูลทั้งหมด (CTAM+, Assets, Risks, Incidents, Drills, Pentest, Vendors ฯลฯ) เป็นไฟล์ JSON เพื่อสำรองหรือย้ายไปเครื่องอื่น</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="exportAllData()">📥 Export All Data (.json)</button>
+              <label class="btn btn-ghost btn-sm" style="cursor:pointer">📤 Import Data <input type="file" accept=".json" style="display:none" onchange="importAllData(this)"></label>
+            </div>
+            <div id="data-import-result" style="margin-top:8px;font-size:.7rem;color:var(--text3)"></div>
+          </div>
         </div>
       </div>
 
@@ -6805,6 +6816,44 @@ function renderVendorList(){
       </div>
       <button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:.65rem;flex-shrink:0" onclick="deleteVendor(${v.id})">🗑</button>
     </div>`).join('');
+}
+
+// ── Dashboard Data Export / Import ──
+function exportAllData(){
+  const allKeys=[CFG_KEY, INC_KEY, DRILL_KEY, PT_KEY, VD_KEY, PS_KEY, GEO_KEY];
+  const bundle={version:'1.0',exported:new Date().toISOString(),data:{}};
+  allKeys.forEach(k=>{const v=localStorage.getItem(k);if(v)bundle.data[k]=JSON.parse(v);});
+  const blob=new Blob([JSON.stringify(bundle,null,2)],{type:'application/json'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`ncsa-soc-backup-${new Date().toISOString().slice(0,10)}.json`});
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('Export ข้อมูลสำเร็จ','ok');
+}
+
+function importAllData(input){
+  const file=input.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try {
+      const bundle=JSON.parse(e.target.result);
+      if(!bundle.data){toast('ไฟล์ไม่ถูกต้อง','warn');return;}
+      const count=Object.keys(bundle.data).length;
+      Object.entries(bundle.data).forEach(([k,v])=>localStorage.setItem(k,JSON.stringify(v)));
+      document.getElementById('data-import-result').innerHTML=`<span style="color:var(--green)">✅ Import สำเร็จ — ${count} หมวดข้อมูล (exported: ${bundle.exported?.slice(0,10)||'?'})</span>`;
+      // Re-render everything
+      applyOrgConfig();
+      renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining();
+      renderRisks(); renderRiskMatrix(); renderIncidentTimeline(); renderDrillList();
+      renderPentestList(); renderVendorList(); renderPhishSimList(); renderSocPerformance();
+      renderNistCsf(); renderSecurityCalendar(); renderVulnBreakdown(); renderSecurityScore();
+      renderGeoBlockList();
+      toast('Import สำเร็จ — รีเฟรชข้อมูลแล้ว','ok');
+    } catch(err){
+      document.getElementById('data-import-result').innerHTML=`<span style="color:var(--red)">❌ Error: ${esc(err.message)}</span>`;
+      toast('Import ล้มเหลว — ตรวจสอบไฟล์','warn');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
 }
 
 // ── Phishing Simulation ──
