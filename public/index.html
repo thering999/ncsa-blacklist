@@ -872,6 +872,7 @@ select.input{cursor:pointer}
             <button class="btn btn-primary" onclick="checkOne()" id="single-btn">Check</button>
           </div>
           <div id="single-result"></div>
+          <div id="osint-links" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
         </div>
 
         <div id="tab-bulk" class="tab-panel">
@@ -1051,6 +1052,16 @@ select.input{cursor:pointer}
       <span>🟡 <span id="ac-warn">0</span></span>
       <span>🔴 <span id="ac-crit">0</span></span>
     </div>
+  </div>
+
+  <!-- CVE Live Lookup -->
+  <div class="card" style="margin-bottom:16px;margin-top:16px">
+    <div class="card-title" style="margin-bottom:12px">🔍 CVE Live Lookup — NVD Database</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input class="input mono" id="cve-q" placeholder="CVE-2024-12345 หรือ keyword เช่น apache log4j" style="flex:1" onkeydown="if(event.key==='Enter')lookupCve()">
+      <button class="btn btn-primary" onclick="lookupCve()">🔍 ค้นหา</button>
+    </div>
+    <div id="cve-res" style="display:none"><div id="cve-res-inner"></div></div>
   </div>
 
   <!-- Vulnerability Tracker -->
@@ -3657,6 +3668,24 @@ async function loadRecent() {
 }
 
 // Single lookup
+function showOsintLinks(value) {
+  const el = document.getElementById('osint-links');
+  if (!el) return;
+  const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(value);
+  const isHash = /^[a-f0-9]{64}$/i.test(value);
+  const links = isHash
+    ? [['🔍 VT Hash',`https://www.virustotal.com/gui/file/${value}`],['🛡 MalwareBazaar',`https://bazaar.abuse.ch/sample/${value}`]]
+    : [
+        ['🔍 VirusTotal',`https://www.virustotal.com/gui/${isIp?'ip-address':'domain'}/${encodeURIComponent(value)}`],
+        ['📡 Shodan',`https://www.shodan.io/host/${encodeURIComponent(value)}`],
+        ['🛡 AbuseIPDB',`https://www.abuseipdb.com/check/${encodeURIComponent(value)}`],
+        ['🌐 ipinfo.io',`https://ipinfo.io/${encodeURIComponent(value)}`],
+        ...(isIp?[['🔎 Greynoise',`https://viz.greynoise.io/ip/${encodeURIComponent(value)}`]]:
+                 [['🕷 URLScan',`https://urlscan.io/search/#domain:${encodeURIComponent(value)}`]])
+      ];
+  el.innerHTML = links.map(([l,u])=>`<a href="${u}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:.68rem;text-decoration:none">${l}</a>`).join('');
+}
+
 async function checkOne() {
   const val = document.getElementById('single-val').value.trim();
   const type = document.getElementById('single-type').value;
@@ -3667,6 +3696,7 @@ async function checkOne() {
     const path = type === 'auto' ? `/check/auto/${encodeURIComponent(val)}` : `/check/${type}/${encodeURIComponent(val)}`;
     const data = await apiFetch(path).then(r => r.json());
     document.getElementById('single-result').innerHTML = renderResult(val, data);
+    showOsintLinks(val);
   } catch (e) { toast('Lookup failed: ' + e.message, 'err'); }
   btn.disabled = false; btn.textContent = 'Check';
 }
@@ -3947,13 +3977,16 @@ async function loadCountries() {
     const el = document.getElementById('country-list');
     if (!data.top?.length) { el.innerHTML = '<div class="empty">No data</div>'; return; }
     const max = data.top[0].count;
-    el.innerHTML = data.top.slice(0,15).map(c => `
-      <div class="country-row">
+    el.innerHTML = data.top.slice(0,15).map((c, i) => {
+      const rankBadge = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="font-size:.7rem;color:var(--text3)">${i+1}.</span>`;
+      return `<div class="country-row">
+        <span style="font-size:.9rem;min-width:20px;text-align:center">${rankBadge}</span>
         <span style="font-size:1rem">${countryFlag(c.country)}</span>
         <span style="min-width:30px;font-size:.78rem;font-weight:700;font-family:'JetBrains Mono',monospace">${esc(c.country||'?')}</span>
-        <div class="country-bar-wrap"><div class="country-bar" style="width:${Math.round(c.count/max*100)}%"></div></div>
+        <div class="country-bar-wrap"><div class="country-bar" style="width:${Math.round(c.count/max*100)}%${i===0?';background:linear-gradient(90deg,#ff1744,#ff6b35)':i===1?';background:linear-gradient(90deg,#c0c0c0,#e0e0e0)':i===2?';background:linear-gradient(90deg,#cd7f32,#d4a057)':''}"></div></div>
         <span class="country-count">${fmt(c.count)}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } catch { document.getElementById('country-list').innerHTML = '<div class="empty">Error</div>'; }
 }
 function countryFlag(cc) {
@@ -4883,6 +4916,45 @@ function checkHibp(){
 // ── Asset Inventory ──
 const ASSET_TYPE_LABEL = {web:'Web/App',db:'Database',fw:'Firewall/Net',siem:'SIEM',backup:'Backup',vm:'Hypervisor',other:'อื่นๆ'};
 const ASSET_STATUS_LABEL = {ok:'🟢 ปกติ',warn:'🟡 ต้องดูแล',crit:'🔴 วิกฤต',off:'⚫ ปิดใช้'};
+
+// ── CVE Live Lookup ──
+async function lookupCve() {
+  const q = (document.getElementById('cve-q')||{}).value?.trim();
+  if (!q) return;
+  const resEl = document.getElementById('cve-res'), inner = document.getElementById('cve-res-inner');
+  if (!resEl||!inner) return;
+  resEl.style.display = '';
+  inner.innerHTML = '<div style="color:var(--text3);font-size:.8rem;padding:8px">กำลังค้นหา NVD...</div>';
+  try {
+    const isCve = /^CVE-\d{4}-\d+$/i.test(q);
+    const url = isCve
+      ? `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${q.toUpperCase()}`
+      : `https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=${encodeURIComponent(q)}&resultsPerPage=5`;
+    const data = await fetch(url).then(r=>r.json());
+    const list = data.vulnerabilities||[];
+    if (!list.length) { inner.innerHTML='<div style="color:var(--text3);padding:8px;font-size:.8rem">ไม่พบ CVE: '+esc(q)+'</div>'; return; }
+    inner.innerHTML = list.map(v=>{
+      const c=v.cve||{}, id=c.id||'—';
+      const desc=(c.descriptions?.find(d=>d.lang==='en')?.value||'—').substring(0,280);
+      const cv=c.metrics?.cvssMetricV31?.[0]?.cvssData||c.metrics?.cvssMetricV30?.[0]?.cvssData;
+      const score=cv?.baseScore, sev=cv?.baseSeverity||'';
+      const sc={CRITICAL:'var(--red)',HIGH:'var(--orange)',MEDIUM:'var(--yellow)',LOW:'var(--green)'}[sev]||'var(--text2)';
+      const pub=c.published?new Date(c.published).toLocaleDateString('th-TH'):'—';
+      return `<div style="padding:12px;border:1px solid var(--card-b);border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,.02)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <a href="https://nvd.nist.gov/vuln/detail/${id}" target="_blank" style="font-family:monospace;font-weight:800;color:var(--cyan);font-size:.88rem;text-decoration:none">${id}</a>
+          ${score?`<span style="background:${sc}22;color:${sc};padding:2px 8px;border-radius:10px;font-size:.7rem;font-weight:700">${sev} ${score}</span>`:''}
+          <span style="margin-left:auto;font-size:.68rem;color:var(--text3)">${pub}</span>
+        </div>
+        <div style="font-size:.77rem;color:var(--text2);line-height:1.5">${esc(desc)}${desc.length>=280?'…':''}</div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <a href="https://nvd.nist.gov/vuln/detail/${id}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:.65rem;text-decoration:none">NVD ↗</a>
+          <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="(function(){const el=document.getElementById('v-cve');if(el)el.value='${id}';showAddVuln();toast('กรอก CVE แล้ว','ok')})()">➕ เพิ่มใน Tracker</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { inner.innerHTML=`<div style="color:var(--red);padding:8px;font-size:.8rem">Error: ${esc(e.message)}</div>`; }
+}
 
 // ── Vulnerability Tracker ──
 const SEV_COLOR={critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--green)'};
