@@ -1202,6 +1202,18 @@ select.input{cursor:pointer}
     </div>
   </div>
 
+  <!-- Phishing Simulation Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🎣 Phishing Simulation Tracker</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto;font-size:.7rem" onclick="showAddPhishSim()">+ บันทึกผล</button>
+    </div>
+    <div style="margin-bottom:10px;padding:10px;background:rgba(250,204,21,.05);border:1px solid rgba(250,204,21,.2);border-radius:7px;font-size:.72rem;color:var(--text2)">
+      จำลองการโจมตี Phishing เพื่อทดสอบความตระหนักรู้ของบุคลากร ตาม CTAM+ ข้อ 2 (Awareness Training)
+    </div>
+    <div id="phishsim-list" style="display:flex;flex-direction:column;gap:8px"><div class="empty">ยังไม่มีบันทึกผล Phishing Simulation</div></div>
+  </div>
+
   <!-- Pentest Tracker -->
   <div class="card" style="margin-top:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -1293,6 +1305,36 @@ select.input{cursor:pointer}
       <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
         <button class="btn btn-ghost" onclick="document.getElementById('vendor-modal').style.display='none'">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveVendor()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phishing Sim Modal -->
+  <div id="phishsim-modal" style="display:none;position:fixed;inset:0;z-index:9005;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:22px;max-width:440px;width:calc(100% - 32px)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px"><strong>บันทึกผล Phishing Simulation</strong><button class="btn btn-ghost btn-sm" onclick="document.getElementById('phishsim-modal').style.display='none'">✕</button></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อแคมเปญ</label><input class="input" id="ps-name" placeholder="เช่น Q1 2569 Phishing Test" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">วันที่ทดสอบ</label><input class="input" id="ps-date" type="date" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">ส่งให้ (คน)</label><input class="input" id="ps-sent" type="number" min="1" placeholder="100" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">คลิก (คน)</label><input class="input" id="ps-clicked" type="number" min="0" placeholder="15" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">รายงาน (คน)</label><input class="input" id="ps-reported" type="number" min="0" placeholder="30" style="width:100%;margin-top:4px"></div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ประเภท Phishing</label>
+          <select class="input" id="ps-type" style="width:100%;margin-top:4px">
+            <option value="credential">🔑 Credential Harvesting</option>
+            <option value="attachment">📎 Malicious Attachment</option>
+            <option value="link">🔗 Malicious Link</option>
+            <option value="pretexting">🎭 Pretexting / CEO Fraud</option>
+            <option value="smishing">📱 Smishing (SMS)</option>
+          </select>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">สรุปผล / บทเรียน</label><textarea class="input" id="ps-result" rows="2" placeholder="กลุ่มที่เสี่ยงสูง, มาตรการติดตาม" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('phishsim-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="savePhishSim()">💾 บันทึก</button>
       </div>
     </div>
   </div>
@@ -1521,6 +1563,17 @@ select.input{cursor:pointer}
           <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Training %</div>
           <div class="stat-val" id="sm-training-pct" style="font-size:1.8rem;color:var(--yellow)">—</div>
         </div>
+      </div>
+    </div>
+
+    <!-- SOC Performance Metrics -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">⏱ SOC Performance (MTTD / MTTR)</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="renderSocPerformance()">↺</button>
+      </div>
+      <div id="soc-perf-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+        <div class="empty" style="grid-column:1/-1">กำลังคำนวณ…</div>
       </div>
     </div>
 
@@ -6754,6 +6807,103 @@ function renderVendorList(){
     </div>`).join('');
 }
 
+// ── Phishing Simulation ──
+const PS_KEY='ncsa_phishsims';
+function getPhishSims(){try{return JSON.parse(localStorage.getItem(PS_KEY)||'[]');}catch{return[];}}
+function savePhishSims(a){localStorage.setItem(PS_KEY,JSON.stringify(a));}
+
+function showAddPhishSim(){
+  document.getElementById('ps-date').value=new Date().toISOString().slice(0,10);
+  ['ps-name','ps-result'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ps-sent','ps-clicked','ps-reported'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('ps-type').value='credential';
+  document.getElementById('phishsim-modal').style.display='flex';
+}
+
+function savePhishSim(){
+  const name=document.getElementById('ps-name').value.trim();
+  const sent=parseInt(document.getElementById('ps-sent').value)||0;
+  if(!name||!sent){toast('กรุณากรอกชื่อและจำนวนที่ส่ง','warn');return;}
+  const clicked=parseInt(document.getElementById('ps-clicked').value)||0;
+  const reported=parseInt(document.getElementById('ps-reported').value)||0;
+  const arr=getPhishSims();
+  arr.unshift({id:Date.now(),name,date:document.getElementById('ps-date').value,sent,clicked,reported,
+    type:document.getElementById('ps-type').value,result:document.getElementById('ps-result').value.trim(),
+    created:new Date().toISOString()});
+  savePhishSims(arr);
+  document.getElementById('phishsim-modal').style.display='none';
+  renderPhishSimList(); toast('บันทึกผล Phishing Simulation แล้ว','ok');
+}
+
+function deletePhishSim(id){if(!confirm('ลบ?'))return;savePhishSims(getPhishSims().filter(p=>p.id!==id));renderPhishSimList();toast('ลบแล้ว','ok');}
+
+function renderPhishSimList(){
+  const el=document.getElementById('phishsim-list'); if(!el)return;
+  const arr=getPhishSims();
+  if(!arr.length){el.innerHTML='<div class="empty">ยังไม่มีบันทึกผล Phishing Simulation</div>';return;}
+  const PT_ICON={credential:'🔑',attachment:'📎',link:'🔗',pretexting:'🎭',smishing:'📱'};
+  el.innerHTML=arr.map(p=>{
+    const clickRate=p.sent?Math.round(p.clicked/p.sent*100):0;
+    const reportRate=p.sent?Math.round(p.reported/p.sent*100):0;
+    const good=clickRate<=10;
+    return `<div style="padding:12px;background:rgba(255,255,255,.03);border:1px solid ${good?'rgba(0,230,118,.2)':'rgba(250,204,21,.2)'};border-radius:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:.85rem">${PT_ICON[p.type]||'🎣'}</span>
+        <strong style="font-size:.82rem">${esc(p.name)}</strong>
+        <span style="font-size:.65rem;color:var(--text3)">${p.date||''}</span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--red);padding:1px 5px;font-size:.6rem" onclick="deletePhishSim(${p.id})">🗑</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:6px">
+        <div style="background:rgba(255,255,255,.04);border-radius:6px;padding:6px">
+          <div style="font-size:1rem;font-weight:800;color:var(--cyan)">${p.sent}</div>
+          <div style="font-size:.6rem;color:var(--text3)">ส่งทั้งหมด</div>
+        </div>
+        <div style="background:${clickRate>20?'rgba(239,68,68,.1)':clickRate>10?'rgba(250,204,21,.1)':'rgba(0,230,118,.08)'};border-radius:6px;padding:6px">
+          <div style="font-size:1rem;font-weight:800;color:${clickRate>20?'var(--red)':clickRate>10?'var(--yellow)':'var(--green)'}">${clickRate}%</div>
+          <div style="font-size:.6rem;color:var(--text3)">Click Rate (${p.clicked})</div>
+        </div>
+        <div style="background:rgba(0,229,255,.06);border-radius:6px;padding:6px">
+          <div style="font-size:1rem;font-weight:800;color:var(--cyan)">${reportRate}%</div>
+          <div style="font-size:.6rem;color:var(--text3)">Report Rate (${p.reported})</div>
+        </div>
+      </div>
+      ${p.result?`<div style="font-size:.68rem;color:var(--text3)">💡 ${esc(p.result)}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ── SOC Performance Metrics ──
+function renderSocPerformance(){
+  const el=document.getElementById('soc-perf-grid'); if(!el)return;
+  const incidents=getIncidents();
+  if(!incidents.length){el.innerHTML='<div class="empty" style="grid-column:1/-1;font-size:.72rem">บันทึก Incident อย่างน้อย 1 รายการเพื่อคำนวณ MTTD/MTTR</div>';return;}
+  const resolved=incidents.filter(i=>i.status==='resolved'&&i.date&&i.created);
+  const mttr=resolved.length?Math.round(resolved.reduce((s,i)=>{
+    const t0=new Date(i.date).getTime(); const t1=new Date(i.created).getTime();
+    return s+Math.abs((t1-t0)/3600000);
+  },0)/resolved.length):null;
+  const critical=incidents.filter(i=>i.sev==='critical').length;
+  const open=incidents.filter(i=>i.status==='open'||i.status==='investigating').length;
+  const thisMonth=new Date(); thisMonth.setDate(1); thisMonth.setHours(0,0,0,0);
+  const monthCount=incidents.filter(i=>new Date(i.created||i.date)>=thisMonth).length;
+  const typeBreak={};
+  incidents.forEach(i=>{typeBreak[i.type]=(typeBreak[i.type]||0)+1;});
+  const topType=Object.entries(typeBreak).sort((a,b)=>b[1]-a[1])[0];
+  const metrics=[
+    {label:'Incidents รวม',val:incidents.length,color:'var(--cyan)',icon:'📋'},
+    {label:'Open / Active',val:open,color:open>3?'var(--red)':'var(--orange)',icon:'🔴'},
+    {label:'Critical (ทั้งหมด)',val:critical,color:critical>0?'var(--red)':'var(--green)',icon:'⚡'},
+    {label:'เดือนนี้',val:monthCount,color:'var(--yellow)',icon:'📅'},
+    {label:'MTTR (ชม.)',val:mttr!==null?mttr+'h':'N/A',color:'var(--green)',icon:'⏱'},
+    {label:'Threat สูงสุด',val:topType?topType[0]:'-',color:'var(--orange)',icon:'🎯'},
+  ];
+  el.innerHTML=metrics.map(m=>`<div style="text-align:center;padding:12px;background:rgba(255,255,255,.03);border:1px solid ${m.color}33;border-radius:8px">
+    <div style="font-size:1rem">${m.icon}</div>
+    <div style="font-size:1.3rem;font-weight:900;color:${m.color};margin:4px 0">${m.val}</div>
+    <div style="font-size:.62rem;color:var(--text3)">${m.label}</div>
+  </div>`).join('');
+}
+
 // ── NIST CSF Assessment ──
 function renderNistCsf(){
   const el=document.getElementById('nist-csf-grid'); if(!el)return;
@@ -7582,7 +7732,7 @@ function renderThreatActors(){
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
   renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
-  renderPentestList(); renderVendorList(); renderNistCsf();
+  renderPentestList(); renderVendorList(); renderNistCsf(); renderPhishSimList(); renderSocPerformance();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
@@ -7610,6 +7760,8 @@ function renderThreatActors(){
       if (ptm) ptm.style.display = 'none';
       const vdm = document.getElementById('vendor-modal');
       if (vdm) vdm.style.display = 'none';
+      const psm = document.getElementById('phishsim-modal');
+      if (psm) psm.style.display = 'none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
