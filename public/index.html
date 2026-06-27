@@ -1042,6 +1042,83 @@ select.input{cursor:pointer}
       <span>🔴 <span id="ac-crit">0</span></span>
     </div>
   </div>
+
+  <!-- Vulnerability Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🔍 Vulnerability Tracker — CVE per Asset (CTAM+ ข้อ 11)</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="showAddVuln()">+ เพิ่ม CVE</button>
+      <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="exportVulns()">⬇ CSV</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span id="vc-crit" style="background:rgba(255,23,68,.12);color:var(--red);padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700">CRITICAL: 0</span>
+      <span id="vc-high" style="background:rgba(255,171,0,.12);color:var(--orange);padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700">HIGH: 0</span>
+      <span id="vc-med" style="background:rgba(255,214,0,.1);color:var(--yellow);padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700">MEDIUM: 0</span>
+      <span id="vc-low" style="background:rgba(0,230,118,.08);color:var(--green);padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:700">LOW: 0</span>
+      <span style="margin-left:auto;font-size:.72rem;color:var(--text3)">Patched: <span id="vc-patched" style="color:var(--green)">0</span> / <span id="vc-total">0</span></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:rgba(255,23,68,.06);font-size:.7rem;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">
+          <th style="padding:8px 12px;text-align:left">CVE ID</th><th style="padding:8px 12px;text-align:left">ระบบ</th><th style="padding:8px 12px;text-align:left">Severity</th><th style="padding:8px 12px;text-align:left">CVSS</th><th style="padding:8px 12px;text-align:left">คำอธิบาย</th><th style="padding:8px 12px;text-align:left">สถานะ</th><th style="padding:8px 12px;text-align:left">Patch Due</th><th style="padding:8px 6px"></th>
+        </tr></thead>
+        <tbody id="vuln-tbody"><tr id="vuln-empty"><td colspan="8" style="padding:24px;text-align:center;color:var(--text3);font-size:.82rem">ยังไม่มีช่องโหว่ — คลิก "+ เพิ่ม CVE"</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="vuln-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid rgba(255,23,68,.3);border-radius:14px;padding:24px;max-width:500px;width:calc(100% - 32px)">
+      <div style="font-size:1rem;font-weight:800;color:var(--red);margin-bottom:16px">🔍 เพิ่ม / แก้ไข Vulnerability</div>
+      <input type="hidden" id="vuln-edit-idx" value="-1">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="setting-row"><div class="setting-label">CVE ID</div><input class="input mono" id="v-cve" placeholder="CVE-2024-XXXXX"></div>
+        <div class="setting-row"><div class="setting-label">ระบบที่กระทบ</div><select class="input" id="v-asset"><option value="">-- เลือกระบบ --</option></select></div>
+        <div class="setting-row"><div class="setting-label">Severity</div><select class="input" id="v-severity"><option value="critical">🔴 CRITICAL</option><option value="high">🟠 HIGH</option><option value="medium">🟡 MEDIUM</option><option value="low">🟢 LOW</option></select></div>
+        <div class="setting-row"><div class="setting-label">CVSS</div><input class="input mono" id="v-cvss" placeholder="9.8" style="max-width:80px"></div>
+        <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">คำอธิบาย</div><input class="input" id="v-desc" placeholder="Remote Code Execution via..."></div>
+        <div class="setting-row"><div class="setting-label">สถานะ</div><select class="input" id="v-status"><option value="open">🔴 Open</option><option value="inprogress">🟡 In Progress</option><option value="patched">🟢 Patched</option><option value="accepted">⚪ Risk Accepted</option></select></div>
+        <div class="setting-row"><div class="setting-label">กำหนด Patch</div><input class="input" id="v-due" type="date"></div>
+        <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">หมายเหตุ</div><input class="input" id="v-note" placeholder="Workaround, ผู้รับผิดชอบ"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('vuln-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveVuln()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Training Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">👥 Staff Cybersecurity Training (CTAM+ ข้อ 17)</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="showAddTraining()">+ เพิ่มบุคลากร</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+      <span style="font-size:.75rem;color:var(--text3)">ผ่านอบรม: <strong id="tr-done" style="color:var(--green)">0</strong> / <strong id="tr-total">0</strong> คน</span>
+      <div style="flex:1;background:rgba(255,255,255,.08);border-radius:4px;height:8px;overflow:hidden"><div id="tr-bar" style="height:100%;background:var(--green);border-radius:4px;transition:width .4s;width:0%"></div></div>
+      <span id="tr-pct" style="font-size:.75rem;color:var(--green);font-weight:700">0%</span>
+    </div>
+    <div id="training-list" style="display:flex;flex-direction:column;gap:4px"></div>
+  </div>
+  <div id="training-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid rgba(0,229,255,.2);border-radius:14px;padding:24px;max-width:440px;width:calc(100% - 32px)">
+      <div style="font-size:1rem;font-weight:800;color:var(--cyan);margin-bottom:16px">👤 เพิ่ม/แก้ไข บุคลากร</div>
+      <input type="hidden" id="tr-edit-idx" value="-1">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="setting-row"><div class="setting-label">ชื่อ-สกุล *</div><input class="input" id="tr-name" placeholder="นาย/นาง..."></div>
+        <div class="setting-row"><div class="setting-label">ตำแหน่ง</div><input class="input" id="tr-role" placeholder="IT Admin"></div>
+        <div class="setting-row"><div class="setting-label">หลักสูตร</div><select class="input" id="tr-course"><option value="basic">Cyber Awareness</option><option value="phishing">Phishing</option><option value="pdpa">PDPA</option><option value="irp">Incident Response</option><option value="ncsa">NCSA Ethical Hacking</option><option value="other">อื่นๆ</option></select></div>
+        <div class="setting-row"><div class="setting-label">วันที่อบรม</div><input class="input" id="tr-date" type="date"></div>
+        <div class="setting-row"><div class="setting-label">สถานะ</div><select class="input" id="tr-status"><option value="done">✅ ผ่านแล้ว</option><option value="pending">⏳ รอดำเนินการ</option><option value="expired">⚠ หมดอายุ</option></select></div>
+        <div class="setting-row"><div class="setting-label">ใบประกาศ</div><input class="input" id="tr-cert" placeholder="เลขที่ (ถ้ามี)"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('training-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveTraining()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
 </section>
 
   <!-- IRP -->
@@ -1123,6 +1200,40 @@ select.input{cursor:pointer}
     <div class="card" style="margin-bottom:16px;padding:16px 20px">
       <div class="card-title" style="margin-bottom:12px">🗺 Network Topology — <span id="topo-orgname">หน่วยงาน</span></div>
       <div id="net-topo"></div>
+    </div>
+
+    <!-- SOC Metrics -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">⚡ SOC Metrics — Real-time</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="loadSocMetrics()">↺ Refresh</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px" id="soc-metrics-grid">
+        <div class="stat-card" style="--accent:var(--red);padding:14px 16px">
+          <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Alerts Today</div>
+          <div class="stat-val" id="sm-alerts-today" style="font-size:1.8rem;color:var(--red)">—</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--orange);padding:14px 16px">
+          <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">New IPs (24h)</div>
+          <div class="stat-val" id="sm-new-ips" style="font-size:1.8rem;color:var(--orange)">—</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--cyan);padding:14px 16px">
+          <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Total Blacklist</div>
+          <div class="stat-val" id="sm-total-bl" style="font-size:1.8rem;color:var(--cyan)">—</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--green);padding:14px 16px">
+          <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Feed Age</div>
+          <div class="stat-val" id="sm-feed-age" style="font-size:1.8rem;color:var(--green)">—</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--purple);padding:14px 16px">
+          <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Open Vulns</div>
+          <div class="stat-val" id="sm-open-vulns" style="font-size:1.8rem;color:#c4b5fd">—</div>
+        </div>
+        <div class="stat-card" style="--accent:var(--yellow);padding:14px 16px">
+          <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Training %</div>
+          <div class="stat-val" id="sm-training-pct" style="font-size:1.8rem;color:var(--yellow)">—</div>
+        </div>
+      </div>
     </div>
 
     <!-- Cyber KPI Scorecard -->
@@ -1236,6 +1347,38 @@ select.input{cursor:pointer}
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Compliance Gap Analysis -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title" style="margin-bottom:12px">📋 Compliance Gap Analysis — CTAM+ vs KPI v2.1</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px" id="gap-grid">
+        <div style="padding:14px;border-radius:var(--rs);border:1px solid rgba(0,230,118,.2);background:rgba(0,230,118,.04)">
+          <div style="font-size:.7rem;color:var(--text3);margin-bottom:6px">CTAM+ Assessment</div>
+          <div style="font-size:1.6rem;font-weight:900;color:var(--green)" id="gap-ctam">0/17</div>
+          <div style="font-size:.68rem;color:var(--text3);margin-top:4px">เกณฑ์ผ่าน</div>
+          <div style="margin-top:8px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
+            <div id="gap-ctam-bar" style="height:100%;background:var(--green);border-radius:2px;transition:width .4s;width:0%"></div>
+          </div>
+        </div>
+        <div style="padding:14px;border-radius:var(--rs);border:1px solid rgba(0,229,255,.2);background:rgba(0,229,255,.04)">
+          <div style="font-size:.7rem;color:var(--text3);margin-bottom:6px">KPI ขั้นต่ำ (90% target)</div>
+          <div style="font-size:1.6rem;font-weight:900;color:var(--cyan)" id="gap-kpimin">0/7</div>
+          <div style="font-size:.68rem;color:var(--text3);margin-top:4px">ต้องผ่านทั้ง 7 ข้อ</div>
+          <div style="margin-top:8px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
+            <div id="gap-kpimin-bar" style="height:100%;background:var(--cyan);border-radius:2px;transition:width .4s;width:0%"></div>
+          </div>
+        </div>
+        <div style="padding:14px;border-radius:var(--rs);border:1px solid rgba(139,92,246,.2);background:rgba(139,92,246,.04)">
+          <div style="font-size:.7rem;color:var(--text3);margin-bottom:6px">KPI ขั้นสูง (25% target)</div>
+          <div style="font-size:1.6rem;font-weight:900;color:#c4b5fd" id="gap-kpimax">0/8</div>
+          <div style="font-size:.68rem;color:var(--text3);margin-top:4px">Data Center / Network / Policy</div>
+          <div style="margin-top:8px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden">
+            <div id="gap-kpimax-bar" style="height:100%;background:#c4b5fd;border-radius:2px;transition:width .4s;width:0%"></div>
+          </div>
+        </div>
+      </div>
+      <div id="gap-items" style="margin-top:12px;display:flex;flex-direction:column;gap:4px"></div>
     </div>
   </section>
 
@@ -2620,6 +2763,8 @@ const CFG_DEFAULT = {
   kpiMin: new Array(7).fill(false),
   kpiMax: new Array(8).fill(false),
   assets: [],
+  vulns: [],
+  training: [],
   mispUrl: 'https://MISP-SERVER',
   firewallType: 'fortigate',
   firewallIP: 'FIREWALL-IP',
@@ -3431,7 +3576,11 @@ async function doExport(format) {
 
 // Keyboard
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeSettings();
+  if (e.key === 'Escape') {
+    closeSettings();
+    const vm=document.getElementById('vuln-modal');if(vm)vm.style.display='none';
+    const tm=document.getElementById('training-modal');if(tm)tm.style.display='none';
+  }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
     switchLookupTab(document.querySelector('#lookup-tabs .tab'), 'single');
@@ -3576,6 +3725,119 @@ function wizardFinish() {
 // ── Asset Inventory ──
 const ASSET_TYPE_LABEL = {web:'Web/App',db:'Database',fw:'Firewall/Net',siem:'SIEM',backup:'Backup',vm:'Hypervisor',other:'อื่นๆ'};
 const ASSET_STATUS_LABEL = {ok:'🟢 ปกติ',warn:'🟡 ต้องดูแล',crit:'🔴 วิกฤต',off:'⚫ ปิดใช้'};
+
+// ── Vulnerability Tracker ──
+const SEV_COLOR={critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--green)'};
+const SEV_LABEL={critical:'🔴 CRITICAL',high:'🟠 HIGH',medium:'🟡 MEDIUM',low:'🟢 LOW'};
+const VS_LABEL={open:'🔴 Open',inprogress:'🟡 In Progress',patched:'🟢 Patched',accepted:'⚪ Accepted'};
+function renderVulns(){
+  const cfg=getCfg(),vulns=Array.isArray(cfg.vulns)?cfg.vulns:[];
+  const tbody=document.getElementById('vuln-tbody');if(!tbody)return;
+  const empty=document.getElementById('vuln-empty');
+  if(!vulns.length){empty&&(empty.style.display='');tbody.querySelectorAll('tr:not(#vuln-empty)').forEach(r=>r.remove());return;}
+  empty&&(empty.style.display='none');tbody.querySelectorAll('tr:not(#vuln-empty)').forEach(r=>r.remove());
+  vulns.forEach((v,i)=>{
+    const due=v.due?new Date(v.due):null,overdue=due&&v.status!=='patched'&&due<new Date();
+    const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--card-b);font-size:.76rem';
+    tr.innerHTML=`<td style="padding:8px 12px;font-family:monospace;font-weight:700;color:${SEV_COLOR[v.severity]||'var(--text1)'}"><a href="https://nvd.nist.gov/vuln/detail/${esc(v.cve)}" target="_blank" style="color:inherit;text-decoration:none">${esc(v.cve||'—')}</a></td>
+      <td style="padding:8px 12px">${esc(v.asset||'—')}</td><td style="padding:8px 12px">${SEV_LABEL[v.severity]||'—'}</td>
+      <td style="padding:8px 12px;font-family:monospace;text-align:center">${v.cvss||'—'}</td>
+      <td style="padding:8px 12px;color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v.desc||'')}">${esc(v.desc||'—')}</td>
+      <td style="padding:8px 12px">${VS_LABEL[v.status]||'—'}</td>
+      <td style="padding:8px 12px;color:${overdue?'var(--red)':due?'var(--text2)':'var(--text3)'}">${v.due||(v.status==='patched'?'✅':'—')}</td>
+      <td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:2px 8px" onclick="editVuln(${i})">✏</button> <button class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:2px 8px;color:var(--red)" onclick="deleteVuln(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+  const cnt={critical:0,high:0,medium:0,low:0,patched:0};
+  vulns.forEach(v=>{if(cnt[v.severity]!==undefined)cnt[v.severity]++;if(v.status==='patched')cnt.patched++;});
+  const s=id=>document.getElementById(id);
+  if(s('vc-crit'))s('vc-crit').textContent='CRITICAL: '+cnt.critical;
+  if(s('vc-high'))s('vc-high').textContent='HIGH: '+cnt.high;
+  if(s('vc-med'))s('vc-med').textContent='MEDIUM: '+cnt.medium;
+  if(s('vc-low'))s('vc-low').textContent='LOW: '+cnt.low;
+  if(s('vc-patched'))s('vc-patched').textContent=cnt.patched;if(s('vc-total'))s('vc-total').textContent=vulns.length;
+}
+function showAddVuln(){
+  const cfg=getCfg(),sel=document.getElementById('v-asset');
+  if(sel)sel.innerHTML='<option value="">-- เลือกระบบ --</option>'+(Array.isArray(cfg.assets)?cfg.assets:[]).map(a=>`<option value="${esc(a.name)}">${esc(a.name)} (${a.ip||''})</option>`).join('');
+  document.getElementById('vuln-edit-idx').value='-1';
+  ['v-cve','v-cvss','v-desc','v-due','v-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const sv=document.getElementById('v-severity');if(sv)sv.value='high';
+  const vs=document.getElementById('v-status');if(vs)vs.value='open';
+  document.getElementById('vuln-modal').style.display='flex';
+}
+function editVuln(idx){
+  const cfg=getCfg(),v=(cfg.vulns||[])[idx];if(!v)return;showAddVuln();
+  document.getElementById('vuln-edit-idx').value=idx;
+  document.getElementById('v-cve').value=v.cve||'';document.getElementById('v-asset').value=v.asset||'';
+  document.getElementById('v-severity').value=v.severity||'high';document.getElementById('v-cvss').value=v.cvss||'';
+  document.getElementById('v-desc').value=v.desc||'';document.getElementById('v-status').value=v.status||'open';
+  document.getElementById('v-due').value=v.due||'';document.getElementById('v-note').value=v.note||'';
+}
+function saveVuln(){
+  const cve=document.getElementById('v-cve').value.trim();if(!cve){toast('กรอก CVE ID ก่อน','err');return;}
+  const vuln={cve,asset:document.getElementById('v-asset').value,severity:document.getElementById('v-severity').value,cvss:document.getElementById('v-cvss').value.trim(),desc:document.getElementById('v-desc').value.trim(),status:document.getElementById('v-status').value,due:document.getElementById('v-due').value,note:document.getElementById('v-note').value.trim()};
+  const cfg=getCfg();if(!Array.isArray(cfg.vulns))cfg.vulns=[];
+  const idx=parseInt(document.getElementById('vuln-edit-idx').value);
+  if(idx>=0)cfg.vulns[idx]=vuln;else cfg.vulns.push(vuln);
+  saveCfg(cfg);document.getElementById('vuln-modal').style.display='none';renderVulns();toast(idx>=0?'อัพเดทแล้ว':'เพิ่ม CVE แล้ว','ok');
+}
+function deleteVuln(idx){const cfg=getCfg();cfg.vulns.splice(idx,1);saveCfg(cfg);renderVulns();toast('ลบแล้ว','ok');}
+function exportVulns(){
+  const cfg=getCfg(),v=Array.isArray(cfg.vulns)?cfg.vulns:[];if(!v.length){toast('ยังไม่มีช่องโหว่','err');return;}
+  const hdr='CVE ID,ระบบ,Severity,CVSS,คำอธิบาย,สถานะ,Patch Due,หมายเหตุ';
+  const rows=v.map(x=>[x.cve,x.asset,x.severity,x.cvss,x.desc,x.status,x.due,x.note].map(f=>`"${String(f||'').replace(/"/g,'""')}"`).join(','));
+  const blob=new Blob(['﻿'+hdr+'\n'+rows.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='vulnerabilities.csv';a.click();
+}
+
+// ── Staff Training Tracker ──
+const COURSE_LABEL={basic:'Cyber Awareness',phishing:'Phishing',pdpa:'PDPA',irp:'Incident Response',ncsa:'NCSA Ethical Hacking',other:'อื่นๆ'};
+const TR_STATUS_LABEL={done:'✅ ผ่านแล้ว',pending:'⏳ รอดำเนินการ',expired:'⚠ หมดอายุ'};
+function renderTraining(){
+  const cfg=getCfg(),list=Array.isArray(cfg.training)?cfg.training:[];
+  const el=document.getElementById('training-list');if(!el)return;
+  el.innerHTML=list.length?list.map((t,i)=>
+    `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;border:1px solid var(--card-b);font-size:.76rem;flex-wrap:wrap">
+      <span style="min-width:130px;font-weight:600">${esc(t.name||'')}</span>
+      <span style="color:var(--text3);min-width:90px">${esc(t.role||'')}</span>
+      <span style="color:var(--cyan);min-width:110px">${COURSE_LABEL[t.course]||t.course||''}</span>
+      <span style="color:var(--text3);min-width:80px">${t.date||'—'}</span>
+      <span>${TR_STATUS_LABEL[t.status]||t.status||''}</span>
+      ${t.cert?`<span style="font-family:monospace;font-size:.68rem;color:var(--text3)">${esc(t.cert)}</span>`:''}
+      <span style="margin-left:auto;display:flex;gap:4px">
+        <button class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:2px 8px" onclick="editTraining(${i})">✏</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:2px 8px;color:var(--red)" onclick="deleteTraining(${i})">✕</button>
+      </span></div>`
+  ).join(''):'<div style="padding:16px;text-align:center;color:var(--text3);font-size:.82rem">ยังไม่มีบุคลากร</div>';
+  const done=list.filter(t=>t.status==='done').length,pct=list.length?Math.round(done/list.length*100):0;
+  const s=id=>document.getElementById(id);
+  if(s('tr-done'))s('tr-done').textContent=done;if(s('tr-total'))s('tr-total').textContent=list.length;
+  if(s('tr-bar'))s('tr-bar').style.width=pct+'%';if(s('tr-pct'))s('tr-pct').textContent=pct+'%';
+}
+function showAddTraining(){
+  document.getElementById('tr-edit-idx').value='-1';
+  ['tr-name','tr-role','tr-date','tr-cert'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const tc=document.getElementById('tr-course');if(tc)tc.value='basic';
+  const ts=document.getElementById('tr-status');if(ts)ts.value='done';
+  document.getElementById('training-modal').style.display='flex';
+}
+function editTraining(idx){
+  const cfg=getCfg(),t=(cfg.training||[])[idx];if(!t)return;showAddTraining();
+  document.getElementById('tr-edit-idx').value=idx;
+  document.getElementById('tr-name').value=t.name||'';document.getElementById('tr-role').value=t.role||'';
+  document.getElementById('tr-course').value=t.course||'basic';document.getElementById('tr-date').value=t.date||'';
+  document.getElementById('tr-status').value=t.status||'done';document.getElementById('tr-cert').value=t.cert||'';
+}
+function saveTraining(){
+  const name=document.getElementById('tr-name').value.trim();if(!name){toast('กรอกชื่อก่อน','err');return;}
+  const t={name,role:document.getElementById('tr-role').value.trim(),course:document.getElementById('tr-course').value,date:document.getElementById('tr-date').value,status:document.getElementById('tr-status').value,cert:document.getElementById('tr-cert').value.trim()};
+  const cfg=getCfg();if(!Array.isArray(cfg.training))cfg.training=[];
+  const idx=parseInt(document.getElementById('tr-edit-idx').value);
+  if(idx>=0)cfg.training[idx]=t;else cfg.training.push(t);
+  saveCfg(cfg);document.getElementById('training-modal').style.display='none';renderTraining();toast(idx>=0?'อัพเดทแล้ว':'เพิ่มบุคลากรแล้ว','ok');
+}
+function deleteTraining(idx){const cfg=getCfg();cfg.training.splice(idx,1);saveCfg(cfg);renderTraining();toast('ลบแล้ว','ok');}
 
 function renderAssets() {
   const cfg = getCfg();
@@ -4033,6 +4295,56 @@ const KPI_MAX = [
   'Security Policy: IRP+DPO+นโยบาย อนุมัติผู้บริหาร',
 ];
 
+async function loadSocMetrics() {
+  try {
+    const [stats, info, recent] = await Promise.all([
+      fetch(apiBase()+'/stats').then(r=>r.json()).catch(()=>({})),
+      fetch(apiBase()+'/info').then(r=>r.json()).catch(()=>({})),
+      fetch(apiBase()+'/recent?limit=200').then(r=>r.json()).catch(()=>[]),
+    ]);
+    const cfg = getCfg();
+    const now = Date.now();
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const alertsToday = Array.isArray(recent) ? recent.filter(r => r.added_at && new Date(r.added_at) >= todayStart).length : 0;
+    const newIps24h = Array.isArray(recent) ? recent.filter(r => r.added_at && (now - new Date(r.added_at)) < 86400000).length : 0;
+    const totalBl = (stats.ip?.total||0) + (stats.domain?.total||0) + (stats.hash?.total||0);
+    const feedAgeMins = info.ip?.generated_at ? Math.floor((now - new Date(info.ip.generated_at))/60000) : null;
+    const feedAgeStr = feedAgeMins === null ? '—' : feedAgeMins < 60 ? feedAgeMins+'m' : feedAgeMins < 1440 ? Math.floor(feedAgeMins/60)+'h' : Math.floor(feedAgeMins/1440)+'d';
+    const vulns = Array.isArray(cfg.vulns) ? cfg.vulns.filter(v=>v.status==='open'||v.status==='inprogress') : [];
+    const training = Array.isArray(cfg.training) ? cfg.training : [];
+    const trPct = training.length ? Math.round(training.filter(t=>t.status==='done').length/training.length*100) : 0;
+    const s = id => document.getElementById(id);
+    if(s('sm-alerts-today')) s('sm-alerts-today').textContent = fmt(alertsToday);
+    if(s('sm-new-ips')) s('sm-new-ips').textContent = fmt(newIps24h);
+    if(s('sm-total-bl')) s('sm-total-bl').textContent = totalBl>1000?Math.round(totalBl/1000)+'K':fmt(totalBl);
+    if(s('sm-feed-age')) { s('sm-feed-age').textContent=feedAgeStr; const fa=feedAgeMins; s('sm-feed-age').style.color=!fa?'var(--text3)':fa<1440?'var(--green)':fa<2880?'var(--orange)':'var(--red)'; }
+    if(s('sm-open-vulns')) { s('sm-open-vulns').textContent=vulns.length; s('sm-open-vulns').style.color=vulns.length>5?'var(--red)':vulns.length>0?'var(--orange)':'var(--green)'; }
+    if(s('sm-training-pct')) { s('sm-training-pct').textContent=trPct+'%'; s('sm-training-pct').style.color=trPct>=80?'var(--green)':trPct>=50?'var(--orange)':'var(--red)'; }
+  } catch {}
+}
+
+function renderComplianceGap() {
+  const cfg = getCfg();
+  const ctamDone = CTAM_ITEMS.filter(i=>i.done).length;
+  const kpiMin = Array.isArray(cfg.kpiMin) ? cfg.kpiMin.filter(Boolean).length : 0;
+  const kpiMax = Array.isArray(cfg.kpiMax) ? cfg.kpiMax.filter(Boolean).length : 0;
+  const s = id => document.getElementById(id);
+  if(s('gap-ctam')) s('gap-ctam').textContent = ctamDone+'/17';
+  if(s('gap-ctam-bar')) s('gap-ctam-bar').style.width = (ctamDone/17*100)+'%';
+  if(s('gap-kpimin')) s('gap-kpimin').textContent = kpiMin+'/7';
+  if(s('gap-kpimin-bar')) s('gap-kpimin-bar').style.width = (kpiMin/7*100)+'%';
+  if(s('gap-kpimax')) s('gap-kpimax').textContent = kpiMax+'/8';
+  if(s('gap-kpimax-bar')) s('gap-kpimax-bar').style.width = (kpiMax/8*100)+'%';
+  const gaps = [];
+  CTAM_ITEMS.forEach(item => { if(!item.done) gaps.push({label:`CTAM+ ข้อ ${item.id}: ${item.label}`,color:'var(--orange)',src:'CTAM+'}); });
+  if(Array.isArray(cfg.kpiMin)) cfg.kpiMin.forEach((v,i)=>{ if(!v && KPI_MIN[i]) gaps.push({label:`KPI ขั้นต่ำ ข้อ ${i+1}: ${KPI_MIN[i].substring(0,60)}`,color:'var(--red)',src:'KPI Min'}); });
+  const gapEl = s('gap-items');
+  if(gapEl) {
+    if(gaps.length===0) { gapEl.innerHTML='<div style="padding:10px;color:var(--green);font-size:.82rem">✅ ผ่านทุกเกณฑ์ที่ตั้งค่าแล้ว</div>'; }
+    else { gapEl.innerHTML = `<div style="font-size:.7rem;color:var(--text3);margin-bottom:4px">⚠ Gap ${gaps.length} รายการ:</div>` + gaps.slice(0,8).map(g=>`<div style="padding:5px 10px;border-radius:4px;background:rgba(255,255,255,.03);border-left:3px solid ${g.color};font-size:.73rem;color:var(--text2)"><span style="color:${g.color};font-size:.65rem;font-weight:700;margin-right:6px">${g.src}</span>${g.label}</div>`).join('')+(gaps.length>8?`<div style="font-size:.7rem;color:var(--text3);padding:4px 10px">...และอีก ${gaps.length-8} รายการ</div>`:''); }
+  }
+}
+
 function renderKpi() {
   const cfg = getCfg();
   const minDone = Array.isArray(cfg.kpiMin) && cfg.kpiMin.length === 7 ? cfg.kpiMin : new Array(7).fill(false);
@@ -4120,7 +4432,9 @@ async function loadSocAlerts() {
   loadFreshnessBar();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
-  renderCtam(); renderKpi(); renderAssets();
+  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining();
+  loadSocMetrics();
+  renderComplianceGap();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
