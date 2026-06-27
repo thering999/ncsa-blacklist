@@ -1514,6 +1514,80 @@ select.input{cursor:pointer}
     </div>
   </div>
 
+  <!-- CSIRT Contact Directory -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">📞 CSIRT Contact Directory</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto;font-size:.7rem" onclick="showAddContact()">+ เพิ่มผู้ติดต่อ</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:12px">
+      <div style="padding:12px;background:rgba(255,23,68,.05);border:1px solid rgba(255,23,68,.2);border-radius:8px">
+        <div style="font-weight:700;color:var(--red);font-size:.82rem;margin-bottom:6px">🚨 Thai National CSIRT</div>
+        <div style="font-size:.72rem;color:var(--text2);line-height:2">
+          <strong>NCSA Hotline:</strong> 1212<br>
+          <strong>ThaiCERT:</strong> 02-123-1212<br>
+          <strong>Email:</strong> report@thaicert.or.th<br>
+          <strong>Web:</strong> thaicert.or.th
+        </div>
+      </div>
+      <div style="padding:12px;background:rgba(0,229,255,.04);border:1px solid rgba(0,229,255,.15);border-radius:8px">
+        <div style="font-weight:700;color:var(--cyan);font-size:.82rem;margin-bottom:6px">🏥 กระทรวงสาธารณสุข</div>
+        <div style="font-size:.72rem;color:var(--text2);line-height:2">
+          <strong>ICT MOPH:</strong> ict.moph.go.th<br>
+          <strong>Email:</strong> ictmoph@gmail.com<br>
+          <strong>PDPC Hotline:</strong> 02-142-1033<br>
+          <strong>PDPA Report:</strong> pdpc.or.th
+        </div>
+      </div>
+      <div style="padding:12px;background:rgba(0,230,118,.04);border:1px solid rgba(0,230,118,.15);border-radius:8px">
+        <div style="font-weight:700;color:var(--green);font-size:.82rem;margin-bottom:6px">🌐 International</div>
+        <div style="font-size:.72rem;color:var(--text2);line-height:2">
+          <strong>INTERPOL:</strong> www.interpol.int/Crimes<br>
+          <strong>CISA (US):</strong> cisa.gov/report<br>
+          <strong>Abuse.ch:</strong> abuse.ch<br>
+          <strong>MISP Project:</strong> misp-project.org
+        </div>
+      </div>
+    </div>
+    <div id="csirt-contacts" style="display:flex;flex-direction:column;gap:6px"><div class="empty">ยังไม่มีผู้ติดต่อเพิ่มเติม</div></div>
+  </div>
+
+  <!-- Contact Modal -->
+  <div id="contact-modal" style="display:none;position:fixed;inset:0;z-index:9006;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:22px;max-width:420px;width:calc(100% - 32px)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px"><strong>เพิ่มผู้ติดต่อ CSIRT</strong><button class="btn btn-ghost btn-sm" onclick="document.getElementById('contact-modal').style.display='none'">✕</button></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อ / หน่วยงาน</label><input class="input" id="ct-name" placeholder="IT Security Team / บริษัท..." style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">บทบาท</label>
+          <select class="input" id="ct-role" style="width:100%;margin-top:4px">
+            <option value="incident">🚨 Incident Response</option>
+            <option value="vendor">🔧 Vendor/Support</option>
+            <option value="legal">⚖ Legal/DPO</option>
+            <option value="management">👔 Management</option>
+            <option value="it">💻 IT Admin</option>
+            <option value="csirt">🛡 CSIRT/SOC</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">โทรศัพท์</label><input class="input" id="ct-phone" placeholder="0x-xxxx-xxxx" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">Email</label><input class="input" id="ct-email" placeholder="security@..." style="width:100%;margin-top:4px"></div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">Line ID / ช่องทางอื่น</label><input class="input" id="ct-other" placeholder="Line ID หรือ Teams" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ความสำคัญ</label>
+          <select class="input" id="ct-priority" style="width:100%;margin-top:4px">
+            <option value="primary">🔴 หลัก (ติดต่อก่อน)</option>
+            <option value="secondary">🟡 รอง</option>
+            <option value="escalation">🟠 Escalation</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('contact-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveContact()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   </section>
 
   <!-- SOC -->
@@ -1815,8 +1889,10 @@ select.input{cursor:pointer}
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <div class="card-title" style="margin-bottom:0">🎯 Threat Hunt Query Library</div>
         <span style="font-size:.65rem;background:rgba(0,229,255,.1);color:var(--cyan);padding:2px 8px;border-radius:10px">Wazuh / Elastic</span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.65rem" onclick="showAddHuntQuery()">+ Custom Query</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px" id="hunt-query-list"></div>
+      <div id="custom-hunt-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
     </div>
 
     <!-- Backup Status Tracker -->
@@ -6818,9 +6894,85 @@ function renderVendorList(){
     </div>`).join('');
 }
 
+// ── CSIRT Contact Directory ──
+const CT_KEY='ncsa_contacts'; const CHQ_KEY='ncsa_custom_hunts';
+function getContacts(){try{return JSON.parse(localStorage.getItem(CT_KEY)||'[]');}catch{return[];}}
+function getCustomHunts(){try{return JSON.parse(localStorage.getItem(CHQ_KEY)||'[]');}catch{return[];}}
+function saveContacts(a){localStorage.setItem(CT_KEY,JSON.stringify(a));}
+function saveCustomHunts(a){localStorage.setItem(CHQ_KEY,JSON.stringify(a));}
+
+function showAddContact(){
+  ['ct-name','ct-phone','ct-email','ct-other'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('ct-role').value='incident';
+  document.getElementById('ct-priority').value='primary';
+  document.getElementById('contact-modal').style.display='flex';
+}
+
+function saveContact(){
+  const name=document.getElementById('ct-name').value.trim();
+  if(!name){toast('กรุณากรอกชื่อ','warn');return;}
+  const arr=getContacts();
+  arr.push({id:Date.now(),name,role:document.getElementById('ct-role').value,
+    phone:document.getElementById('ct-phone').value.trim(),email:document.getElementById('ct-email').value.trim(),
+    other:document.getElementById('ct-other').value.trim(),priority:document.getElementById('ct-priority').value});
+  saveContacts(arr);
+  document.getElementById('contact-modal').style.display='none';
+  renderCsirtContacts(); toast('เพิ่มผู้ติดต่อแล้ว','ok');
+}
+
+function deleteContact(id){if(!confirm('ลบ?'))return;saveContacts(getContacts().filter(c=>c.id!==id));renderCsirtContacts();toast('ลบแล้ว','ok');}
+
+function renderCsirtContacts(){
+  const el=document.getElementById('csirt-contacts'); if(!el)return;
+  const arr=getContacts();
+  if(!arr.length){el.innerHTML='<div class="empty">ยังไม่มีผู้ติดต่อเพิ่มเติม</div>';return;}
+  const PRIORITY_C={primary:'var(--red)',secondary:'var(--yellow)',escalation:'var(--orange)'};
+  const ROLE_ICON={incident:'🚨',vendor:'🔧',legal:'⚖',management:'👔',it:'💻',csirt:'🛡'};
+  el.innerHTML=arr.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.03);border:1px solid ${PRIORITY_C[c.priority]||'var(--card-b)'}44;border-radius:8px;flex-wrap:wrap">
+    <span style="font-size:1rem;flex-shrink:0">${ROLE_ICON[c.role]||'👤'}</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:.8rem;font-weight:700">${esc(c.name)}</div>
+      <div style="font-size:.65rem;color:var(--text3)">${c.phone||''} ${c.email?`| ${c.email}`:''} ${c.other?`| ${c.other}`:''}</div>
+    </div>
+    <span style="font-size:.62rem;padding:1px 7px;border-radius:8px;background:${PRIORITY_C[c.priority]||'var(--card-b)'}22;color:${PRIORITY_C[c.priority]||'var(--text3)'};font-weight:700">${c.priority}</span>
+    <button class="btn btn-ghost btn-sm" style="color:var(--red);padding:1px 5px;font-size:.62rem;flex-shrink:0" onclick="deleteContact(${c.id})">🗑</button>
+  </div>`).join('');
+}
+
+// ── Custom Hunt Queries ──
+function showAddHuntQuery(){
+  const name=prompt('ชื่อ Query:'); if(!name)return;
+  const type=prompt('ประเภท (elastic/ncsa/forti/sigma):','elastic'); if(!type)return;
+  const query=prompt('Query / ค้นหา:'); if(!query)return;
+  const arr=getCustomHunts();
+  arr.push({id:Date.now(),label:name,type,query});
+  saveCustomHunts(arr); renderCustomHuntList(); toast('เพิ่ม Query แล้ว','ok');
+}
+
+function deleteCustomHunt(id){saveCustomHunts(getCustomHunts().filter(q=>q.id!==id));renderCustomHuntList();toast('ลบแล้ว','ok');}
+
+function renderCustomHuntList(){
+  const el=document.getElementById('custom-hunt-list'); if(!el)return;
+  const arr=getCustomHunts(); const cfg=getCfg();
+  if(!arr.length){el.innerHTML='';return;}
+  el.innerHTML=`<div style="font-size:.68rem;color:var(--text3);font-weight:600;margin-top:4px">📌 Custom Queries</div>`+arr.map(q=>{
+    const patched=q.query.replace(/WAZUH-SERVER/g,cfg.wazuhIP||'WAZUH-SERVER').replace(/WAZUH-AGENT/g,cfg.wazuhAgent||'agent');
+    const tc={elastic:'var(--cyan)',ncsa:'var(--orange)',forti:'var(--red)',sigma:'var(--purple)'}[q.type]||'var(--text3)';
+    return `<div style="border:1px solid var(--card-b);border-radius:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.02);cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <span style="font-size:.65rem;font-weight:700;color:${tc};min-width:55px">${q.type.toUpperCase()}</span>
+        <span style="font-size:.76rem;flex:1">${esc(q.label)}</span>
+        <button class="btn btn-ghost btn-sm" style="font-size:.6rem;padding:2px 6px" onclick="event.stopPropagation();copyText(${JSON.stringify(patched)})">📋</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.6rem;padding:2px 6px;color:var(--red)" onclick="event.stopPropagation();deleteCustomHunt(${q.id})">🗑</button>
+      </div>
+      <div style="display:none;padding:10px 12px;background:rgba(0,0,0,.3)"><pre class="mono" style="font-size:.68rem;color:var(--green);white-space:pre-wrap;word-break:break-all;margin:0">${esc(patched)}</pre></div>
+    </div>`;
+  }).join('');
+}
+
 // ── Dashboard Data Export / Import ──
 function exportAllData(){
-  const allKeys=[CFG_KEY, INC_KEY, DRILL_KEY, PT_KEY, VD_KEY, PS_KEY, GEO_KEY];
+  const allKeys=[CFG_KEY, INC_KEY, DRILL_KEY, PT_KEY, VD_KEY, PS_KEY, GEO_KEY, CT_KEY, CHQ_KEY];
   const bundle={version:'1.0',exported:new Date().toISOString(),data:{}};
   allKeys.forEach(k=>{const v=localStorage.getItem(k);if(v)bundle.data[k]=JSON.parse(v);});
   const blob=new Blob([JSON.stringify(bundle,null,2)],{type:'application/json'});
@@ -6845,7 +6997,7 @@ function importAllData(input){
       renderRisks(); renderRiskMatrix(); renderIncidentTimeline(); renderDrillList();
       renderPentestList(); renderVendorList(); renderPhishSimList(); renderSocPerformance();
       renderNistCsf(); renderSecurityCalendar(); renderVulnBreakdown(); renderSecurityScore();
-      renderGeoBlockList();
+      renderGeoBlockList(); renderCsirtContacts(); renderCustomHuntList();
       toast('Import สำเร็จ — รีเฟรชข้อมูลแล้ว','ok');
     } catch(err){
       document.getElementById('data-import-result').innerHTML=`<span style="color:var(--red)">❌ Error: ${esc(err.message)}</span>`;
@@ -7782,6 +7934,7 @@ function renderThreatActors(){
   renderRisks(); renderRiskMatrix(); renderThreatActors();
   renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
   renderPentestList(); renderVendorList(); renderNistCsf(); renderPhishSimList(); renderSocPerformance();
+  renderCsirtContacts(); renderCustomHuntList();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
@@ -7811,6 +7964,8 @@ function renderThreatActors(){
       if (vdm) vdm.style.display = 'none';
       const psm = document.getElementById('phishsim-modal');
       if (psm) psm.style.display = 'none';
+      const ctm = document.getElementById('contact-modal');
+      if (ctm) ctm.style.display = 'none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
