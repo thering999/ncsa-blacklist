@@ -776,7 +776,7 @@ select.input{cursor:pointer}
       <div class="setting-label">Wazuh Type</div>
       <select class="input" id="s-wazuh-type">
         <option value="local">Local (สสจ. own)</option>
-        <option value="ket10">Region-10 Shared (203.157.132.146)</option>
+        <option value="ket10">Region-10 Shared (สาธารณสุขเขต 10)</option>
         <option value="custom">Custom</option>
       </select>
       <div class="setting-desc">เลือก Region-10 ถ้าไม่มี Wazuh ของตัวเอง</div>
@@ -2499,11 +2499,11 @@ systemctl reload dnsmasq
         <div class="int-grid2">
           <div>
             <div class="int-desc">
-              <strong style="color:var(--cyan)">MISP Feed Config</strong> — MISP สสจ.มุกดาหาร<br>
-              URL: <code class="mono" style="color:var(--orange)">https://203.157.172.9</code> (internal: <code class="mono" style="color:var(--orange)">10.10.30.225</code>)
+              <strong style="color:var(--cyan)">MISP Feed Config</strong> — ตั้งค่า MISP URL ใน Settings ก่อน<br>
+              URL: <code class="mono" style="color:var(--orange)" data-cfg="mispUrl">https://MISP-SERVER</code>
             </div>
             <div class="code-block">
-              <pre><span class="cm"># MISP (203.157.172.9) → Sync → Feeds → Add Feed</span>
+              <pre><span class="cm"># MISP (MISP-SERVER) → Sync → Feeds → Add Feed</span>
 <span class="kw">Name:</span>        NCSA Thailand Blacklist
 <span class="kw">Provider:</span>    NCSA Thailand (ncsa.or.th)
 <span class="kw">URL:</span>         <span class="str">http://NCSA-HOST</span>
@@ -2515,7 +2515,7 @@ systemctl reload dnsmasq
 from pymisp import PyMISP, MISPEvent, MISPAttribute
 import requests
 
-MISP_URL = <span class="str">'https://203.157.172.9'</span>  <span class="cm"># MISP สสจ.</span>
+MISP_URL = <span class="str">'https://MISP-SERVER'</span>  <span class="cm"># ใส่ MISP URL ของหน่วยงาน</span>
 MISP_KEY = <span class="str">'your-api-key'</span>
 NCSA_URL = <span class="str">'http://NCSA-HOST'</span>
 
@@ -6021,7 +6021,7 @@ async function loadSocAlerts() {
         <div class="setting-label">Wazuh</div>
         <select class="input" id="wz-wazuh-type" onchange="wizardWazuhTypeChange(this.value)">
           <option value="local">Local (SIEM ของตัวเอง)</option>
-          <option value="ket10">Region-10 Shared (203.157.132.146)</option>
+          <option value="ket10">Region-10 Shared (สาธารณสุขเขต 10)</option>
           <option value="none">ยังไม่มี Wazuh</option>
         </select>
       </div>
