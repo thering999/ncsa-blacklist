@@ -22,6 +22,10 @@ services:
       - SMTP_TO=${SMTP_TO:-}
       - EXTRA_FEEDS=${EXTRA_FEEDS:-}
       - CORS_ORIGIN=${CORS_ORIGIN:-}
+      - METRICS_TOKEN=${METRICS_TOKEN:-}
+      - ADMIN_ALLOWED_IPS=${ADMIN_ALLOWED_IPS:-}
+      - LOG_FORMAT=${LOG_FORMAT:-}
+      - RATE_LIMIT=${RATE_LIMIT:-60}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3939/healthz', r => process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
