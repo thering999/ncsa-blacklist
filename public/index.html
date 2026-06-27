@@ -5707,23 +5707,23 @@ async function genZeek() {
 
 // ── CTAM+ Status ──
 const CTAM_ITEMS = [
-  { id: 1, label: 'Backup 3-2-1 (NAS+Ext+Cloud)', icon: '💾', done: true, note: 'Proxmox + OneboxCloud' },
-  { id: 2, label: 'Antivirus / EDR', icon: '🛡', done: true, note: 'CrowdStrike (5VM) + NextGen AV' },
-  { id: 3, label: 'Access Control (12 conditions)', icon: '🔐', done: true, note: 'FortiGate-120G + Kong ACL' },
-  { id: 4, label: 'PAM / Least Privilege', icon: '👤', done: true, note: 'Disable root + password policy' },
-  { id: 5, label: 'BCP & DRP', icon: '📋', done: true, note: 'ทดสอบประจำปี มีเอกสารครบ' },
-  { id: 6, label: 'OS Patching (FW+OS+App)', icon: '🔧', done: true, note: 'FortiGate firmware + Linux' },
-  { id: 7, label: 'MFA / Cisco DUO 2FA', icon: '🔑', done: true, note: 'DUO บน Kong + servers' },
-  { id: 8, label: 'WAF (Cloudflare Enterprise)', icon: '🌐', done: true, note: '50TB throughput, OWASP Top10' },
-  { id: 9, label: 'Log Management ≥90 วัน', icon: '📝', done: true, note: 'System+Access+Security logs' },
-  { id: 10, label: 'SIEM (Wazuh + FortiSIEM)', icon: '📡', done: true, note: 'Wazuh 10.10.32.123 + FortiSIEM' },
-  { id: 11, label: 'VA Scan (Wazuh + Nexus)', icon: '🔍', done: true, note: 'ประจำปี + continuous' },
-  { id: 12, label: 'Asset Inventory (17 systems)', icon: '📦', done: true, note: 'HW+SW ครบ 17 ระบบ' },
-  { id: 13, label: 'Software Patching (HIS)', icon: '⬆', done: true, note: 'Linux-based, risk accepted docs' },
-  { id: 14, label: 'Network Segmentation', icon: '🔲', done: true, note: '10.10.10/30/31/32/34.x แยก segment' },
-  { id: 15, label: 'Licensed Software', icon: '📜', done: true, note: 'Linux open-source servers' },
-  { id: 16, label: 'Penetration Testing', icon: '🎯', done: true, note: 'Blackbox pentest เว็บไซต์' },
-  { id: 17, label: 'Cybersecurity & PDPA Policy', icon: '📖', done: true, note: 'นโยบาย + อบรมบุคลากร' },
+  { id: 1,  label: 'Backup 3-2-1', icon: '💾', done: false, note: '', desc: 'สำรองข้อมูล ≥1 ครั้ง/วัน ย้อนหลัง ≥7 วัน รูปแบบ 3-2-1', evidence: 'รายงานผล Backup / รายการระบบที่สำรองข้อมูล / หลักฐานภาพ' },
+  { id: 2,  label: 'Antivirus / EDR', icon: '🛡', done: false, note: '', desc: 'ติดตั้ง AV/EDR/XDR บนระบบสำคัญทุกตัว อัปเดต Signature', evidence: 'ผลการติดตั้ง / รายการเครื่องที่ติดตั้ง / Alert Report' },
+  { id: 3,  label: 'Access Control (12 ข้อ)', icon: '🔐', done: false, note: '', desc: 'Open Port, IP Filter, IDS/IPS, VPN, Network Zone, User/Password Policy, Time Sync, Default Accounts, Review Log, IOC Feeds', evidence: 'รายงาน Firewall config / ตารางกำหนดสิทธิ' },
+  { id: 4,  label: 'PAM / Least Privilege', icon: '👤', done: false, note: '', desc: 'Disable Admin/Root, Role-based access, Password ≥12 ตัว, Session timeout, Review Privilege', evidence: 'ผลการตั้งค่าสิทธิ / ตาราง Access Rights Matrix' },
+  { id: 5,  label: 'BCP & DRP', icon: '📋', done: false, note: '', desc: 'ทดสอบ BCP+DRP ≥1 ครั้ง/ปี ครอบคลุม Risk, Resource, Continuity, Testing, Review', evidence: 'แผน BCP / แผน DRP / รายงานผลการทดสอบ' },
+  { id: 6,  label: 'OS Patching', icon: '🔧', done: false, note: '', desc: 'อัปเดต Firewall firmware, OS, Application, Software พร้อม Change Management', evidence: 'คู่มือการอัปเดต / ผลการดำเนินงาน' },
+  { id: 7,  label: 'MFA / 2FA', icon: '🔑', done: false, note: '', desc: '2FA บน VPN, Network devices, Security devices, Hypervisor, OS สำหรับ Admin', evidence: 'รายละเอียดระบบ 2FA / ภาพหน้าจอการเข้าสู่ระบบ' },
+  { id: 8,  label: 'WAF (OWASP Top10)', icon: '🌐', done: false, note: '', desc: 'WAF ป้องกัน OWASP Top10, Review Attack Report, IP Blocklist', evidence: 'คู่มือ WAF / ผลการติดตั้ง' },
+  { id: 9,  label: 'Log Management ≥90 วัน', icon: '📝', done: false, note: '', desc: 'เก็บ Log ≥90 วัน: System, Access, Auth, Authorization, Error, Application', evidence: 'รายงาน Log ย้อนหลัง 90 วัน / คู่มือระบบ Log' },
+  { id: 10, label: 'SIEM', icon: '📡', done: false, note: '', desc: 'ตรวจจับ: Brute force/Port scan, Malware, Blacklist IP, Unauthorized, DDoS, Data Breach', evidence: 'รายละเอียดระบบ SIEM / รายงานผลการตรวจจับ' },
+  { id: 11, label: 'VA Scan', icon: '🔍', done: false, note: '', desc: 'Vulnerability Assessment ≥1 ครั้ง/ปี แก้ไข Critical/High ก่อน พร้อม Risk Management', evidence: 'รายงาน VA Scan พร้อมผลสรุปผู้บริหาร' },
+  { id: 12, label: 'Asset Inventory', icon: '📦', done: false, note: '', desc: 'สำรวจ IT Asset ทั้งหมด ปิดระบบที่ไม่ใช้งาน', evidence: 'Asset Inventory ระบบทั้งหมด / สถานะการใช้งาน' },
+  { id: 13, label: 'Software Patching', icon: '⬆', done: false, note: '', desc: 'อัปเดต Software/Patch ระบบสำคัญ เช่น HIS, ระบบบริการ', evidence: 'คู่มือการอัปเดต / รายงาน Patching' },
+  { id: 14, label: 'Network Segmentation', icon: '🔲', done: false, note: '', desc: 'แบ่งแยก Network: Critical vs Guest/User ด้วย Firewall/ACL', evidence: 'Network Diagram / Firewall/ACL config' },
+  { id: 15, label: 'Licensed Software', icon: '📜', done: false, note: '', desc: 'ซอฟต์แวร์ถูกลิขสิทธิ์ทุกตัว จัดทำ Software Asset Inventory', evidence: 'Software Asset Inventory / หลักฐาน License' },
+  { id: 16, label: 'Penetration Testing', icon: '🎯', done: false, note: '', desc: 'Pentest (Gray/Black box) ≥1 ครั้ง/ปี ไม่มีช่องโหว่ Critical/High ตาม OWASP Top10', evidence: 'รายงาน Pentest พร้อมผลสรุปผู้บริหาร / แนวทางแก้ไข' },
+  { id: 17, label: 'Cybersecurity & PDPA Policy', icon: '📖', done: false, note: '', desc: 'นโยบาย Cybersecurity+PDPA เป็นลายลักษณ์อักษร + อบรมบุคลากร ≥1 ครั้ง/ปี', evidence: 'เอกสารนโยบาย / รายงานการอบรม / รายชื่อผู้เข้าร่วม' },
 ];
 
 // ── Cyber KPI Scorecard (MOPH v2.1) ──
@@ -5902,12 +5902,13 @@ function renderCtam() {
   document.getElementById('ctam-score').textContent = done + '/' + total;
   document.getElementById('ctam-bar').style.width = (done / total * 100) + '%';
   document.getElementById('ctam-grid').innerHTML = CTAM_ITEMS.map(item =>
-    `<div class="ctam-item ${item.done ? 'done' : 'miss'}" title="${item.note||item.label}">
+    `<div class="ctam-item ${item.done ? 'done' : 'miss'}" title="${esc(item.desc||item.label)}&#10;📎 ${esc(item.evidence||'')}">
       <span class="ctam-icon">${item.icon}</span>
       <div style="min-width:0;flex:1">
         <div style="font-size:.66rem;color:var(--text3)">ข้อที่ ${item.id}</div>
         <div style="font-size:.78rem">${item.label}</div>
-        ${item.note ? `<div style="font-size:.65rem;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.note}</div>` : ''}
+        ${item.note ? `<div style="font-size:.65rem;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.note)}</div>` : (item.desc ? `<div style="font-size:.63rem;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.desc.substring(0,55))}…</div>` : '')}
+        ${item.evidence && !item.note ? `<div style="font-size:.6rem;color:rgba(0,229,255,.5);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 ${esc(item.evidence.substring(0,50))}</div>` : ''}
       </div>
       <span style="margin-left:auto;font-size:.9rem;flex-shrink:0">${item.done ? '✅' : '❌'}</span>
     </div>`
