@@ -873,6 +873,7 @@ select.input{cursor:pointer}
           </div>
           <div id="single-result"></div>
           <div id="osint-links" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+          <div id="ip-geo-box" style="display:none;margin-top:8px;padding:10px 14px;border-radius:8px;background:rgba(0,0,0,.3);border:1px solid var(--card-b);font-size:.76rem;color:var(--text2)"></div>
         </div>
 
         <div id="tab-bulk" class="tab-panel">
@@ -1254,6 +1255,21 @@ select.input{cursor:pointer}
           <div style="font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Training %</div>
           <div class="stat-val" id="sm-training-pct" style="font-size:1.8rem;color:var(--yellow)">—</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Network Topology -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">🗺 Network Topology — Live</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="renderTopology()">↺</button>
+      </div>
+      <div style="position:relative;background:rgba(0,0,0,.3);border-radius:8px;overflow:hidden;border:1px solid var(--card-b)">
+        <svg id="topo-svg" viewBox="0 0 700 320" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:.68rem;color:var(--text3)">
+        <span>🟢 Online</span><span>🔴 Alert</span><span>⚪ Unknown</span>
+        <span style="margin-left:auto">คลิกโหนดเพื่อดูรายละเอียด</span>
       </div>
     </div>
 
@@ -3146,6 +3162,11 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
         </div>
       </div>
     </div>
+    <!-- Feed Source Breakdown -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title" style="margin-bottom:12px">📊 Feed Source Breakdown</div>
+      <div id="feed-breakdown" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px"></div>
+    </div>
   </section>
 
   <!-- Exports -->
@@ -3552,6 +3573,31 @@ function openGrafana(path) {
   window.open(base + '/' + path, '_blank');
 }
 
+async function loadFeedBreakdown() {
+  const el = document.getElementById('feed-breakdown');
+  if (!el) return;
+  try {
+    const info = await fetch(apiBase()+'/info').then(r=>r.json()).catch(()=>({}));
+    const feeds = [
+      {key:'ip',   label:'IP Blacklist',     icon:'🔴', color:'var(--red)'},
+      {key:'domain',label:'Domain Blacklist', icon:'🌐', color:'var(--orange)'},
+      {key:'hash', label:'Hash Blacklist',   icon:'#️⃣',  color:'var(--purple)'},
+    ];
+    el.innerHTML = feeds.map(f=>{
+      const fd=info[f.key]||{};
+      const age=fd.generated_at?Math.floor((Date.now()-new Date(fd.generated_at))/3600000):null;
+      const ageStr=age===null?'—':age<1?'<1h':age<24?age+'h':Math.floor(age/24)+'d';
+      const ageColor=age===null?'var(--text3)':age<48?'var(--green)':age<96?'var(--orange)':'var(--red)';
+      return `<div style="padding:12px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--card-b)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:1.2rem">${f.icon}</span><span style="font-size:.78rem;font-weight:700;color:var(--text1)">${f.label}</span></div>
+        <div style="font-size:1.4rem;font-weight:900;color:${f.color};margin-bottom:4px">${fd.total!=null?fmt(fd.total):'—'}</div>
+        <div style="font-size:.68rem;color:var(--text3)">อัปเดต: <span style="color:${ageColor}">${ageStr} ที่แล้ว</span></div>
+        ${fd.url?`<div style="font-size:.64rem;color:var(--text3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fd.url.replace('https://','').substring(0,40)}</div>`:''}
+      </div>`;
+    }).join('');
+  } catch {}
+}
+
 async function loadFreshnessBar() {
   try {
     const data = await fetch(apiBase() + '/info').then(r => r.json());
@@ -3685,6 +3731,19 @@ function showOsintLinks(value) {
       ];
   el.innerHTML = links.map(([l,u])=>`<a href="${u}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:.68rem;text-decoration:none">${l}</a>`).join('');
 }
+async function enrichGeo(value) {
+  const box = document.getElementById('ip-geo-box');
+  if (!box) return;
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(value)) { box.style.display='none'; return; }
+  box.style.display=''; box.innerHTML='<span style="color:var(--text3)">⏳ ดึงข้อมูล geo...</span>';
+  try {
+    const d = await fetch(`https://ipinfo.io/${value}/json`).then(r=>r.json());
+    const flag = d.country&&d.country.length===2
+      ? String.fromCodePoint(...[...d.country.toUpperCase()].map(c=>0x1F1E6-65+c.charCodeAt(0)))
+      : '🌐';
+    box.innerHTML=`<div style="display:flex;gap:16px;flex-wrap:wrap"><span>${flag} <strong>${d.country||'—'}</strong> ${d.region||''} / ${d.city||'—'}</span><span>📡 ${d.org||'—'}</span>${d.hostname?`<span>🔤 ${esc(d.hostname)}</span>`:''}<span>🌐 ${value}</span></div>`;
+  } catch { box.style.display='none'; }
+}
 
 async function checkOne() {
   const val = document.getElementById('single-val').value.trim();
@@ -3697,6 +3756,7 @@ async function checkOne() {
     const data = await apiFetch(path).then(r => r.json());
     document.getElementById('single-result').innerHTML = renderResult(val, data);
     showOsintLinks(val);
+    enrichGeo(val);
   } catch (e) { toast('Lookup failed: ' + e.message, 'err'); }
   btn.disabled = false; btn.textContent = 'Check';
 }
@@ -5525,6 +5585,40 @@ const KPI_MAX = [
   'Security Policy: IRP+DPO+นโยบาย อนุมัติผู้บริหาร',
 ];
 
+function renderTopology() {
+  const cfg = getCfg();
+  const svg = document.getElementById('topo-svg');
+  if (!svg) return;
+  const fw = cfg.firewallType === 'mikrotik' ? 'MikroTik' : cfg.firewallType === 'cisco' ? 'Cisco' : 'FortiGate';
+  const nodes = [
+    {id:'inet',  x:350, y:30,  label:'Internet',        icon:'🌐', color:'#64748b', r:22},
+    {id:'fw',    x:350, y:95,  label:fw,                icon:'🛡',  color:'#ef4444', r:26},
+    {id:'waf',   x:200, y:95,  label:'WAF/CDN',         icon:'☁',  color:'#f59e0b', r:22},
+    {id:'kong',  x:350, y:175, label:'Kong '+cfg.kongIP, icon:'⚡', color:'#06b6d4', r:24},
+    {id:'wazuh', x:520, y:165, label:'Wazuh SIEM',      icon:'🔍', color:'#8b5cf6', r:22},
+    {id:'misp',  x:170, y:175, label:'MISP TI',         icon:'🕸',  color:'#ec4899', r:22},
+    {id:'app1',  x:250, y:270, label:'Web App',         icon:'🖥',  color:'#10b981', r:20},
+    {id:'app2',  x:350, y:270, label:'API Server',      icon:'⚙',  color:'#10b981', r:20},
+    {id:'app3',  x:450, y:270, label:'Database',        icon:'🗄',  color:'#10b981', r:20},
+    {id:'nas',   x:570, y:270, label:'NAS/Backup',      icon:'💾',  color:'#64748b', r:20},
+  ];
+  const edges = [
+    ['inet','fw'],['inet','waf'],['waf','kong'],['fw','kong'],
+    ['kong','wazuh'],['kong','misp'],['kong','app1'],['kong','app2'],['kong','app3'],['wazuh','nas']
+  ];
+  let html = '';
+  edges.forEach(([a,b]) => {
+    const na = nodes.find(n=>n.id===a), nb = nodes.find(n=>n.id===b);
+    if (!na||!nb) return;
+    html += `<line x1="${na.x}" y1="${na.y}" x2="${nb.x}" y2="${nb.y}" stroke="rgba(0,229,255,.2)" stroke-width="1.5" stroke-dasharray="4 3"><animate attributeName="stroke-dashoffset" from="0" to="-14" dur="2s" repeatCount="indefinite"/></line>`;
+  });
+  nodes.forEach(n => {
+    html += `<g class="topo-node" style="cursor:pointer" onclick="toast('${n.label}','ok')"><circle cx="${n.x}" cy="${n.y}" r="${n.r+4}" fill="${n.color}" opacity=".12"/><circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${n.color}" opacity=".25" stroke="${n.color}" stroke-width="1.5"/><text x="${n.x}" y="${n.y+1}" text-anchor="middle" dominant-baseline="middle" font-size="${n.r*.9}">${n.icon}</text><text x="${n.x}" y="${n.y+n.r+11}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.7)" font-family="monospace">${n.label.substring(0,16)}</text></g>`;
+  });
+  html += `<g opacity=".5"><line x1="80" y1="30" x2="310" y2="75" stroke="var(--red)" stroke-width="1" stroke-dasharray="3 2" opacity=".4"/><polygon points="310,75 300,65 306,78" fill="var(--red)" opacity=".5"/><text x="80" y="25" font-size="9" fill="var(--red)" font-family="monospace" opacity=".6">⚠ Threats</text></g>`;
+  svg.innerHTML = html;
+}
+
 async function loadSocMetrics() {
   try {
     const [stats, info, recent] = await Promise.all([
@@ -5696,10 +5790,11 @@ async function loadSocAlerts() {
   if (!localStorage.getItem(CFG_KEY)) setTimeout(wizardShow, 800);
   await loadStats();
   loadFreshnessBar();
+  loadFeedBreakdown();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
   renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries();
-  updateExecSummary(); loadSocMetrics(); loadDarkWebMonitor(); loadWazuhAlerts();
+  updateExecSummary(); loadSocMetrics(); renderTopology(); loadDarkWebMonitor(); loadWazuhAlerts();
   renderComplianceGap();
   loadSocAlerts();
   loadTicker();
