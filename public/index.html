@@ -1318,6 +1318,78 @@ select.input{cursor:pointer}
       </div>
     </div>
 
+    <!-- Wazuh Recent Alerts -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">🔔 Wazuh Recent Alerts</div>
+        <span id="wazuh-agent-label" style="font-size:.68rem;color:var(--text3)">agent: <span data-cfg="wazuhAgent">WAZUH-AGENT</span></span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="loadWazuhAlerts()">↺</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="openWazuh('/app/discover')">🔗 Wazuh</button>
+      </div>
+      <div id="wazuh-alert-list" style="display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto">
+        <div style="padding:14px;text-align:center;color:var(--text3);font-size:.82rem">
+          กด ↺ เพื่อดึง alerts จาก Wazuh — ต้องตั้งค่า Wazuh IP ใน Settings ก่อน
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="openWazuh('/app/discover#/?_g=(time:(from:now-24h,to:now))')">⚡ 24h Alerts</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="openWazuh('/app/threat-hunting')">🎯 Threat Hunting</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="openWazuh('/app/fim')">📁 FIM</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="openWazuh('/app/sca')">🔍 SCA</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="openWazuh('/app/vulnerability-detector')">🛡 Vuln</button>
+      </div>
+    </div>
+
+    <!-- Firewall Block Log -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">🔥 Firewall Block Log — <span data-cfg="firewallType">FortiGate</span></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="showAddFirewallLog()">+ เพิ่มรายการ</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="exportFirewallLog()">⬇ CSV</button>
+      </div>
+      <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px">บันทึก IP ที่ถูก block จาก FortiGate/iptables/Wazuh Active Response</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:rgba(255,171,0,.06);font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">
+            <th style="padding:6px 10px;text-align:left">วันที่/เวลา</th><th style="padding:6px 10px;text-align:left">IP ที่ถูก Block</th><th style="padding:6px 10px;text-align:left">ประเทศ</th><th style="padding:6px 10px;text-align:left">เหตุผล</th><th style="padding:6px 10px;text-align:left">NCSA?</th><th style="padding:6px 6px"></th>
+          </tr></thead>
+          <tbody id="fw-log-tbody"><tr id="fw-log-empty"><td colspan="6" style="padding:20px;text-align:center;color:var(--text3);font-size:.8rem">ยังไม่มีรายการ</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="fw-log-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+      <div style="background:var(--card-bg);border:1px solid rgba(255,171,0,.3);border-radius:14px;padding:24px;max-width:460px;width:calc(100% - 32px)">
+        <div style="font-size:1rem;font-weight:800;color:var(--orange);margin-bottom:16px">🔥 เพิ่มรายการ Block</div>
+        <input type="hidden" id="fw-edit-idx" value="-1">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="setting-row"><div class="setting-label">IP ที่ถูก Block *</div><input class="input mono" id="fw-ip" placeholder="103.253.72.41"></div>
+          <div class="setting-row"><div class="setting-label">ประเทศ</div><input class="input" id="fw-country" placeholder="CN / TH / US"></div>
+          <div class="setting-row"><div class="setting-label">วันที่/เวลา</div><input class="input" id="fw-date" type="datetime-local"></div>
+          <div class="setting-row"><div class="setting-label">NCSA Blacklisted</div><select class="input" id="fw-ncsa"><option value="yes">✅ ใช่</option><option value="no">❌ ไม่</option><option value="check">⏳ ยังไม่ตรวจ</option></select></div>
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">เหตุผล</div><input class="input" id="fw-reason" placeholder="Wazuh rule 657, wp-admin scan, brute force"></div>
+          <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">หมายเหตุ</div><input class="input" id="fw-note" placeholder="หมายเหตุเพิ่มเติม"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('fw-log-modal').style.display='none'">ยกเลิก</button>
+          <button class="btn btn-primary" onclick="saveFirewallLog()">💾 บันทึก</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOC Shift Handover -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">📋 SOC Shift Handover Report</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="genHandoverReport()">📄 สร้างรายงาน</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="setting-row"><div class="setting-label">เวร</div><select class="input" id="hs-shift"><option value="เช้า">เช้า (08:00–16:00)</option><option value="บ่าย">บ่าย (16:00–00:00)</option><option value="ดึก">ดึก (00:00–08:00)</option></select></div>
+        <div class="setting-row"><div class="setting-label">ผู้รับผิดชอบ</div><input class="input" id="hs-officer" placeholder="ชื่อ IT/SOC Officer"></div>
+        <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">เหตุการณ์สำคัญ</div><textarea class="input" id="hs-events" rows="3" placeholder="เหตุการณ์ที่พบในช่วงเวร เช่น Wazuh alert rule 657, blocked 5 IPs..." style="resize:vertical;font-size:.8rem"></textarea></div>
+        <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">งานค้าง / Pending</div><textarea class="input" id="hs-pending" rows="2" placeholder="งานที่ยังไม่เสร็จ / ต้องส่งต่อ" style="resize:vertical;font-size:.8rem"></textarea></div>
+      </div>
+    </div>
+
     <!-- Cyber KPI Scorecard -->
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -2849,6 +2921,7 @@ const CFG_DEFAULT = {
   training: [],
   sslDomains: [],
   portScans: [],
+  fwLog: [],
   mispUrl: 'https://MISP-SERVER',
   firewallType: 'fortigate',
   firewallIP: 'FIREWALL-IP',
@@ -3666,6 +3739,7 @@ document.addEventListener('keydown', e => {
     const tm=document.getElementById('training-modal');if(tm)tm.style.display='none';
     const sm=document.getElementById('ssl-modal');if(sm)sm.style.display='none';
     const pm=document.getElementById('port-modal');if(pm)pm.style.display='none';
+    const fm=document.getElementById('fw-log-modal');if(fm)fm.style.display='none';
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
@@ -3808,6 +3882,130 @@ function wizardFinish() {
   applyOrgConfig();
   toast(`ตั้งค่า ${cfg.orgName} เรียบร้อย ✓`, 'ok');
 }
+// ── Wazuh Alerts (direct link helper) ──
+function openWazuh(path){const cfg=getCfg();window.open('https://'+cfg.wazuhIP+path,'_blank');}
+async function loadWazuhAlerts(){
+  const el=document.getElementById('wazuh-alert-list');if(!el)return;
+  el.innerHTML='<div style="padding:10px;text-align:center;color:var(--text3);font-size:.8rem">⏳ กำลังดึง alerts...</div>';
+  try{
+    const cfg=getCfg();
+    // Try Wazuh indexer API (port 9200) — CORS likely blocked; show helpful message
+    const r=await fetch(`https://${cfg.wazuhIP}:9200/wazuh-alerts-*/_search`,{
+      method:'POST',signal:AbortSignal.timeout(5000),
+      headers:{'Content-Type':'application/json','Authorization':'Basic '+btoa('admin:SecretPassword')},
+      body:JSON.stringify({size:10,sort:[{'timestamp':{order:'desc'}}],query:{range:{timestamp:{gte:'now-24h'}}}})
+    });
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    const hits=(d.hits&&d.hits.hits)||[];
+    if(!hits.length){el.innerHTML='<div style="padding:10px;text-align:center;color:var(--text3);font-size:.8rem">ไม่มี alert ใน 24 ชั่วโมงที่ผ่านมา</div>';return;}
+    el.innerHTML=hits.map(h=>{
+      const s=h._source||{};const lvl=s.rule&&s.rule.level||0;
+      const color=lvl>=12?'var(--red)':lvl>=8?'var(--orange)':lvl>=5?'var(--yellow)':'var(--green)';
+      return `<div style="padding:7px 10px;border-radius:6px;border:1px solid var(--card-b);font-size:.73rem;display:flex;gap:8px;align-items:flex-start">
+        <span style="font-weight:800;color:${color};min-width:24px">L${lvl}</span>
+        <div><div style="color:var(--text1)">${esc((s.rule&&s.rule.description)||'—')}</div>
+        <div style="color:var(--text3);font-size:.65rem">${s.timestamp?new Date(s.timestamp).toLocaleString('th-TH'):''} · agent: ${esc((s.agent&&s.agent.name)||'—')}</div></div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    const cfg=getCfg();
+    el.innerHTML=`<div style="padding:10px 12px;border-radius:8px;background:rgba(255,171,0,.06);border:1px solid rgba(255,171,0,.2);font-size:.76rem">
+      <div style="color:var(--orange);font-weight:700">⚠ ไม่สามารถเชื่อมต่อ Wazuh โดยตรงได้ (CORS/Auth)</div>
+      <div style="color:var(--text2);margin-top:4px">Wazuh Dashboard: <a href="https://${cfg.wazuhIP}" target="_blank" style="color:var(--cyan)">https://${cfg.wazuhIP}</a></div>
+      <div style="color:var(--text3);font-size:.68rem;margin-top:4px">เปิด Wazuh → Discover → filter agent.name: <strong>${cfg.wazuhAgent||'agent'}</strong></div>
+    </div>`;
+  }
+}
+
+// ── Firewall Block Log ──
+function renderFirewallLog(){
+  const cfg=getCfg(),list=Array.isArray(cfg.fwLog)?cfg.fwLog:[];
+  const tbody=document.getElementById('fw-log-tbody');if(!tbody)return;
+  const empty=document.getElementById('fw-log-empty');
+  if(!list.length){empty&&(empty.style.display='');tbody.querySelectorAll('tr:not(#fw-log-empty)').forEach(r=>r.remove());return;}
+  empty&&(empty.style.display='none');tbody.querySelectorAll('tr:not(#fw-log-empty)').forEach(r=>r.remove());
+  list.slice().reverse().forEach((f,ri)=>{
+    const i=list.length-1-ri;
+    const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--card-b);font-size:.73rem';
+    const ncsa_color=f.ncsa==='yes'?'var(--red)':f.ncsa==='no'?'var(--green)':'var(--text3)';
+    const ncsa_label=f.ncsa==='yes'?'🔴 ใช่':f.ncsa==='no'?'🟢 ไม่':f.ncsa==='check'?'⏳ ยังไม่ตรวจ':'—';
+    tr.innerHTML=`<td style="padding:6px 10px;color:var(--text3);font-size:.68rem;white-space:nowrap">${f.date?f.date.replace('T',' ').slice(0,16):'—'}</td>
+      <td style="padding:6px 10px;font-family:monospace;font-weight:700;color:var(--orange)">${esc(f.ip||'—')}</td>
+      <td style="padding:6px 10px">${esc(f.country||'—')}</td>
+      <td style="padding:6px 10px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.reason||'')}">${esc(f.reason||'—')}</td>
+      <td style="padding:6px 10px;color:${ncsa_color};font-weight:600">${ncsa_label}</td>
+      <td style="padding:6px 4px;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" style="font-size:.62rem;padding:1px 6px" onclick="editFirewallLog(${i})">✏</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.62rem;padding:1px 6px;color:var(--red)" onclick="deleteFirewallLog(${i})">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+function showAddFirewallLog(){
+  document.getElementById('fw-edit-idx').value='-1';
+  ['fw-ip','fw-country','fw-reason','fw-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const fd=document.getElementById('fw-date');if(fd)fd.value=new Date().toISOString().slice(0,16);
+  const fn=document.getElementById('fw-ncsa');if(fn)fn.value='check';
+  document.getElementById('fw-log-modal').style.display='flex';
+}
+function editFirewallLog(idx){
+  const cfg=getCfg(),f=(cfg.fwLog||[])[idx];if(!f)return;showAddFirewallLog();
+  document.getElementById('fw-edit-idx').value=idx;
+  document.getElementById('fw-ip').value=f.ip||'';document.getElementById('fw-country').value=f.country||'';
+  document.getElementById('fw-date').value=f.date||'';document.getElementById('fw-reason').value=f.reason||'';
+  document.getElementById('fw-ncsa').value=f.ncsa||'check';document.getElementById('fw-note').value=f.note||'';
+}
+function saveFirewallLog(){
+  const ip=document.getElementById('fw-ip').value.trim();if(!ip){toast('กรอก IP ก่อน','err');return;}
+  const f={ip,country:document.getElementById('fw-country').value.trim(),date:document.getElementById('fw-date').value,reason:document.getElementById('fw-reason').value.trim(),ncsa:document.getElementById('fw-ncsa').value,note:document.getElementById('fw-note').value.trim()};
+  const cfg=getCfg();if(!Array.isArray(cfg.fwLog))cfg.fwLog=[];
+  const idx=parseInt(document.getElementById('fw-edit-idx').value);
+  if(idx>=0)cfg.fwLog[idx]=f;else cfg.fwLog.push(f);
+  saveCfg(cfg);document.getElementById('fw-log-modal').style.display='none';renderFirewallLog();toast('บันทึกแล้ว','ok');
+}
+function deleteFirewallLog(idx){const cfg=getCfg();(cfg.fwLog||[]).splice(idx,1);saveCfg(cfg);renderFirewallLog();toast('ลบแล้ว','ok');}
+function exportFirewallLog(){
+  const cfg=getCfg(),v=Array.isArray(cfg.fwLog)?cfg.fwLog:[];if(!v.length){toast('ไม่มีข้อมูล','err');return;}
+  const hdr='วันที่,IP,ประเทศ,เหตุผล,NCSA,หมายเหตุ';
+  const rows=v.map(f=>[f.date,f.ip,f.country,f.reason,f.ncsa,f.note].map(x=>`"${String(x||'').replace(/"/g,'""')}"`).join(','));
+  const blob=new Blob(['﻿'+hdr+'\n'+rows.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='firewall-block-log.csv';a.click();
+}
+
+// ── SOC Shift Handover ──
+function genHandoverReport(){
+  const cfg=getCfg();
+  const shift=document.getElementById('hs-shift')?.value||'';
+  const officer=document.getElementById('hs-officer')?.value||'';
+  const events=document.getElementById('hs-events')?.value||'';
+  const pending=document.getElementById('hs-pending')?.value||'';
+  const now=new Date().toLocaleString('th-TH',{dateStyle:'full',timeStyle:'short'});
+  const vulns=(cfg.vulns||[]).filter(v=>v.status==='open'||v.status==='inprogress');
+  const fwCount=(cfg.fwLog||[]).length;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>SOC Shift Handover</title>
+  <style>body{font-family:TH Sarabun New,sans-serif;padding:30px;max-width:800px;margin:0 auto;font-size:14pt}
+  h1{color:#1e3a5f;border-bottom:3px solid #1e3a5f;padding-bottom:8px}h2{color:#c0392b;font-size:13pt}
+  table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}
+  th{background:#f0f0f0}.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-weight:bold}
+  .red{background:#ffe0e0;color:#c0392b}.green{background:#e0ffe0;color:#1a7a1a}.org{color:#666;font-size:11pt}</style>
+  </head><body>
+  <h1>SOC Shift Handover Report</h1>
+  <p class="org"><strong>${esc(cfg.orgName||'หน่วยงาน')}</strong> ${cfg.department?'— '+esc(cfg.department):''}</p>
+  <table><tr><td><strong>เวร</strong></td><td>${esc(shift)}</td><td><strong>ผู้รับผิดชอบ</strong></td><td>${esc(officer)}</td></tr>
+  <tr><td><strong>วันที่/เวลา</strong></td><td colspan="3">${now}</td></tr></table>
+  <h2>เหตุการณ์ในช่วงเวร</h2><p>${esc(events||'ไม่มีเหตุการณ์พิเศษ').replace(/\n/g,'<br>')}</p>
+  <h2>ช่องโหว่ที่ยังเปิดอยู่ (${vulns.length} รายการ)</h2>
+  ${vulns.length?`<table><tr><th>CVE</th><th>ระบบ</th><th>Severity</th><th>สถานะ</th><th>กำหนด Patch</th></tr>
+  ${vulns.map(v=>`<tr><td>${esc(v.cve)}</td><td>${esc(v.asset)}</td><td>${esc(v.severity?.toUpperCase())}</td><td>${esc(v.status)}</td><td>${esc(v.due||'—')}</td></tr>`).join('')}</table>`:'<p>ไม่มีช่องโหว่ค้างอยู่</p>'}
+  <h2>Firewall Block Log (${fwCount} รายการทั้งหมด)</h2>
+  <p>รายการ block ทั้งหมด: ${fwCount} รายการ — ดู dashboard สำหรับรายละเอียด</p>
+  <h2>งานค้าง / Pending</h2><p>${esc(pending||'ไม่มี').replace(/\n/g,'<br>')}</p>
+  <hr><p style="font-size:10pt;color:#999">สร้างโดย NCSA Blacklist Dashboard · ${now}</p>
+  </body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+}
+
 // ── SSL Cert Monitor ──
 function getSslDomains(){const cfg=getCfg();return Array.isArray(cfg.sslDomains)?cfg.sslDomains:[];}
 function showAddSslDomain(){document.getElementById('ssl-modal').style.display='flex';document.getElementById('ssl-domain-input').value='';}
@@ -4637,8 +4835,8 @@ async function loadSocAlerts() {
   loadFreshnessBar();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
-  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans();
-  loadSocMetrics(); loadDarkWebMonitor();
+  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog();
+  loadSocMetrics(); loadDarkWebMonitor(); loadWazuhAlerts();
   renderComplianceGap();
   loadSocAlerts();
   loadTicker();
