@@ -3395,6 +3395,42 @@ function closeSettings() {
   document.getElementById('settings-drawer').classList.remove('open');
   document.getElementById('overlay').classList.remove('on');
 }
+const TOPO_ICONS = {firewall:'🛡',router:'📡',switch:'🔌',server:'🖥',database:'🗄',cloud:'☁',internet:'🌐',waf:'🛡',siem:'🔍',misp:'🕸',nas:'💾',ap:'📶',iot:'📟',other:'⚙'};
+function renderTopoNodeList() {
+  const cfg = getCfg();
+  const el = document.getElementById('topo-node-list');
+  if (!el) return;
+  const nodes = cfg.topoNodes||[];
+  if (!nodes.length) { el.innerHTML='<div style="font-size:.72rem;color:var(--text3);padding:6px">ไม่มี custom node — ใช้ค่าเริ่มต้นตามประเภทองค์กร</div>'; return; }
+  el.innerHTML = nodes.map((n,i)=>`<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:rgba(255,255,255,.03);border-radius:6px;border:1px solid var(--card-b)">
+    <span style="font-size:1rem">${TOPO_ICONS[n.type]||'⚙'}</span>
+    <span style="font-size:.75rem;flex:1;color:var(--text1)">${esc(n.label||n.id)}</span>
+    <span style="font-size:.68rem;color:var(--text3);font-family:monospace">${esc(n.ip||'')}</span>
+    <button class="btn btn-ghost btn-sm" style="font-size:.6rem;padding:2px 6px;color:var(--red)" onclick="deleteTopoNode(${i})">✕</button>
+  </div>`).join('');
+}
+function addTopoNode() {
+  const label = prompt('ชื่อ Node (เช่น FortiGate, HIS Server, Switch-Core):');
+  if (!label) return;
+  const type = prompt('ประเภท: firewall/router/switch/server/database/cloud/nas/siem/waf/ap/iot/other','server')||'other';
+  const ip = prompt('IP Address (ถ้ามี):')||'';
+  const cfg = getCfg();
+  cfg.topoNodes = cfg.topoNodes||[];
+  const id = 'node_'+Date.now();
+  const colors = ['#ef4444','#06b6d4','#10b981','#8b5cf6','#f59e0b'];
+  cfg.topoNodes.push({id, label, type, ip, x:100+Math.random()*500, y:100+Math.random()*200, color:colors[Math.floor(Math.random()*colors.length)], r:22, icon:TOPO_ICONS[type]||'⚙'});
+  saveCfg(cfg); renderTopoNodeList(); toast('เพิ่ม node: '+label,'ok');
+}
+function deleteTopoNode(i) {
+  const cfg = getCfg();
+  cfg.topoNodes = (cfg.topoNodes||[]).filter((_,idx)=>idx!==i);
+  saveCfg(cfg); renderTopoNodeList();
+}
+function clearTopoNodes() {
+  if (!confirm('ล้าง custom nodes ทั้งหมด? จะใช้ค่าเริ่มต้นตามประเภทองค์กร')) return;
+  const cfg = getCfg(); cfg.topoNodes=[]; cfg.topoEdges=[]; saveCfg(cfg);
+  renderTopoNodeList(); toast('ล้าง nodes — ใช้ค่าเริ่มต้น','ok');
+}
 function saveSettings() {
   localStorage.setItem('api_url', document.getElementById('s-api-url').value.trim());
   localStorage.setItem('metrics_token', document.getElementById('s-metrics-token').value.trim());
@@ -3540,6 +3576,12 @@ function applyOrgConfig() {
     const key = el.dataset.cfg;
     const val = cfg[key];
     if (val && val !== CFG_DEFAULT[key]) el.textContent = val;
+  });
+
+  // Org type badge
+  const orgTypeMap = {provincial_health:'สสจ.',district_health:'สสอ.',hospital_m:'รพ.ทั่วไป',hospital_s:'รพ.ชุมชน',local_gov:'อบจ./อบต.',school:'โรงเรียน',university:'มหาวิทยาลัย',ministry:'กระทรวง/กรม',private:'เอกชน',other:'องค์กร'};
+  document.querySelectorAll('[data-cfg="orgType"]').forEach(el => {
+    el.textContent = orgTypeMap[cfg.orgType||'provincial_health']||cfg.orgType||'';
   });
 
   // Patch static code blocks (pre tags with WAZUH-SERVER / MISP-SERVER / etc.)
@@ -5653,23 +5695,29 @@ function renderTopology() {
   const cfg = getCfg();
   const svg = document.getElementById('topo-svg');
   if (!svg) return;
-  const fw = cfg.firewallType === 'mikrotik' ? 'MikroTik' : cfg.firewallType === 'cisco' ? 'Cisco' : 'FortiGate';
-  const nodes = [
-    {id:'inet',  x:350, y:30,  label:'Internet',        icon:'🌐', color:'#64748b', r:22},
-    {id:'fw',    x:350, y:95,  label:fw,                icon:'🛡',  color:'#ef4444', r:26},
-    {id:'waf',   x:200, y:95,  label:'WAF/CDN',         icon:'☁',  color:'#f59e0b', r:22},
-    {id:'kong',  x:350, y:175, label:'Kong '+cfg.kongIP, icon:'⚡', color:'#06b6d4', r:24},
-    {id:'wazuh', x:520, y:165, label:'Wazuh SIEM',      icon:'🔍', color:'#8b5cf6', r:22},
-    {id:'misp',  x:170, y:175, label:'MISP TI',         icon:'🕸',  color:'#ec4899', r:22},
-    {id:'app1',  x:250, y:270, label:'Web App',         icon:'🖥',  color:'#10b981', r:20},
-    {id:'app2',  x:350, y:270, label:'API Server',      icon:'⚙',  color:'#10b981', r:20},
-    {id:'app3',  x:450, y:270, label:'Database',        icon:'🗄',  color:'#10b981', r:20},
-    {id:'nas',   x:570, y:270, label:'NAS/Backup',      icon:'💾',  color:'#64748b', r:20},
-  ];
-  const edges = [
-    ['inet','fw'],['inet','waf'],['waf','kong'],['fw','kong'],
-    ['kong','wazuh'],['kong','misp'],['kong','app1'],['kong','app2'],['kong','app3'],['wazuh','nas']
-  ];
+  const fw = {fortigate:'FortiGate',mikrotik:'MikroTik',cisco:'Cisco',pfsense:'pfSense',opnsense:'OPNsense'}[cfg.firewallType]||'Firewall';
+  const siemLabel = {wazuh:'Wazuh SIEM',splunk:'Splunk',elastic:'Elastic SIEM',fortisiem:'FortiSIEM',graylog:'Graylog',none:'Log Server'}[cfg.siemType||'wazuh']||'SIEM';
+  const orgType = cfg.orgType || 'provincial_health';
+  let nodes, edges;
+  if (cfg.topoNodes && cfg.topoNodes.length > 0) {
+    nodes = cfg.topoNodes;
+    edges = cfg.topoEdges || [];
+  } else {
+    const appLabel = {provincial_health:'สสจ. Web',hospital_m:'HIS/EMR',hospital_s:'HIS',local_gov:'e-Service',school:'PSIS',university:'MIS',ministry:'Gov Portal',private:'Web App'}[orgType]||'Web App';
+    nodes = [
+      {id:'inet', x:350,y:30,  label:'Internet',           icon:'🌐',color:'#64748b',r:22},
+      {id:'fw',   x:350,y:95,  label:fw,                   icon:'🛡', color:'#ef4444',r:26},
+      {id:'waf',  x:200,y:95,  label:'WAF/CDN',            icon:'☁', color:'#f59e0b',r:22},
+      {id:'kong', x:350,y:175, label:'API GW '+cfg.kongIP, icon:'⚡',color:'#06b6d4',r:24},
+      {id:'siem', x:520,y:165, label:siemLabel,            icon:'🔍',color:'#8b5cf6',r:22},
+      {id:'misp', x:170,y:175, label:'Threat Intel',       icon:'🕸', color:'#ec4899',r:22},
+      {id:'app1', x:250,y:270, label:appLabel,             icon:'🖥', color:'#10b981',r:20},
+      {id:'app2', x:350,y:270, label:'API Server',         icon:'⚙', color:'#10b981',r:20},
+      {id:'app3', x:450,y:270, label:'Database',           icon:'🗄', color:'#10b981',r:20},
+      {id:'nas',  x:570,y:270, label:'NAS/Backup',         icon:'💾',color:'#64748b',r:20},
+    ];
+    edges = [['inet','fw'],['inet','waf'],['waf','kong'],['fw','kong'],['kong','siem'],['kong','misp'],['kong','app1'],['kong','app2'],['kong','app3'],['siem','nas']];
+  }
   let html = '';
   edges.forEach(([a,b]) => {
     const na = nodes.find(n=>n.id===a), nb = nodes.find(n=>n.id===b);
