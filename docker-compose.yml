@@ -55,6 +55,8 @@ services:
     depends_on:
       ncsa-blacklist:
         condition: service_healthy
+    healthcheck:
+      disable: true
     restart: unless-stopped
 
 volumes:
