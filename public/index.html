@@ -1328,6 +1328,55 @@ select.input{cursor:pointer}
     </div>
   </div>
 
+  <!-- BCP / Drill Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">🎯 BCP / Cyber Drill Tracker — CTAM+ ข้อ 15</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto;font-size:.7rem" onclick="showAddDrill()">+ บันทึก</button>
+    </div>
+    <div style="margin-bottom:12px;padding:10px;background:rgba(0,229,255,.05);border:1px solid rgba(0,229,255,.15);border-radius:8px;font-size:.72rem;color:var(--text2)">
+      CTAM+ ข้อ 15 กำหนดให้ซ้อมแผนรับมือ <strong style="color:var(--cyan)">อย่างน้อย 1 ครั้ง/ปี</strong> ครอบคลุม BCP, DRP และ IR Playbook
+    </div>
+    <div id="drill-list" style="display:flex;flex-direction:column;gap:8px"><div class="empty">ยังไม่มีบันทึกการซ้อม</div></div>
+  </div>
+
+  <!-- Drill Modal -->
+  <div id="drill-modal" style="display:none;position:fixed;inset:0;z-index:9002;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:22px;max-width:440px;width:calc(100% - 32px)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+        <strong>บันทึกการซ้อมแผน</strong>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('drill-modal').style.display='none'">✕</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ประเภทการซ้อม</label>
+          <select class="input" id="dr-type" style="width:100%;margin-top:4px">
+            <option value="tabletop">🪑 Tabletop Exercise</option>
+            <option value="functional">⚙ Functional Drill</option>
+            <option value="fullscale">🚨 Full-Scale Exercise</option>
+            <option value="bcp">📋 BCP Test</option>
+            <option value="drp">💾 DRP / Restore Test</option>
+            <option value="red">🔴 Red Team Exercise</option>
+          </select>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">วันที่ซ้อม</label><input class="input" id="dr-date" type="date" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">จำนวนผู้เข้าร่วม</label><input class="input" id="dr-participants" type="number" min="1" placeholder="เช่น 15" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">สถานการณ์จำลอง</label><input class="input" id="dr-scenario" placeholder="เช่น Ransomware โจมตีระบบ HIS" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ผลการซ้อม / บทเรียน</label><textarea class="input" id="dr-result" rows="2" placeholder="สรุปผล จุดอ่อนที่พบ ข้อเสนอปรับปรุง" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ผลการประเมิน</label>
+          <select class="input" id="dr-grade" style="width:100%;margin-top:4px">
+            <option value="pass">✅ ผ่าน</option>
+            <option value="partial">⚠ ผ่านบางส่วน</option>
+            <option value="fail">❌ ไม่ผ่าน</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('drill-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveDrill()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   </section>
 
   <!-- SOC -->
@@ -6339,6 +6388,74 @@ async function loadSocAlerts() {
   } catch { document.getElementById('soc-alerts').innerHTML = '<div class="empty">Failed to load</div>'; }
 }
 
+// ── BCP / Drill Tracker ──
+const DRILL_KEY='ncsa_drills';
+const DR_TYPE_ICON={tabletop:'🪑',functional:'⚙',fullscale:'🚨',bcp:'📋',drp:'💾',red:'🔴'};
+const DR_GRADE_ICON={pass:'✅',partial:'⚠',fail:'❌'};
+
+function getDrills(){try{return JSON.parse(localStorage.getItem(DRILL_KEY)||'[]');}catch{return[];}}
+function saveDrills(arr){localStorage.setItem(DRILL_KEY,JSON.stringify(arr));}
+
+function showAddDrill(){
+  document.getElementById('dr-date').value=new Date().toISOString().slice(0,10);
+  ['dr-participants','dr-scenario','dr-result'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('dr-type').value='tabletop';
+  document.getElementById('dr-grade').value='pass';
+  document.getElementById('drill-modal').style.display='flex';
+}
+
+function saveDrill(){
+  const date=document.getElementById('dr-date').value;
+  const scenario=document.getElementById('dr-scenario').value.trim();
+  if(!scenario){toast('กรุณากรอกสถานการณ์จำลอง','warn');return;}
+  const arr=getDrills();
+  arr.unshift({
+    id:Date.now(),
+    type:document.getElementById('dr-type').value,
+    date,
+    participants:parseInt(document.getElementById('dr-participants').value)||0,
+    scenario,
+    result:document.getElementById('dr-result').value.trim(),
+    grade:document.getElementById('dr-grade').value,
+    created:new Date().toISOString()
+  });
+  saveDrills(arr);
+  document.getElementById('drill-modal').style.display='none';
+  renderDrillList();
+  toast('บันทึกการซ้อมแล้ว','ok');
+}
+
+function deleteDrill(id){
+  if(!confirm('ลบบันทึกนี้?'))return;
+  saveDrills(getDrills().filter(d=>d.id!==id));
+  renderDrillList(); toast('ลบแล้ว','ok');
+}
+
+function renderDrillList(){
+  const el=document.getElementById('drill-list'); if(!el)return;
+  const arr=getDrills();
+  if(!arr.length){el.innerHTML='<div class="empty">ยังไม่มีบันทึกการซ้อม</div>';return;}
+  const thisYear=new Date().getFullYear();
+  const yearDrills=arr.filter(d=>new Date(d.date).getFullYear()===thisYear);
+  const ctamOk=yearDrills.length>=1;
+  el.innerHTML=`<div style="margin-bottom:8px;padding:8px 12px;background:${ctamOk?'rgba(0,230,118,.08)':'rgba(250,204,21,.08)'};border:1px solid ${ctamOk?'rgba(0,230,118,.25)':'rgba(250,204,21,.25)'};border-radius:8px;font-size:.72rem">
+    <span style="color:${ctamOk?'var(--green)':'var(--yellow)'}">${ctamOk?'✅':'⚠'}</span> ปีนี้ซ้อมแล้ว <strong>${yearDrills.length} ครั้ง</strong> — CTAM+ ข้อ 15: <span style="color:${ctamOk?'var(--green)':'var(--yellow)'}">${ctamOk?'ผ่าน':'ยังไม่ผ่าน (ต้องการอย่างน้อย 1 ครั้ง)'}</span>
+  </div>` + arr.map(d=>`
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--card-b);border-radius:8px">
+      <span style="font-size:1.2rem;flex-shrink:0;margin-top:2px">${DR_TYPE_ICON[d.type]||'📋'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <strong style="font-size:.8rem;color:var(--text1)">${esc(d.scenario)}</strong>
+          <span style="font-size:.7rem">${DR_GRADE_ICON[d.grade]||''}</span>
+          ${d.participants?`<span style="font-size:.65rem;color:var(--text3)">👥 ${d.participants} คน</span>`:''}
+          <span style="margin-left:auto;font-size:.65rem;color:var(--text3)">${d.date||''}</span>
+        </div>
+        ${d.result?`<div style="font-size:.7rem;color:var(--text3);margin-top:4px">💡 ${esc(d.result)}</div>`:''}
+      </div>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:.65rem;flex-shrink:0" onclick="deleteDrill(${d.id})">🗑</button>
+    </div>`).join('');
+}
+
 // ── Threat Intel Summary ──
 async function loadThreatIntelSummary(){
   // Countries
@@ -6757,7 +6874,7 @@ function renderThreatActors(){
   updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
-  renderIncidentTimeline();
+  renderIncidentTimeline(); renderDrillList();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
@@ -6779,6 +6896,8 @@ function renderThreatActors(){
       if (rm) rm.style.display = 'none';
       const im = document.getElementById('incident-modal');
       if (im) im.style.display = 'none';
+      const dm = document.getElementById('drill-modal');
+      if (dm) dm.style.display = 'none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
