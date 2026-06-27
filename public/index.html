@@ -50,6 +50,10 @@ body{
   animation:scanline 10s linear infinite;
 }
 @keyframes scanline{0%{top:-2px}100%{top:100vh}}
+@keyframes gradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes slide-in-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes blink-cursor{0%,100%{opacity:1}50%{opacity:0}}
 
 a{color:var(--cyan);text-decoration:none}
 button{cursor:pointer;border:none;font-family:inherit}
@@ -85,7 +89,7 @@ input,textarea,select{font-family:inherit;color:var(--text);background:transpare
   font-size:.84rem;font-weight:500;transition:var(--tr);white-space:nowrap;
 }
 .nav-links a:hover{color:var(--cyan);background:rgba(0,229,255,.06)}
-.nav-links a.active{color:var(--cyan);background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.2)}
+.nav-links a.active{color:var(--cyan);background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.3);box-shadow:0 0 12px rgba(0,229,255,.25)}
 .nav-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
 .btn-icon{
   width:36px;height:36px;border-radius:var(--rs);
@@ -111,7 +115,9 @@ input,textarea,select{font-family:inherit;color:var(--text);background:transpare
   border-radius:var(--r);padding:20px;
   backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
   transition:var(--tr);position:relative;overflow:hidden;
+  animation:slide-in-up .4s ease both;
 }
+.card:nth-child(2){animation-delay:.05s}.card:nth-child(3){animation-delay:.1s}.card:nth-child(4){animation-delay:.15s}.card:nth-child(5){animation-delay:.2s}
 .card::before{
   content:'';position:absolute;inset:0;border-radius:var(--r);opacity:0;transition:opacity .3s;
   background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(0,229,255,.06) 0,transparent 60%);
@@ -150,8 +156,10 @@ input,textarea,select{font-family:inherit;color:var(--text);background:transpare
 .stat-card:hover{
   transform:translateY(-3px);
   border-color:color-mix(in srgb,var(--accent,var(--cyan)) 40%,transparent);
-  box-shadow:0 0 30px color-mix(in srgb,var(--accent,var(--cyan)) 20%,transparent),var(--sh);
+  box-shadow:0 0 30px color-mix(in srgb,var(--accent,var(--cyan)) 20%,transparent),var(--sh),0 0 20px rgba(0,229,255,.12);
+  animation:float 3s ease-in-out infinite;
 }
+.stat-card:hover .stat-val{text-shadow:0 0 20px currentColor}
 .stat-label{font-size:.72rem;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
 .stat-val{
   font-size:2.8rem;font-weight:900;letter-spacing:-.05em;line-height:1;
@@ -168,11 +176,13 @@ input,textarea,select{font-family:inherit;color:var(--text);background:transpare
 /* ── Hero title ── */
 .hero-title{
   font-size:1.6rem;font-weight:900;letter-spacing:-.04em;
-  background:linear-gradient(135deg,var(--cyan) 0%,var(--purple) 60%,var(--pink) 100%);
+  background:linear-gradient(270deg,var(--cyan),var(--purple),var(--pink),var(--cyan));
+  background-size:600% 600%;
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
   display:inline-block;
+  animation:gradShift 6s ease infinite;
 }
-.hero-sub{font-size:.82rem;color:var(--text3);margin-top:4px;font-weight:500}
+.hero-sub{font-size:.82rem;color:var(--text3);margin-top:4px;font-weight:500;letter-spacing:.04em}
 
 /* ── Feed health ── */
 .feed-health{display:flex;flex-direction:column;gap:11px}
@@ -1771,6 +1781,7 @@ select.input{cursor:pointer}
         </div>
         <div class="card">
           <div class="card-title">🔔 Recent IOC Alerts</div>
+          <canvas id="soc-hourly-chart" height="60" style="width:100%;margin-bottom:10px;border-radius:4px"></canvas>
           <div id="soc-alerts" style="display:flex;flex-direction:column;gap:7px;max-height:180px;overflow-y:auto">
             <div class="empty">Loading…</div>
           </div>
@@ -5547,10 +5558,46 @@ function renderCtam() {
   ).join('');
 }
 
+// ── SOC Hourly Threat Chart ──
+function renderHourlyChart(alerts) {
+  const canvas = document.getElementById('soc-hourly-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * (window.devicePixelRatio||1);
+  canvas.height = 60 * (window.devicePixelRatio||1);
+  ctx.scale(window.devicePixelRatio||1, window.devicePixelRatio||1);
+  const W = canvas.offsetWidth, H = 60;
+  ctx.clearRect(0,0,W,H);
+  const now = new Date();
+  const buckets = new Array(24).fill(0);
+  alerts.forEach(a => {
+    if (!a.added_at) return;
+    const diff = (now - new Date(a.added_at)) / 3600000;
+    if (diff < 24) buckets[Math.floor(diff)]++;
+  });
+  const max = Math.max(...buckets, 1);
+  const bw = W / 24;
+  buckets.forEach((v, i) => {
+    const x = (23 - i) * bw;
+    const h = Math.max(2, (v / max) * (H - 10));
+    const alpha = v > 0 ? 0.7 : 0.15;
+    const color = v > max * 0.7 ? `rgba(255,23,68,${alpha})` : v > max * 0.3 ? `rgba(255,171,0,${alpha})` : `rgba(0,229,255,${alpha})`;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x+1, H-h, bw-2, h, 2); else ctx.rect(x+1, H-h, bw-2, h);
+    ctx.fill();
+  });
+  ctx.fillStyle = 'rgba(255,255,255,.3)';
+  ctx.font = '9px monospace';
+  ctx.fillText('24h ago', 2, H-2);
+  ctx.fillText('now', W-28, H-2);
+}
+
 // ── SOC Alerts (from recent changes) ──
 async function loadSocAlerts() {
   try {
     const data = await apiFetch('/recent').then(r => r.json());
+    renderHourlyChart(Array.isArray(data) ? data : []);
     const el = document.getElementById('soc-alerts');
     if (!Array.isArray(data) || !data.length) {
       el.innerHTML = '<div class="empty">No recent alerts</div>'; return;
