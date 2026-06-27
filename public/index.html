@@ -713,6 +713,55 @@ select.input{cursor:pointer}
     </div>
 
     <div style="height:1px;background:rgba(0,229,255,.1);margin:8px 0"></div>
+    <div style="font-size:.68rem;font-weight:800;color:var(--cyan);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">ประเภทองค์กร &amp; Security Stack</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:.72rem;color:var(--text3);display:block;margin-bottom:4px">ประเภทองค์กร</label>
+      <select class="input" id="s-org-type" style="width:100%">
+        <option value="provincial_health">สสจ. (สำนักงานสาธารณสุขจังหวัด)</option>
+        <option value="district_health">สสอ. (สำนักงานสาธารณสุขอำเภอ)</option>
+        <option value="hospital_m">รพ.ศูนย์/รพ.ทั่วไป (M1-M2)</option>
+        <option value="hospital_s">รพ.ชุมชน (S/F)</option>
+        <option value="local_gov">อบจ./อบต./เทศบาล</option>
+        <option value="school">โรงเรียน/สพฐ.</option>
+        <option value="university">มหาวิทยาลัย</option>
+        <option value="ministry">กระทรวง/กรม</option>
+        <option value="private">องค์กรเอกชน</option>
+        <option value="other">อื่นๆ</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <label style="font-size:.72rem;color:var(--text3);display:block;margin-bottom:4px">SIEM / Log Management</label>
+        <select class="input" id="s-siem-type" style="width:100%">
+          <option value="wazuh">Wazuh</option>
+          <option value="splunk">Splunk</option>
+          <option value="elastic">Elastic SIEM</option>
+          <option value="fortisiem">FortiSIEM</option>
+          <option value="graylog">Graylog</option>
+          <option value="none">ไม่มี</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:.72rem;color:var(--text3);display:block;margin-bottom:4px">EDR / Endpoint</label>
+        <select class="input" id="s-edr-type" style="width:100%">
+          <option value="crowdstrike">CrowdStrike</option>
+          <option value="defender">Microsoft Defender</option>
+          <option value="sentinelone">SentinelOne</option>
+          <option value="kaspersky">Kaspersky</option>
+          <option value="trendmicro">Trend Micro</option>
+          <option value="none">ไม่มี</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <label style="font-size:.72rem;color:var(--text3)">Network Nodes (ปล่อยว่าง = ค่าเริ่มต้นตามประเภทองค์กร)</label>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.65rem" onclick="addTopoNode()">+ เพิ่ม</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.65rem;color:var(--red)" onclick="clearTopoNodes()">ล้าง</button>
+      </div>
+      <div id="topo-node-list" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+    </div>
+    <div style="height:1px;background:rgba(0,229,255,.1);margin:8px 0"></div>
     <div style="font-size:.68rem;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.12em;margin-bottom:2px">Security Tools</div>
 
     <div class="setting-row">
@@ -3257,6 +3306,11 @@ const CFG_DEFAULT = {
   subnet4: '10.x.32.x',
   publicIP: 'PUBLIC-IP',
   ctamDone: new Array(17).fill(false),
+  orgType: 'provincial_health',
+  siemType: 'wazuh',
+  edrType: 'crowdstrike',
+  topoNodes: [],
+  topoEdges: [],
 };
 function getCfg() {
   try {
@@ -3373,6 +3427,9 @@ function saveAllSettings() {
   cfg.subnet2     = document.getElementById('s-sub2').value.trim()        || cfg.subnet2;
   cfg.subnet3     = document.getElementById('s-sub3').value.trim()        || cfg.subnet3;
   cfg.subnet4     = document.getElementById('s-sub4').value.trim()        || cfg.subnet4;
+  cfg.orgType     = document.getElementById('s-org-type')?.value          || cfg.orgType;
+  cfg.siemType    = document.getElementById('s-siem-type')?.value         || cfg.siemType;
+  cfg.edrType     = document.getElementById('s-edr-type')?.value          || cfg.edrType;
 
   // CTAM checkboxes
   cfg.ctamDone = CTAM_ITEMS.map((_, i) => {
@@ -3421,6 +3478,13 @@ function populateSettingsForm() {
       </label>`
     ).join('');
   }
+  const st = document.getElementById('s-org-type');
+  if (st) st.value = cfg.orgType || 'provincial_health';
+  const ss = document.getElementById('s-siem-type');
+  if (ss) ss.value = cfg.siemType || 'wazuh';
+  const se = document.getElementById('s-edr-type');
+  if (se) se.value = cfg.edrType || 'crowdstrike';
+  renderTopoNodeList();
   renderKpi();
 }
 
@@ -4096,9 +4160,9 @@ async function loadNews() {
     const data = await r.json();
     if (!data.items?.length) { el.innerHTML = '<div class="empty">No news</div>'; return; }
     el.innerHTML = data.items.slice(0,10).map(n =>
-      `<a class="news-item" href="${esc(n.link||'#')}" target="_blank" rel="noopener">
-        <div class="news-title">${esc(n.title)}</div>
-        <div class="news-meta">${n.pubDate?new Date(n.pubDate).toLocaleDateString('th-TH'):''} · ThaICERT</div>
+      `<a class="news-item" href="${esc(n.url||n.link||'#')}" target="_blank" rel="noopener">
+        <div class="news-title">${esc(n.headline||n.title||'—')}</div>
+        <div class="news-meta">${n.pubDate?new Date(n.pubDate).toLocaleDateString('th-TH'):(typeof n.id==='string'?n.id.substring(0,30):'')||''} · ThaICERT</div>
       </a>`).join('');
   } catch { el.innerHTML = '<div class="empty">Failed to load</div>'; }
 }
