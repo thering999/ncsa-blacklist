@@ -2236,7 +2236,7 @@ select.input{cursor:pointer}
             </div>
           </div>
           <div>
-            <div class="int-desc"><strong style="color:var(--cyan)">FortiGate-120G CLI</strong> — สสจ.มุกดาหาร Primary Firewall</div>
+            <div class="int-desc"><strong style="color:var(--cyan)">Firewall CLI — <span id="fw-type-label">FortiGate</span></strong> — <span data-cfg="orgName">หน่วยงานของท่าน</span> Primary Firewall</div>
             <div class="code-block">
               <pre id="code-forti">
 <span class="cm"># FortiGate-120G — Address Group via CLI</span>
@@ -2253,6 +2253,14 @@ select.input{cursor:pointer}
               <button class="btn btn-ghost btn-sm" onclick="dlCode('code-forti','ncsa-fortigate.txt')">⬇ Download</button>
             </div>
           </div>
+        </div>
+        <!-- Dynamic Syslog Config per Firewall Type -->
+        <div class="card" style="margin-top:16px;--accent:var(--orange)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <div class="card-title" style="margin-bottom:0">📡 Syslog to Wazuh — ตามประเภท Firewall</div>
+            <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.68rem" onclick="renderFwIntegration()">↺</button>
+          </div>
+          <div id="fw-int-content"><div style="font-size:.78rem;color:var(--text3)">กำลังโหลด...</div></div>
         </div>
         <div class="int-grid2" style="margin-top:16px">
           <div>
@@ -3628,6 +3636,8 @@ function applyOrgConfig() {
 
   // Network topology
   renderNetworkTopology(cfg);
+  // Dynamic firewall syslog config
+  renderFwIntegration();
   // Re-render CTAM with updated status
   renderCtam();
 }
@@ -3813,24 +3823,26 @@ async function loadFeedHealth() {
 let _lastVisit = localStorage.getItem('last_visit');
 async function loadRecent() {
   try {
-    const data = await apiFetch('/recent').then(r => r.json());
+    const raw = await apiFetch('/recent').then(r => r.json());
+    const entries = Array.isArray(raw) ? raw : (raw.entries || []);
     const list = document.getElementById('activity-list');
-    if (!Array.isArray(data) || !data.length) { list.innerHTML = '<div class="empty">No recent activity</div>'; return; }
+    if (!entries.length) { list.innerHTML = '<div class="empty">No recent activity</div>'; return; }
     if (_lastVisit) {
-      const newCount = data.reduce((s, d) => s + (d.date > _lastVisit ? (d.added?.length || 0) : 0), 0);
+      const newCount = entries.reduce((s, d) => s + (d.date > _lastVisit ? (d.added_count || 0) : 0), 0);
       if (newCount) {
         document.getElementById('new-banner').style.display = 'flex';
         document.getElementById('new-msg').textContent = newCount + ' new entries since your last visit';
       }
     }
     localStorage.setItem('last_visit', new Date().toISOString());
-    list.innerHTML = data.slice(0, 20).map(d => {
+    list.innerHTML = entries.slice(0, 20).map(d => {
       const cls = d.type === 'domain' ? 'dom' : d.type === 'hash' ? 'hash' : '';
-      const preview = (d.added || []).slice(0, 2).map(v => `<code style="font-size:.68rem;opacity:.6">${esc(v)}</code>`).join(' ');
+      const samples = (d.added_sample || []).slice(0, 2).map(v => typeof v === 'string' ? v : (v.ip || v.value || ''));
+      const preview = samples.map(v => `<code style="font-size:.68rem;opacity:.6">${esc(v)}</code>`).join(' ');
       return `<div class="activity-item ${cls}">
         <span class="tag ${d.type}">${d.type}</span>
-        ${d.added?.length ? `<span class="activity-badge ab-add">+${d.added.length}</span>` : ''}
-        ${d.removed?.length ? `<span class="activity-badge ab-rem">-${d.removed.length}</span>` : ''}
+        ${d.added_count ? `<span class="activity-badge ab-add">+${d.added_count}</span>` : ''}
+        ${d.removed_count ? `<span class="activity-badge ab-rem">-${d.removed_count}</span>` : ''}
         ${preview}
         <div class="activity-time">${new Date(d.date).toLocaleString('th-TH')} · total ${fmt(d.total)}</div>
       </div>`;
@@ -4225,7 +4237,7 @@ async function loadNews() {
         <div class="news-title">${esc(n.headline||n.title||'—')}</div>
         <div class="news-meta">${n.pubDate?new Date(n.pubDate).toLocaleDateString('th-TH'):(typeof n.id==='string'?n.id.substring(0,30):'')||''} · ThaICERT</div>
       </a>`).join('');
-  } catch { el.innerHTML = '<div class="empty">Failed to load</div>'; }
+  } catch(e) { el.innerHTML = `<div class="empty">Failed to load: ${esc(e.message)}</div>`; console.error('loadNews:', e); }
 }
 
 // Export
@@ -5735,6 +5747,27 @@ const KPI_MAX = [
   'Security Policy: IRP+DPO+นโยบาย อนุมัติผู้บริหาร',
 ];
 
+function renderFwIntegration() {
+  const cfg = getCfg();
+  const fwType = cfg.firewallType || 'fortigate';
+  const fwLabel = {fortigate:'FortiGate',mikrotik:'MikroTik',cisco:'Cisco',pfsense:'pfSense',opnsense:'OPNsense'}[fwType]||fwType;
+  const el = document.getElementById('fw-int-content');
+  const lb = document.getElementById('fw-type-label');
+  if (lb) lb.textContent = fwLabel;
+  if (!el) return;
+  const cmds = {
+    fortigate:`config log syslogd setting\n    set status enable\n    set server WAZUH-SERVER\n    set port 514\n    set facility local7\nend`,
+    mikrotik:`/system logging action add name=syslog target=remote remote=WAZUH-SERVER remote-port=514\n/system logging add action=syslog topics=firewall`,
+    cisco:`logging host WAZUH-SERVER transport udp port 514\nlogging trap informational\nlogging facility local7`,
+    pfsense:`# Status → System Logs → Settings → Enable Remote Logging\n# Remote syslog server: WAZUH-SERVER:514\n# Facility: Security (kern)`,
+    opnsense:`# System → Settings → Logging → Remote Syslog\n# Add WAZUH-SERVER port 514`,
+  };
+  el.innerHTML = patchHost(`<p style="font-size:.78rem;color:var(--text2);margin-bottom:8px">
+    Firewall: <strong style="color:var(--cyan)">${fwLabel}</strong> — Syslog → Wazuh
+    <span style="font-size:.68rem;color:var(--text3);margin-left:8px">(เปลี่ยนใน Settings → Firewall Type)</span>
+  </p><div class="code-block"><pre><span class="cm"># ${fwLabel} — Syslog to WAZUH-SERVER</span>\n${cmds[fwType]||cmds.fortigate}</pre></div>`);
+}
+
 function renderTopology() {
   const cfg = getCfg();
   const svg = document.getElementById('topo-svg');
@@ -5930,7 +5963,7 @@ async function loadSocAlerts() {
       const addCount = d.added_count || d.added?.length || 0;
       const sev = addCount > 100 ? '' : addCount > 10 ? 'med' : 'low';
       const samples = d.added_sample || d.added || [];
-      const preview = samples.slice(0, 1).map(v => `<code class="mono" style="font-size:.7rem;color:var(--orange)">${esc(v)}</code>`).join('');
+      const preview = samples.slice(0, 1).map(v => { const ip = typeof v==='string'?v:(v.ip||v.value||''); const geo = v.geo?.country?` (${v.geo.country})`:''; return `<code class="mono" style="font-size:.7rem;color:var(--orange)">${esc(ip)}${geo}</code>`; }).join('');
       return `<div class="soc-alert ${sev}">
         <span class="soc-alert-icon">${addCount > 50 ? '🔴' : addCount > 10 ? '🟡' : '🔵'}</span>
         <div style="flex:1">
@@ -5953,7 +5986,7 @@ async function loadSocAlerts() {
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
   renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries();
-  updateExecSummary(); loadSocMetrics(); renderTopology(); loadDarkWebMonitor(); loadWazuhAlerts();
+  updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts();
   renderComplianceGap();
   loadSocAlerts();
   loadTicker();

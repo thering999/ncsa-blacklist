@@ -794,6 +794,17 @@ app.get('/admin/feed-health', requireAdmin, (req, res) => {
   res.json({ feeds });
 });
 
+// Manual sync trigger
+app.post('/admin/sync', requireAdmin, async (req, res) => {
+  try {
+    const { fetchAll } = require('./fetch');
+    fetchAll().then(() => {}).catch(err => console.error('Manual sync error:', err));
+    res.json({ ok: true, message: 'Sync triggered in background — check /admin/feed-health in 30-60s' });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3939;
 if (require.main === module) {
   const server = app.listen(PORT, () => console.log(`ncsa-blacklist API on :${PORT}`));
