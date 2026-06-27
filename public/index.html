@@ -2081,6 +2081,24 @@ select.input{cursor:pointer}
         </div>
       </div>
     </div>
+
+    <!-- Security Calendar & Vuln Breakdown -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:16px">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">📅 Security Calendar</div>
+          <span style="font-size:.65rem;color:var(--text3);margin-left:auto">กิจกรรมที่กำลังจะมาถึง</span>
+        </div>
+        <div id="sec-calendar" style="display:flex;flex-direction:column;gap:6px"><div class="empty" style="font-size:.72rem">กำลังโหลด…</div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">🐛 Vulnerability Breakdown</div>
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.65rem" onclick="renderVulnBreakdown()">↺</button>
+        </div>
+        <div id="vuln-breakdown" style="display:flex;flex-direction:column;gap:6px"><div class="empty" style="font-size:.72rem">กำลังโหลด…</div></div>
+      </div>
+    </div>
   </section>
 
   <!-- Integrations -->
@@ -6388,6 +6406,78 @@ async function loadSocAlerts() {
   } catch { document.getElementById('soc-alerts').innerHTML = '<div class="empty">Failed to load</div>'; }
 }
 
+// ── Security Calendar ──
+function renderSecurityCalendar(){
+  const el=document.getElementById('sec-calendar'); if(!el)return;
+  const cfg=getCfg(); const now=new Date(); const today=now.toISOString().slice(0,10);
+  const events=[];
+  // SSL expiry
+  (cfg.sslDomains||[]).forEach(s=>{
+    if(s.expiry){
+      const exp=new Date(s.expiry); const diff=Math.round((exp-now)/86400000);
+      if(diff<90) events.push({date:s.expiry,icon:'🔐',label:`SSL หมดอายุ: ${s.domain}`,color:diff<14?'var(--red)':diff<30?'var(--orange)':'var(--yellow)',days:diff});
+    }
+  });
+  // Patches due
+  (cfg.patches||[]).forEach(p=>{
+    if(p.deadline&&p.status!=='done'){
+      const d=new Date(p.deadline); const diff=Math.round((d-now)/86400000);
+      if(diff<60) events.push({date:p.deadline,icon:'🔧',label:`Patch: ${p.name||p.system||''}`,color:diff<7?'var(--red)':diff<30?'var(--orange)':'var(--text2)',days:diff});
+    }
+  });
+  // Drills (anniversary/annual)
+  const drills=getDrills(); const lastDrill=drills[drills.length-1];
+  if(lastDrill){
+    const lastDate=new Date(lastDrill.date);
+    const nextDue=new Date(lastDate); nextDue.setFullYear(nextDue.getFullYear()+1);
+    const diff=Math.round((nextDue-now)/86400000);
+    if(diff<365) events.push({date:nextDue.toISOString().slice(0,10),icon:'🎯',label:`BCP/Drill ประจำปีครบกำหนด (ครั้งล่าสุด: ${lastDrill.date})`,color:diff<30?'var(--orange)':'var(--text2)',days:diff});
+  } else {
+    events.push({date:today,icon:'🎯',label:'BCP/Drill — ยังไม่เคยซ้อมในปีนี้',color:'var(--red)',days:0});
+  }
+  // CTAM assessment (annual, fiscal 2569 = Oct 2025-Sep 2026)
+  const ctamDue=new Date('2026-03-31'); const ctamDiff=Math.round((ctamDue-now)/86400000);
+  if(ctamDiff>-30) events.push({date:'2026-03-31',icon:'📋',label:'CTAM+ 2569 ประเมินผล',color:ctamDiff<30?'var(--orange)':'var(--cyan)',days:ctamDiff});
+  // Sort by days
+  events.sort((a,b)=>a.days-b.days);
+  if(!events.length){el.innerHTML='<div class="empty" style="font-size:.72rem">ไม่มีกิจกรรมที่กำลังจะมาถึง</div>';return;}
+  el.innerHTML=events.slice(0,8).map(e=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(255,255,255,.03);border:1px solid ${e.color}33;border-radius:7px">
+      <span style="font-size:1rem;flex-shrink:0">${e.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.73rem;font-weight:600;color:${e.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.label)}</div>
+        <div style="font-size:.63rem;color:var(--text3)">${e.date} ${e.days<0?'<span style="color:var(--red)">เกินกำหนด!</span>':e.days===0?'<span style="color:var(--orange)">วันนี้</span>':`อีก ${e.days} วัน`}</div>
+      </div>
+      <div style="font-size:.8rem;font-weight:800;color:${e.color};flex-shrink:0">${e.days<0?'!':e.days}</div>
+    </div>`).join('');
+}
+
+// ── Vulnerability Breakdown ──
+function renderVulnBreakdown(){
+  const el=document.getElementById('vuln-breakdown'); if(!el)return;
+  const cfg=getCfg(); const vulns=cfg.vulns||[];
+  if(!vulns.length){el.innerHTML='<div class="empty" style="font-size:.72rem">ไม่มีข้อมูล Vulnerability</div>';return;}
+  const SEV=['critical','high','medium','low'];
+  const SEV_COLOR={critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--green)'};
+  const SEV_TH={critical:'Critical',high:'สูง',medium:'ปานกลาง',low:'ต่ำ'};
+  const counts={}; SEV.forEach(s=>counts[s]=0);
+  vulns.forEach(v=>{ const s=v.severity?.toLowerCase()||'medium'; if(counts[s]!==undefined) counts[s]++; });
+  const open=vulns.filter(v=>v.status==='open').length;
+  const closed=vulns.length-open;
+  el.innerHTML=`<div style="display:flex;gap:14px;margin-bottom:10px">
+    <div style="text-align:center"><div style="font-size:1.4rem;font-weight:800;color:var(--red)">${open}</div><div style="font-size:.65rem;color:var(--text3)">Open</div></div>
+    <div style="text-align:center"><div style="font-size:1.4rem;font-weight:800;color:var(--green)">${closed}</div><div style="font-size:.65rem;color:var(--text3)">Closed</div></div>
+    <div style="flex:1;display:flex;align-items:center"><div style="width:100%;background:rgba(255,255,255,.07);border-radius:4px;height:8px;overflow:hidden"><div style="width:${vulns.length?Math.round((closed/vulns.length)*100):0}%;background:var(--green);height:100%;transition:width .5s"></div></div></div>
+  </div>`+SEV.map(s=>`
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:60px;font-size:.68rem;color:${SEV_COLOR[s]};font-weight:600">${SEV_TH[s]}</div>
+      <div style="flex:1;background:rgba(255,255,255,.07);border-radius:4px;height:7px;overflow:hidden">
+        <div style="width:${vulns.length?Math.round((counts[s]/vulns.length)*100):0}%;background:${SEV_COLOR[s]};height:100%;border-radius:4px"></div>
+      </div>
+      <div style="font-size:.72rem;font-weight:700;color:${SEV_COLOR[s]};width:24px;text-align:right">${counts[s]}</div>
+    </div>`).join('');
+}
+
 // ── BCP / Drill Tracker ──
 const DRILL_KEY='ncsa_drills';
 const DR_TYPE_ICON={tabletop:'🪑',functional:'⚙',fullscale:'🚨',bcp:'📋',drp:'💾',red:'🔴'};
@@ -6874,7 +6964,7 @@ function renderThreatActors(){
   updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
-  renderIncidentTimeline(); renderDrillList();
+  renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
