@@ -620,6 +620,17 @@ select.input{cursor:pointer}
 <div id="toasts"></div>
 <div class="overlay" id="overlay" onclick="closeSettings()"></div>
 
+<!-- Feed Freshness Bar -->
+<div id="feed-freshness" style="display:flex;align-items:center;gap:12px;padding:6px 20px;background:rgba(0,0,0,.3);border-bottom:1px solid var(--card-b);font-size:.72rem">
+  <span style="color:var(--text3)">📡 Feed:</span>
+  <span id="ff-ip" style="color:var(--text2)">IP: —</span>
+  <span style="color:var(--card-b)">·</span>
+  <span id="ff-domain" style="color:var(--text2)">Domain: —</span>
+  <span style="color:var(--card-b)">·</span>
+  <span id="ff-hash" style="color:var(--text2)">Hash: —</span>
+  <span style="margin-left:auto;color:var(--text3)" id="ff-sync">ซิงค์ล่าสุด: —</span>
+  <button class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:2px 10px" onclick="loadFreshnessBar()">↺</button>
+</div>
 <!-- Threat Ticker -->
 <div class="threat-ticker" id="threat-ticker">
   <div class="ticker-label">
@@ -1897,6 +1908,12 @@ print(f<span class="str">'{len(hits)}/{len(ips)} MISP IOCs confirmed in NCSA bla
 
       <!-- Grafana -->
       <div class="int-panel" id="int-grafana">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <a href="#" onclick="openGrafana('d/ncsa-blacklist');return false" class="btn btn-ghost btn-sm" style="font-size:.72rem;text-decoration:none">📊 NCSA Overview</a>
+          <a href="#" onclick="openGrafana('d/wazuh-alerts');return false" class="btn btn-ghost btn-sm" style="font-size:.72rem;text-decoration:none">🔍 Wazuh Alerts</a>
+          <a href="#" onclick="openGrafana('explore');return false" class="btn btn-ghost btn-sm" style="font-size:.72rem;text-decoration:none">🔎 Explore</a>
+          <div style="font-size:.7rem;color:var(--text3);align-self:center">URL ใช้ kongIP:3000 หรือ localhost:3000</div>
+        </div>
         <div class="int-grid2">
           <div>
             <div class="int-desc"><strong style="color:var(--cyan)">Prometheus Datasource</strong> — เพิ่มใน Grafana แล้วใช้ query ด้านขวา</div>
@@ -2460,6 +2477,18 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
             </div>
           </div>
         </div>
+        <div style="margin-top:16px">
+          <div class="int-desc"><strong style="color:var(--cyan)">Test Webhook / LINE Notify</strong> — ทดสอบการส่งแจ้งเตือน</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+            <div style="flex:1;min-width:200px">
+              <div style="font-size:.7rem;color:var(--text3);margin-bottom:4px">Webhook URL (ทดสอบ)</div>
+              <input class="input mono" id="wh-test-url" placeholder="https://hooks.slack.com/... หรือ Discord webhook" style="width:100%">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="testWebhook()">📤 Send Test</button>
+          </div>
+          <div id="wh-test-result" style="margin-top:8px;font-size:.75rem;color:var(--text3)"></div>
+          <div class="int-desc" style="margin-top:10px">LINE Notify: ตั้งค่า <code class="mono" style="color:var(--orange)">LINE_NOTIFY_TOKEN</code> ใน .env → restart server → แจ้งเตือนอัตโนมัติเมื่อ feed อัพเดท</div>
+        </div>
       </div>
 
     </div>
@@ -2881,6 +2910,44 @@ function switchListTab(btn, id) {
   btn.classList.add('active');
   document.getElementById('list-watch').style.display = id === 'watch' ? '' : 'none';
   document.getElementById('list-allow').style.display = id === 'allow' ? '' : 'none';
+}
+
+function openGrafana(path) {
+  const cfg = getCfg();
+  const base = cfg.kongIP && cfg.kongIP !== 'KONG-IP'
+    ? 'http://' + cfg.kongIP.split('/')[0] + ':3000'
+    : 'http://localhost:3000';
+  window.open(base + '/' + path, '_blank');
+}
+
+async function loadFreshnessBar() {
+  try {
+    const data = await fetch(apiBase() + '/info').then(r => r.json());
+    const ago = ts => {
+      if (!ts) return '—';
+      const diff = Math.floor((Date.now() - new Date(ts)) / 60000);
+      if (diff < 60) return diff + ' นาทีที่แล้ว';
+      if (diff < 1440) return Math.floor(diff/60) + ' ชั่วโมงที่แล้ว';
+      return Math.floor(diff/1440) + ' วันที่แล้ว';
+    };
+    const color = (ts, validDays) => {
+      if (!ts) return 'var(--text3)';
+      const ageDays = (Date.now() - new Date(ts)) / 86400000;
+      if (ageDays > validDays) return 'var(--red)';
+      if (ageDays > validDays * 0.7) return 'var(--orange)';
+      return 'var(--green)';
+    };
+    const ip = data.ip || {}, dom = data.domain || {}, hash = data.hash || {};
+    const set = (id, txt, ts, vd) => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = txt; el.style.color = color(ts, vd||7); }
+    };
+    set('ff-ip', `IP: ${fmt(ip.total||0)} รายการ (${ago(ip.generated_at)})`, ip.generated_at, ip.valid_for_days);
+    set('ff-domain', `Domain: ${fmt(dom.total||0)} (${ago(dom.generated_at)})`, dom.generated_at, dom.valid_for_days);
+    set('ff-hash', `Hash: ${fmt(hash.total||0)} (${ago(hash.generated_at)})`, hash.generated_at, hash.valid_for_days);
+    const syncEl = document.getElementById('ff-sync');
+    if (syncEl) syncEl.textContent = 'อัพเดท: ' + (ip.generated_at ? new Date(ip.generated_at).toLocaleString('th-TH') : '—');
+  } catch { /* silently skip */ }
 }
 
 // Stats
@@ -3599,6 +3666,27 @@ function exportAssets() {
   URL.revokeObjectURL(url);
 }
 
+async function testWebhook() {
+  const url = document.getElementById('wh-test-url').value.trim();
+  if (!url) { toast('ใส่ Webhook URL ก่อน','err'); return; }
+  const res = document.getElementById('wh-test-result');
+  if (res) res.textContent = 'กำลังส่ง...';
+  try {
+    const r = await fetch(apiBase() + '/admin/webhook-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('metrics_token')||'') },
+      body: JSON.stringify({ webhook: url })
+    });
+    const data = await r.json();
+    if (res) res.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+    if (res) res.textContent = r.ok ? '✅ ส่งสำเร็จ: ' + (data.status||'ok') : '❌ Error: ' + (data.error||r.status);
+    toast(r.ok ? 'Webhook ส่งแล้ว' : 'Webhook ล้มเหลว', r.ok ? 'ok' : 'err');
+  } catch (e) {
+    if (res) { res.style.color='var(--red)'; res.textContent = '❌ ' + e.message; }
+    toast('ส่งไม่ได้: ' + e.message, 'err');
+  }
+}
+
 function switchHuntTab(btn, id) {
   document.querySelectorAll('.hunt-panel').forEach(p => p.style.display = 'none');
   document.querySelectorAll('.hunt-tab').forEach(b => b.classList.remove('active'));
@@ -3955,6 +4043,7 @@ async function loadSocAlerts() {
   applyOrgConfig();
   if (!localStorage.getItem(CFG_KEY)) setTimeout(wizardShow, 800);
   await loadStats();
+  loadFreshnessBar();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
   renderCtam(); renderKpi(); renderAssets();
