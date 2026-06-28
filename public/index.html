@@ -1821,6 +1821,18 @@ select.input{cursor:pointer}
       </div>
     </div>
 
+    <!-- Executive Report -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">📄 Executive Security Report — สรุปสำหรับผู้บริหาร</div>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="printExecReport()">🖨 พิมพ์ / Export PDF</button>
+      </div>
+      <div style="font-size:.78rem;color:var(--text3);margin-bottom:10px">สร้างรายงานสรุปสถานะ Cybersecurity พร้อมพิมพ์ / บันทึกเป็น PDF (Ctrl+P)</div>
+      <div id="exec-preview" style="padding:16px;border:1px solid var(--card-b);border-radius:8px;background:rgba(255,255,255,.02);font-size:.78rem;color:var(--text2)">
+        <button class="btn btn-ghost btn-sm" onclick="generateExecPreview()">👁 Preview รายงาน</button>
+      </div>
+    </div>
+
     <!-- Network Topology -->
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -3942,6 +3954,45 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
           <div class="export-desc">REST API spec</div>
         </div>
       </div>
+    </div>
+
+    <!-- IOC Submit to ThaiCERT -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title" style="margin-bottom:12px">📡 IOC Sharing — ส่ง IOC ให้ ThaiCERT / NCSA</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ประเภท IOC</label>
+          <select class="input" id="ioc-type" style="width:100%;margin-top:4px">
+            <option value="ip">IP Address</option>
+            <option value="domain">Domain / URL</option>
+            <option value="hash">File Hash (MD5/SHA256)</option>
+            <option value="email">Email Address (Phishing)</option>
+            <option value="filename">Filename / Path</option>
+          </select>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ระดับความน่าเชื่อถือ</label>
+          <select class="input" id="ioc-confidence" style="width:100%;margin-top:4px">
+            <option value="high">High — ยืนยันแล้ว (forensic evidence)</option>
+            <option value="medium" selected>Medium — สันนิษฐานสูง</option>
+            <option value="low">Low — น่าสงสัย</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:8px"><label style="font-size:.72rem;color:var(--text3)">IOC Value *</label>
+        <textarea class="input mono" id="ioc-value" rows="3" placeholder="ใส่ IOC ทีละบรรทัด เช่น&#10;192.168.x.x&#10;malware.example.com&#10;d41d8cd98f00b204e9800998ecf8427e" style="width:100%;margin-top:4px;resize:vertical"></textarea>
+      </div>
+      <div style="margin-bottom:8px"><label style="font-size:.72rem;color:var(--text3)">บริบทเพิ่มเติม (TTPs / การโจมตี)</label>
+        <textarea class="input" id="ioc-context" rows="2" placeholder="เช่น พบจาก Wazuh alert rule 87103, Ransomware C2 traffic, phishing email หัวข้อ..." style="width:100%;margin-top:4px;resize:vertical"></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div><label style="font-size:.72rem;color:var(--text3)">วันที่พบ</label><input class="input" type="date" id="ioc-date" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ผู้รายงาน</label><input class="input" id="ioc-reporter" placeholder="ชื่อ-หน่วยงาน" style="width:100%;margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="generateIocReport()">📋 สร้าง Report</button>
+        <button class="btn btn-ghost" onclick="copyIocEmail()">📧 Copy Email Template</button>
+        <button class="btn btn-ghost" onclick="copyIocStix()">🔗 Copy STIX-lite JSON</button>
+      </div>
+      <div id="ioc-report-out" style="display:none;margin-top:12px"></div>
     </div>
 
     <!-- Email Security Check -->
@@ -6584,6 +6635,150 @@ async function loadWazuhLive() {
   } catch(e) {
     if (status) status.textContent = '❌ '+e.message+' (ตรวจสอบ CORS / URL / credentials)';
   }
+}
+
+// ── Executive Report ──
+function generateExecPreview() {
+  const el = document.getElementById('exec-preview');
+  if (!el) return;
+  const cfg = getCfg();
+  const org = cfg.orgName || 'หน่วยงาน';
+  const today = new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+  const ctamDone = CTAM_ITEMS.filter(x=>x.done).length;
+  const ctamTotal = CTAM_ITEMS.length;
+  const kpiMin = Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
+  const kpiMax = Array.isArray(cfg.kpiMax)?cfg.kpiMax.filter(Boolean).length:0;
+  const vulns = Array.isArray(cfg.vulns)?cfg.vulns:[];
+  const openCrit = vulns.filter(v=>v.status==='open'&&v.severity==='critical').length;
+  const openHigh = vulns.filter(v=>v.status==='open'&&v.severity==='high').length;
+  const risks = Array.isArray(cfg.risks)?cfg.risks:[];
+  const highRisks = risks.filter(r=>r.likelihood*r.impact>=12);
+  const incidents = Array.isArray(cfg.incidents)?cfg.incidents:[];
+  const openInc = incidents.filter(i=>i.status!=='closed').length;
+  const secScore = Math.round((ctamDone/ctamTotal)*40 + (kpiMin/7)*30 + (kpiMax/8)*20 + Math.max(0,10-(openCrit+openHigh)*2));
+  el.innerHTML = `<div style="color:var(--text1)">
+    <div style="font-size:.9rem;font-weight:700;border-bottom:1px solid var(--card-b);padding-bottom:8px;margin-bottom:12px">รายงานสถานะ Cybersecurity — ${esc(org)}<br><span style="font-size:.72rem;color:var(--text3)">ณ วันที่ ${today}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:12px">
+      ${[
+        {label:'Security Score',val:secScore+'%',color:secScore>=75?'var(--green)':secScore>=50?'var(--orange)':'var(--red)'},
+        {label:'CTAM+ ผ่าน',val:ctamDone+'/'+ctamTotal,color:ctamDone>=14?'var(--green)':'var(--orange)'},
+        {label:'KPI ขั้นต่ำ',val:kpiMin+'/7',color:kpiMin>=7?'var(--green)':kpiMin>=5?'var(--yellow)':'var(--red)'},
+        {label:'Critical Vuln',val:openCrit,color:openCrit===0?'var(--green)':'var(--red)'},
+        {label:'High Risk',val:highRisks.length,color:highRisks.length===0?'var(--green)':highRisks.length<=2?'var(--orange)':'var(--red)'},
+        {label:'Open Incidents',val:openInc,color:openInc===0?'var(--green)':openInc<=2?'var(--orange)':'var(--red)'},
+      ].map(s=>`<div style="padding:8px;border-radius:6px;border:1px solid var(--card-b);text-align:center">
+        <div style="font-size:1.1rem;font-weight:900;color:${s.color}">${s.val}</div>
+        <div style="font-size:.62rem;color:var(--text3);margin-top:2px">${s.label}</div>
+      </div>`).join('')}
+    </div>
+    ${highRisks.length?`<div style="margin-bottom:8px"><div style="font-size:.72rem;color:var(--orange);font-weight:700;margin-bottom:4px">⚠ ความเสี่ยงสูง (${highRisks.length} รายการ):</div>${highRisks.slice(0,3).map(r=>`<div style="font-size:.72rem;color:var(--text2);padding-left:8px">• ${esc(r.name)} (Score: ${r.likelihood*r.impact})</div>`).join('')}${highRisks.length>3?`<div style="font-size:.7rem;color:var(--text3);padding-left:8px">และอีก ${highRisks.length-3} รายการ</div>`:''}</div>`:''}
+    ${openCrit+openHigh>0?`<div style="margin-bottom:8px"><div style="font-size:.72rem;color:var(--red);font-weight:700;margin-bottom:4px">🔴 ช่องโหว่ที่ต้องแก้ไขด่วน:</div><div style="font-size:.72rem;color:var(--text2);padding-left:8px">Critical: ${openCrit} รายการ · High: ${openHigh} รายการ</div></div>`:''}
+    <div style="font-size:.68rem;color:var(--text3);border-top:1px solid var(--card-b);padding-top:8px;margin-top:4px">จัดทำโดย NCSA Blacklist SOC Dashboard · ${esc(org)}</div>
+  </div>
+  <button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="printExecReport()">🖨 พิมพ์ / บันทึก PDF</button>`;
+}
+
+function printExecReport() {
+  const cfg = getCfg();
+  const org = cfg.orgName || 'หน่วยงาน';
+  const today = new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+  const ctamDone = CTAM_ITEMS.filter(x=>x.done).length;
+  const ctamTotal = CTAM_ITEMS.length;
+  const kpiMin = Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
+  const kpiMax = Array.isArray(cfg.kpiMax)?cfg.kpiMax.filter(Boolean).length:0;
+  const vulns = Array.isArray(cfg.vulns)?cfg.vulns:[];
+  const openCrit = vulns.filter(v=>v.status==='open'&&v.severity==='critical').length;
+  const openHigh = vulns.filter(v=>v.status==='open'&&v.severity==='high').length;
+  const risks = Array.isArray(cfg.risks)?cfg.risks:[];
+  const highRisks = risks.filter(r=>r.likelihood*r.impact>=12);
+  const incidents = Array.isArray(cfg.incidents)?cfg.incidents:[];
+  const openInc = incidents.filter(i=>i.status!=='closed').length;
+  const secScore = Math.round((ctamDone/ctamTotal)*40 + (kpiMin/7)*30 + (kpiMax/8)*20 + Math.max(0,10-(openCrit+openHigh)*2));
+  const scoreColor = secScore>=80?'#00c853':secScore>=60?'#00b0ff':secScore>=40?'#ff8f00':'#d50000';
+  const win = window.open('','_blank','width=900,height=700');
+  if (!win) { toast('popup ถูก block — allow popup ก่อน','err'); return; }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Executive Security Report — ${org}</title>
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Segoe UI',sans-serif;color:#1a1a2e;background:#fff;padding:32px;font-size:13px}h1{font-size:20px;color:#1a1a2e;margin-bottom:4px}.sub{color:#666;font-size:12px;margin-bottom:20px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}.tile{padding:14px;border:2px solid #eee;border-radius:8px;text-align:center}.tile-val{font-size:24px;font-weight:900;margin-bottom:4px}.tile-lbl{font-size:11px;color:#666}.section{margin-bottom:16px}.section h2{font-size:13px;font-weight:700;border-bottom:2px solid #1a1a2e;padding-bottom:4px;margin-bottom:8px}.badge-red{background:#ffebee;color:#c62828;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}.badge-orange{background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}.badge-green{background:#e8f5e9;color:#1b5e20;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}table{width:100%;border-collapse:collapse;font-size:11px}th,td{padding:5px 8px;text-align:left;border-bottom:1px solid #eee}th{background:#f5f5f5;font-weight:700}.footer{margin-top:24px;font-size:10px;color:#999;text-align:center;border-top:1px solid #eee;padding-top:10px}@media print{body{padding:16px}button{display:none}}</style></head><body>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div><h1>📊 รายงานสถานะ Cybersecurity</h1><div class="sub">${org} · ณ วันที่ ${today}</div></div>
+    <div style="text-align:center;padding:12px 20px;border:3px solid ${scoreColor};border-radius:12px">
+      <div style="font-size:32px;font-weight:900;color:${scoreColor}">${secScore}%</div>
+      <div style="font-size:11px;color:#666">Security Score</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="tile"><div class="tile-val" style="color:${ctamDone/ctamTotal>=0.9?'#1b5e20':'#e65100'}">${ctamDone}/${ctamTotal}</div><div class="tile-lbl">CTAM+ ผ่านเกณฑ์</div></div>
+    <div class="tile"><div class="tile-val" style="color:${kpiMin>=7?'#1b5e20':kpiMin>=5?'#e65100':'#c62828'}">${kpiMin}/7</div><div class="tile-lbl">KPI ขั้นต่ำ</div></div>
+    <div class="tile"><div class="tile-val" style="color:${kpiMax>=6?'#1b5e20':'#e65100'}">${kpiMax}/8</div><div class="tile-lbl">KPI ขั้นสูง</div></div>
+    <div class="tile"><div class="tile-val" style="color:${openCrit===0?'#1b5e20':'#c62828'}">${openCrit}</div><div class="tile-lbl">Critical Vulnerability</div></div>
+    <div class="tile"><div class="tile-val" style="color:${highRisks.length===0?'#1b5e20':highRisks.length<=2?'#e65100':'#c62828'}">${highRisks.length}</div><div class="tile-lbl">High/Critical Risk</div></div>
+    <div class="tile"><div class="tile-val" style="color:${openInc===0?'#1b5e20':openInc<=2?'#e65100':'#c62828'}">${openInc}</div><div class="tile-lbl">Open Incidents</div></div>
+  </div>
+  ${highRisks.length?`<div class="section"><h2>⚠ ความเสี่ยงระดับสูง/วิกฤต (${highRisks.length} รายการ)</h2><table><thead><tr><th>ความเสี่ยง</th><th>หมวด</th><th>คะแนน</th><th>มาตรการ</th></tr></thead><tbody>${highRisks.slice(0,5).map(r=>`<tr><td>${r.name}</td><td>${r.category||'—'}</td><td><span class="${r.likelihood*r.impact>=20?'badge-red':r.likelihood*r.impact>=12?'badge-orange':'badge-green'}">${r.likelihood*r.impact}</span></td><td>${r.control||'—'}</td></tr>`).join('')}</tbody></table></div>`:''}
+  ${openCrit+openHigh>0?`<div class="section"><h2>🔴 ช่องโหว่ที่ต้องดำเนินการ</h2><table><thead><tr><th>ช่องโหว่</th><th>ระดับ</th><th>ระบบ</th></tr></thead><tbody>${vulns.filter(v=>v.status==='open'&&(v.severity==='critical'||v.severity==='high')).slice(0,5).map(v=>`<tr><td>${v.name||v.cve||'—'}</td><td><span class="${v.severity==='critical'?'badge-red':'badge-orange'}">${v.severity}</span></td><td>${v.system||'—'}</td></tr>`).join('')}</tbody></table></div>`:''}
+  <div class="section"><h2>📋 สรุปสถานะ CTAM+ 2569</h2><div style="display:flex;gap:8px;flex-wrap:wrap">${CTAM_ITEMS.map(c=>`<span style="padding:2px 8px;border-radius:4px;font-size:10px;background:${c.done?'#e8f5e9':'#ffebee'};color:${c.done?'#1b5e20':'#c62828'}">${c.icon} ${c.label}</span>`).join('')}</div></div>
+  <div class="footer">จัดทำโดย NCSA Blacklist SOC Dashboard · ${org} · ${today}<br>รายงานนี้เป็นความลับภายในหน่วยงาน</div>
+  <div style="margin-top:16px;text-align:center"><button onclick="window.print()" style="padding:8px 20px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 พิมพ์ / บันทึก PDF</button></div>
+  </body></html>`);
+  win.document.close();
+}
+
+// ── IOC Sharing ──
+function generateIocReport() {
+  const type = document.getElementById('ioc-type')?.value;
+  const val = document.getElementById('ioc-value')?.value.trim();
+  const ctx = document.getElementById('ioc-context')?.value.trim();
+  const conf = document.getElementById('ioc-confidence')?.value;
+  const date = document.getElementById('ioc-date')?.value || new Date().toISOString().split('T')[0];
+  const reporter = document.getElementById('ioc-reporter')?.value.trim() || getCfg().orgName || 'หน่วยงาน';
+  if (!val) { toast('ใส่ IOC Value ก่อน','err'); return; }
+  const iocs = val.split('\n').map(l=>l.trim()).filter(Boolean);
+  const typeLabel = {ip:'IP Address',domain:'Domain/URL',hash:'File Hash',email:'Email (Phishing)',filename:'Filename'};
+  const confLabel = {high:'High (ยืนยันแล้ว)',medium:'Medium (สันนิษฐาน)',low:'Low (น่าสงสัย)'};
+  const el = document.getElementById('ioc-report-out');
+  if (!el) return;
+  el.style.display='';
+  el.innerHTML = `<div style="background:rgba(0,0,0,.4);border:1px solid var(--card-b);border-radius:8px;padding:16px;font-family:monospace;font-size:.75rem;color:var(--text2)">
+    <div style="color:var(--cyan);font-weight:700;margin-bottom:10px">═══ IOC Report — NCSA/ThaiCERT Format ═══</div>
+    <div><span style="color:var(--text3)">วันที่รายงาน:</span> ${new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})}</div>
+    <div><span style="color:var(--text3)">หน่วยงาน:</span> ${esc(reporter)}</div>
+    <div><span style="color:var(--text3)">ประเภท IOC:</span> ${typeLabel[type]||type}</div>
+    <div><span style="color:var(--text3)">ความน่าเชื่อถือ:</span> ${confLabel[conf]||conf}</div>
+    <div><span style="color:var(--text3)">วันที่พบ:</span> ${date}</div>
+    <div style="margin-top:8px;color:var(--text3)">IOC Values (${iocs.length} รายการ):</div>
+    ${iocs.map(ioc=>`<div style="color:var(--yellow);padding-left:12px">• ${esc(ioc)}</div>`).join('')}
+    ${ctx?`<div style="margin-top:8px"><span style="color:var(--text3)">บริบท:</span> ${esc(ctx)}</div>`:''}
+    <div style="margin-top:10px;color:var(--text3);font-size:.7rem">ส่งรายงานไปยัง: thaicert@etda.or.th | ncsa@mict.go.th | hotline 1212</div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button class="btn btn-ghost btn-sm" onclick="copyIocEmail()">📧 Copy Email</button>
+    <button class="btn btn-ghost btn-sm" onclick="copyIocStix()">🔗 Copy STIX JSON</button>
+  </div>`;
+}
+
+function copyIocEmail() {
+  const type = document.getElementById('ioc-type')?.value;
+  const val = document.getElementById('ioc-value')?.value.trim();
+  const ctx = document.getElementById('ioc-context')?.value.trim();
+  const conf = document.getElementById('ioc-confidence')?.value;
+  const reporter = document.getElementById('ioc-reporter')?.value.trim() || getCfg().orgName || 'หน่วยงาน';
+  if (!val) { toast('ใส่ IOC Value ก่อน','err'); return; }
+  const iocs = val.split('\n').map(l=>l.trim()).filter(Boolean);
+  const typeLabel = {ip:'IP Address',domain:'Domain/URL',hash:'File Hash',email:'Email Phishing',filename:'Filename'};
+  const confLabel = {high:'High',medium:'Medium',low:'Low'};
+  const email = `เรื่อง: แจ้ง IOC ${typeLabel[type]||type} ที่พบในระบบ\n\nเรียน ทีม ThaiCERT / NCSA\n\nในนาม${reporter} ขอแจ้ง Indicator of Compromise (IOC) ที่ตรวจพบในระบบของหน่วยงาน เพื่อร่วมแบ่งปันข้อมูลภัยคุกคาม\n\nรายละเอียด:\n- ประเภท: ${typeLabel[type]||type}\n- ความน่าเชื่อถือ: ${confLabel[conf]||conf}\n- วันที่พบ: ${document.getElementById('ioc-date')?.value || new Date().toISOString().split('T')[0]}\n\nIOC Values:\n${iocs.map(i=>'  '+i).join('\n')}\n\n${ctx?'บริบทเพิ่มเติม:\n'+ctx+'\n\n':''}หน่วยงาน: ${reporter}\nวันที่รายงาน: ${new Date().toLocaleDateString('th-TH')}\n\nขอบคุณครับ`;
+  navigator.clipboard.writeText(email).then(()=>toast('Copy email template แล้ว','ok')).catch(()=>toast('Copy ไม่ได้','err'));
+}
+
+function copyIocStix() {
+  const type = document.getElementById('ioc-type')?.value;
+  const val = document.getElementById('ioc-value')?.value.trim();
+  if (!val) { toast('ใส่ IOC Value ก่อน','err'); return; }
+  const iocs = val.split('\n').map(l=>l.trim()).filter(Boolean);
+  const stixType = {ip:'ipv4-addr',domain:'domain-name',hash:'file',email:'email-addr',filename:'file'};
+  const mkUUID = ()=>'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:r&0x3|0x8).toString(16)});
+  const stix = {type:'bundle',id:'bundle--'+mkUUID(),spec_version:'2.1',objects:iocs.map((ioc,i)=>({type:'indicator',id:'indicator--'+mkUUID(),spec_version:'2.1',created:new Date().toISOString(),modified:new Date().toISOString(),name:`IOC-${type}-${i+1}`,description:document.getElementById('ioc-context')?.value.trim()||'',pattern:type==='ip'?`[ipv4-addr:value = '${ioc}']`:type==='domain'?`[domain-name:value = '${ioc}']`:type==='hash'?`[file:hashes.MD5 = '${ioc}']`:`[${stixType[type]||'artifact'}:value = '${ioc}']`,pattern_type:'stix',valid_from:new Date().toISOString(),confidence:document.getElementById('ioc-confidence')?.value==='high'?85:document.getElementById('ioc-confidence')?.value==='medium'?60:30}))};
+  navigator.clipboard.writeText(JSON.stringify(stix,null,2)).then(()=>toast('Copy STIX JSON แล้ว','ok')).catch(()=>toast('Copy ไม่ได้','err'));
 }
 
 async function checkEmailSec() {
