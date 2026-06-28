@@ -1,0 +1,34 @@
+# Production overrides — ใช้คู่กับ docker-compose.yml
+# คำสั่ง: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  ncsa-blacklist:
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 128M
+    environment:
+      - NODE_ENV=production
+      - LOG_FORMAT=json
+
+  ncsa-blacklist-sync:
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M

@@ -349,6 +349,86 @@ API Key: MISP UI → Administration → Auth Keys → Add Auth Key
 
 ---
 
+## 🚀 Production Deployment (Linux Server)
+
+### วิธีที่ 1: Auto Deploy Script (แนะนำ)
+
+```bash
+git clone https://github.com/YOUR_ORG/ncsa-blacklist.git
+cd ncsa-blacklist
+sudo bash deploy.sh
+```
+
+Script ทำให้อัตโนมัติ:
+1. ติดตั้ง Docker + Docker Compose (ถ้ายังไม่มี)
+2. สร้าง `.env` พร้อม random Admin Token
+3. Build + รัน containers (พร้อม health check)
+4. ถามว่าต้องการ nginx reverse proxy
+5. ถามว่ามี domain สำหรับ SSL
+6. ตั้งค่า systemd service (auto-start on reboot)
+7. เปิด firewall (ufw) พอร์ต 80/443
+
+### วิธีที่ 2: Manual Deploy
+
+```bash
+# 1. ติดตั้ง Docker
+curl -fsSL https://get.docker.com | sh
+
+# 2. Clone + ตั้งค่า
+git clone https://github.com/YOUR_ORG/ncsa-blacklist.git
+cd ncsa-blacklist
+cp .env.example .env
+nano .env   # ตั้ง ADMIN_TOKEN ด้วย: openssl rand -hex 32
+
+# 3. รัน (development)
+docker compose up -d --build
+
+# รัน (production — resource limits + structured logging)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+# 4. ตรวจสอบ
+docker compose ps
+curl http://localhost:3939/healthz
+```
+
+### ตั้งค่า nginx + SSL (Let's Encrypt ฟรี)
+
+```bash
+apt install nginx certbot python3-certbot-nginx -y
+
+cp nginx.conf /etc/nginx/sites-available/ncsa-blacklist
+sed -i 's/YOUR_DOMAIN/soc.hospital.go.th/g' /etc/nginx/sites-available/ncsa-blacklist
+ln -sf /etc/nginx/sites-available/ncsa-blacklist /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
+
+# ขอ SSL certificate (ฟรี, ต่ออายุอัตโนมัติ)
+certbot --nginx -d soc.hospital.go.th
+```
+
+### เปิด Firewall
+
+```bash
+# Ubuntu (ufw)
+ufw allow 80/tcp && ufw allow 443/tcp && ufw enable
+
+# CentOS/RHEL (firewalld)
+firewall-cmd --permanent --add-service={http,https}
+firewall-cmd --reload
+```
+
+### Auto-start on Reboot (systemd)
+
+`deploy.sh` ตั้งค่าให้อัตโนมัติ หรือทำเองด้วย:
+
+```bash
+systemctl enable ncsa-blacklist
+systemctl start ncsa-blacklist
+systemctl status ncsa-blacklist
+```
+
+---
+
 ## การอัปเดตระบบ
 
 ```bash
