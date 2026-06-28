@@ -21,9 +21,11 @@
   --sh:0 8px 40px rgba(0,0,0,.7);--tr:0.18s cubic-bezier(.4,0,.2,1);
   --glow-c:0 0 20px rgba(0,229,255,.4);
   --glow-p:0 0 20px rgba(139,92,246,.4);
+  --card-bg:#0a0f1e;
 }
 [data-theme="light"]{
   --bg:#f0f4ff;--bg2:#e4eaf7;--bg3:#ffffff;
+  --card-bg:#ffffff;
   --card:rgba(255,255,255,.85);--card-b:rgba(0,0,0,.09);
   --text:#0d1117;--text2:#4a5568;--text3:#a0aec0;
   --glow-c:none;--glow-p:none;
@@ -229,7 +231,8 @@ input,textarea,select{font-family:inherit;color:var(--text);background:transpare
 .input:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,229,255,.12),0 0 16px rgba(0,229,255,.1)}
 .input::placeholder{color:var(--text3)}
 textarea.input{resize:vertical;min-height:100px;font-family:'JetBrains Mono',monospace;font-size:.82rem}
-select.input{cursor:pointer}
+select.input{cursor:pointer;color-scheme:dark}
+select.input option{background:#0d1117;color:var(--text)}
 .label{font-size:.75rem;color:var(--text2);font-weight:600;margin-bottom:6px;display:block;letter-spacing:.02em}
 
 /* ── Buttons ── */
@@ -1064,6 +1067,10 @@ select.input{cursor:pointer}
             <option value="siem">SIEM/Security</option>
             <option value="backup">Backup</option>
             <option value="vm">Hypervisor/VM</option>
+            <option value="iomt">IoMT/Medical Device</option>
+            <option value="ot">OT/Industrial Device</option>
+            <option value="printer">Printer/MFP</option>
+            <option value="cctv">CCTV/Physical Security</option>
             <option value="other">อื่นๆ</option>
           </select>
         </div>
@@ -1952,12 +1959,42 @@ select.input{cursor:pointer}
   <section id="soc" style="margin-bottom:24px">
     <div class="section-h">
       <h2 class="section-title"><span class="section-accent"></span>SOC Operations Center</h2>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <span class="pill">🛡 CTAM+ 2569</span>
         <button class="btn btn-ghost btn-sm" onclick="loadSocAlerts()">↻</button>
         <button class="btn btn-primary btn-sm" onclick="generateCtamReport()">📄 รายงาน CTAM+</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportOrgConfig()">⬇ Export Config</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer">⬆ Import <input type="file" accept=".json" style="display:none" onchange="importOrgConfig(this)"></label>
       </div>
     </div>
+
+    <!-- Org Profile Card (Public Data) -->
+    <div class="card" style="margin-bottom:16px" id="org-profile-card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div id="org-type-badge" style="font-size:2rem">🏥</div>
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:1rem;font-weight:800;color:var(--text)" id="org-profile-name">หน่วยงานของท่าน</div>
+          <div style="font-size:.75rem;color:var(--text3)" id="org-profile-dept"></div>
+          <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap" id="org-profile-tags"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;min-width:200px">
+          <div style="text-align:center;padding:6px;border-radius:8px;background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.15)">
+            <div style="font-size:1.2rem;font-weight:900;color:var(--cyan)" id="op-ctam">—/17</div>
+            <div style="font-size:.6rem;color:var(--text3)">CTAM+</div>
+          </div>
+          <div style="text-align:center;padding:6px;border-radius:8px;background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.15)">
+            <div style="font-size:1.2rem;font-weight:900;color:var(--green)" id="op-assets">0</div>
+            <div style="font-size:.6rem;color:var(--text3)">Assets</div>
+          </div>
+          <div style="text-align:center;padding:6px;border-radius:8px;background:rgba(255,171,0,.06);border:1px solid rgba(255,171,0,.15)">
+            <div style="font-size:1.2rem;font-weight:900;color:var(--orange)" id="op-vulns">0</div>
+            <div style="font-size:.6rem;color:var(--text3)">Open CVE</div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="font-size:.72rem" onclick="openSettings()" title="ตั้งค่าหน่วยงาน">⚙ ตั้งค่า</button>
+      </div>
+    </div>
+
     <!-- Network Topology mini (dynamic) -->
     <div class="card" style="margin-bottom:16px;padding:16px 20px">
       <div class="card-title" style="margin-bottom:12px">🗺 Network Topology — <span id="topo-orgname">หน่วยงาน</span></div>
@@ -4266,7 +4303,7 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
   </section>
 
   <!-- Risk Assessment -->
-  <section id="risk" style="display:none;margin-bottom:24px">
+  <section id="risk" style="margin-bottom:24px">
     <div class="section-h">
       <h2 class="section-title"><span class="section-accent"></span>Risk Assessment Matrix</h2>
       <button class="btn btn-primary btn-sm" onclick="showAddRisk()">+ เพิ่มความเสี่ยง</button>
@@ -4595,16 +4632,16 @@ function saveAllSettings() {
   // Network zone presets when orgType changes or zones empty
   if (!cfg.networkZones || cfg.networkZones.length === 0 || cfg.orgType !== prevOrgType) {
     const ZONE_PRESETS = {
-      hospital: ['HIS/EMR Zone','DMZ (Public Services)','Admin Zone','IoMT/Medical Device Zone','Backup Zone'],
-      provincial_health: ['Internal Network','DMZ','Admin Zone','Public Wi-Fi Zone'],
-      district_health: ['Internal Network','DMZ','Admin Zone'],
-      localGov: ['Internal Zone','Public Services Zone','Admin Zone'],
-      school: ['Student Zone','Teacher/Staff Zone','Admin Zone','Wi-Fi Zone'],
-      university: ['Student Zone','Staff Zone','Research Zone','DMZ','Admin Zone','Data Center Zone'],
-      ministry: ['Internal Zone','DMZ','Classified Zone','Admin Zone','DR Zone'],
-      private: ['Internal Zone','DMZ','Admin Zone','Cloud Zone'],
-      ngo: ['Internal Zone','Public Zone','Admin Zone'],
-      stateEnterprise: ['Internal Zone','DMZ','Admin Zone','OT/Control Zone'],
+      hospital_m: ['HIS/EMR Zone','DMZ (Public Services)','Admin Zone','IoMT/Medical Device Zone','Backup Zone','User/Staff Zone'],
+      hospital_s: ['HIS/EMR Zone','DMZ','Admin Zone','IoMT Zone','Backup Zone'],
+      provincial_health: ['Internal Network','DMZ','Admin Zone','Public Wi-Fi Zone','Security Zone'],
+      district_health: ['Internal Network','DMZ','Admin Zone','User Zone'],
+      local_gov: ['Internal Zone','Public Services Zone','Admin Zone','Wi-Fi Zone','DMZ'],
+      school: ['Student Zone','Teacher/Staff Zone','Admin Zone','Wi-Fi Zone','Library Zone'],
+      university: ['Student Zone','Staff Zone','Research Zone','DMZ','Admin Zone','Data Center Zone','Guest Wi-Fi Zone'],
+      ministry: ['Internal Zone','DMZ','Classified Zone','Admin Zone','DR Zone','Partner Zone'],
+      private: ['Internal Zone','DMZ','Admin Zone','Cloud Zone','Guest Zone'],
+      other: ['Internal Zone','DMZ','Admin Zone'],
     };
     cfg.networkZones = (ZONE_PRESETS[cfg.orgType] || ['Internal Zone','DMZ','Admin Zone']).map(z=>({name:z,active:true}));
   }
@@ -4639,15 +4676,18 @@ function populateSettingsForm() {
   document.getElementById('s-sub3').value        = cfg.subnet3 !== CFG_DEFAULT.subnet3 ? cfg.subnet3 : '';
   document.getElementById('s-sub4').value        = cfg.subnet4 !== CFG_DEFAULT.subnet4 ? cfg.subnet4 : '';
 
-  // CTAM checklist
+  // CTAM checklist — filter by orgType
   const ctamList = document.getElementById('s-ctam-list');
+  const curOrgType = cfg.orgType || 'provincial_health';
   if (ctamList) {
-    ctamList.innerHTML = CTAM_ITEMS.map((item, i) =>
-      `<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background=''">
+    const applicableCtam = CTAM_ITEMS.filter(item => !item.orgTypes || item.orgTypes.includes('all') || item.orgTypes.includes(curOrgType));
+    ctamList.innerHTML = applicableCtam.map((item) => {
+      const i = CTAM_ITEMS.indexOf(item);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.04)'" onmouseout="this.style.background=''">
         <input type="checkbox" id="s-ctam-${i}" ${cfg.ctamDone[i] ? 'checked' : ''} style="accent-color:var(--green);width:14px;height:14px">
         <span style="font-size:.72rem;flex:1">${item.icon} ข้อ ${item.id}: ${item.label}</span>
-      </label>`
-    ).join('');
+      </label>`;
+    }).join('');
   }
   const st = document.getElementById('s-org-type');
   if (st) st.value = cfg.orgType || 'provincial_health';
@@ -4750,6 +4790,32 @@ function applyOrgConfig() {
   renderFwIntegration();
   // Re-render CTAM with updated status
   renderCtam();
+  // Org profile card
+  renderOrgProfile(cfg);
+}
+
+function renderOrgProfile(cfg) {
+  const ORG_ICONS = {hospital_m:'🏥',hospital_s:'🏨',provincial_health:'🏛',district_health:'🏢',local_gov:'🏙',school:'🏫',university:'🎓',ministry:'🏛',private:'🏗',other:'🏢'};
+  const ORG_LABELS = {provincial_health:'สสจ. (สำนักงานสาธารณสุขจังหวัด)',district_health:'สสอ. (สำนักงานสาธารณสุขอำเภอ)',hospital_m:'โรงพยาบาล (M1-M2)',hospital_s:'โรงพยาบาลชุมชน (S/F)',local_gov:'อบจ./อบต./เทศบาล',school:'โรงเรียน/สพฐ.',university:'มหาวิทยาลัย',ministry:'กระทรวง/กรม',private:'องค์กรเอกชน',other:'หน่วยงานอื่นๆ'};
+  const orgT = cfg.orgType||'provincial_health';
+  const icon = ORG_ICONS[orgT]||'🏢';
+  const label = ORG_LABELS[orgT]||orgT;
+  const appCtam = CTAM_ITEMS.filter(it=>!it.orgTypes||it.orgTypes.includes('all')||it.orgTypes.includes(orgT));
+  const ctamDone = appCtam.filter((_,i)=>cfg.ctamDone[CTAM_ITEMS.indexOf(appCtam[i])]).length;
+  const assets = (cfg.assets||[]).length;
+  const openVulns = (cfg.vulns||[]).filter(v=>v.status==='open'||v.status==='inprogress').length;
+  const SIEM_TAGS = {wazuh:'Wazuh',splunk:'Splunk',elastic:'Elastic',fortisiem:'FortiSIEM',graylog:'Graylog'};
+  const EDR_TAGS = {crowdstrike:'CrowdStrike',defender:'Defender',sentinelone:'SentinelOne',kaspersky:'Kaspersky',trendmicro:'Trend Micro'};
+  const FW_TAGS = {fortigate:'FortiGate',cisco:'Cisco',pfsense:'pfSense',iptables:'iptables',mikrotik:'MikroTik',juniper:'Juniper'};
+  const tags = [SIEM_TAGS[cfg.siemType],EDR_TAGS[cfg.edrType],FW_TAGS[cfg.firewallType]].filter(Boolean);
+  const n = s=>document.getElementById(s);
+  if(n('org-type-badge'))n('org-type-badge').textContent=icon;
+  if(n('org-profile-name'))n('org-profile-name').textContent=cfg.orgName||'หน่วยงานของท่าน';
+  if(n('org-profile-dept'))n('org-profile-dept').textContent=(cfg.department?cfg.department+' · ':'')+label;
+  if(n('org-profile-tags'))n('org-profile-tags').innerHTML=tags.map(t=>`<span style="font-size:.62rem;padding:1px 8px;border-radius:8px;border:1px solid rgba(0,229,255,.2);color:var(--cyan);background:rgba(0,229,255,.06)">${t}</span>`).join('');
+  if(n('op-ctam')){n('op-ctam').textContent=ctamDone+'/'+appCtam.length;n('op-ctam').style.color=ctamDone===appCtam.length?'var(--green)':ctamDone/appCtam.length>=0.7?'var(--orange)':'var(--red)';}
+  if(n('op-assets'))n('op-assets').textContent=assets;
+  if(n('op-vulns')){n('op-vulns').textContent=openVulns;n('op-vulns').style.color=openVulns===0?'var(--green)':openVulns>5?'var(--red)':'var(--orange)';}
 }
 
 function renderNetworkTopology(cfg) {
@@ -4793,7 +4859,8 @@ function renderNetworkTopology(cfg) {
 function navTo(el, target) {
   document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
   el.classList.add('active');
-  document.querySelector(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const t = document.querySelector(target);
+  if (t) { if (t.style.display === 'none') t.style.display = ''; t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
 
 // Tab switchers
@@ -5602,14 +5669,17 @@ function updateExecSummary(){
   const cfg=getCfg();
   const tickets=(cfg.tickets||[]).filter(t=>t.status==='open'||t.status==='investigating'||t.status==='contained').length;
   const vulns=(cfg.vulns||[]).filter(v=>v.status==='open'||v.status==='inprogress').length;
-  const ctamDone=CTAM_ITEMS.filter(i=>i.done).length;
+  const _orgT=cfg.orgType||'provincial_health';
+  const _appCtam=CTAM_ITEMS.filter(it=>!it.orgTypes||it.orgTypes.includes('all')||it.orgTypes.includes(_orgT));
+  const ctamDone=_appCtam.filter(i=>i.done).length;
+  const ctamTotal=_appCtam.length;
   const kpiMin=Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
   const training=(cfg.training||[]),trPct=training.length?Math.round(training.filter(t=>t.status==='done').length/training.length*100):0;
   const fwBlocks=(cfg.fwLog||[]).length;
   const s=id=>document.getElementById(id);
   if(s('exec-tickets')){s('exec-tickets').textContent=tickets;s('exec-tickets').style.color=tickets>0?'var(--red)':'var(--green)';}
   if(s('exec-vulns')){s('exec-vulns').textContent=vulns;s('exec-vulns').style.color=vulns>5?'var(--red)':vulns>0?'var(--orange)':'var(--green)';}
-  if(s('exec-ctam'))s('exec-ctam').textContent=ctamDone+'/17';
+  if(s('exec-ctam'))s('exec-ctam').textContent=ctamDone+'/'+ctamTotal;
   if(s('exec-kpi')){s('exec-kpi').textContent=kpiMin+'/7';s('exec-kpi').style.color=kpiMin===7?'var(--green)':kpiMin>=5?'var(--yellow)':'var(--red)';}
   if(s('exec-training')){s('exec-training').textContent=trPct+'%';s('exec-training').style.color=trPct>=80?'var(--green)':trPct>=50?'var(--yellow)':'var(--red)';}
   if(s('exec-fwblocks'))s('exec-fwblocks').textContent=fwBlocks;
@@ -5619,7 +5689,10 @@ async function genExecSummary(mode='open'){
   let stats={ip:{total:0},domain:{total:0},hash:{total:0}};
   try{const r=await apiFetch('/stats');stats=await r.json();}catch{}
   const now=new Date().toLocaleString('th-TH',{dateStyle:'full',timeStyle:'short'});
-  const ctamDone=CTAM_ITEMS.filter(i=>i.done).length;
+  const _orgT2=cfg.orgType||'provincial_health';
+  const _appCtam2=CTAM_ITEMS.filter(it=>!it.orgTypes||it.orgTypes.includes('all')||it.orgTypes.includes(_orgT2));
+  const ctamDone=_appCtam2.filter(i=>i.done).length;
+  const ctamTotal=_appCtam2.length;
   const kpiMin=Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
   const kpiMax=Array.isArray(cfg.kpiMax)?cfg.kpiMax.filter(Boolean).length:0;
   const openTickets=(cfg.tickets||[]).filter(t=>['open','investigating','contained'].includes(t.status));
@@ -6816,23 +6889,24 @@ async function genZeek() {
 }
 
 // ── CTAM+ Status ──
+// orgTypes values must match Settings s-org-type: provincial_health, district_health, hospital_m, hospital_s, local_gov, school, university, ministry, private, other
 const CTAM_ITEMS = [
   { id: 1,  label: 'Backup 3-2-1', icon: '💾', done: false, note: '', desc: 'สำรองข้อมูล ≥1 ครั้ง/วัน ย้อนหลัง ≥7 วัน รูปแบบ 3-2-1', evidence: 'รายงานผล Backup / รายการระบบที่สำรองข้อมูล / หลักฐานภาพ', orgTypes: ['all'] },
   { id: 2,  label: 'Antivirus / EDR', icon: '🛡', done: false, note: '', desc: 'ติดตั้ง AV/EDR/XDR บนระบบสำคัญทุกตัว อัปเดต Signature', evidence: 'ผลการติดตั้ง / รายการเครื่องที่ติดตั้ง / Alert Report', orgTypes: ['all'] },
   { id: 3,  label: 'Access Control (12 ข้อ)', icon: '🔐', done: false, note: '', desc: 'Open Port, IP Filter, IDS/IPS, VPN, Network Zone, User/Password Policy, Time Sync, Default Accounts, Review Log, IOC Feeds', evidence: 'รายงาน Firewall config / ตารางกำหนดสิทธิ', orgTypes: ['all'] },
   { id: 4,  label: 'PAM / Least Privilege', icon: '👤', done: false, note: '', desc: 'Disable Admin/Root, Role-based access, Password ≥12 ตัว, Session timeout, Review Privilege', evidence: 'ผลการตั้งค่าสิทธิ / ตาราง Access Rights Matrix', orgTypes: ['all'] },
   { id: 5,  label: 'BCP & DRP', icon: '📋', done: false, note: '', desc: 'ทดสอบ BCP+DRP ≥1 ครั้ง/ปี ครอบคลุม Risk, Resource, Continuity, Testing, Review', evidence: 'แผน BCP / แผน DRP / รายงานผลการทดสอบ', orgTypes: ['all'] },
-  { id: 6,  label: 'OS Patching', icon: '🔧', done: false, note: '', desc: 'อัปเดต Firewall firmware, OS, Application, Software พร้อม Change Management', evidence: 'คู่มือการอัปเดต / ผลการดำเนินงาน', orgTypes: ['all'] },
+  { id: 6,  label: 'OS/Firmware Patching', icon: '🔧', done: false, note: '', desc: 'อัปเดต Firewall firmware, OS, Application, Software พร้อม Change Management', evidence: 'คู่มือการอัปเดต / ผลการดำเนินงาน', orgTypes: ['all'] },
   { id: 7,  label: 'MFA / 2FA', icon: '🔑', done: false, note: '', desc: '2FA บน VPN, Network devices, Security devices, Hypervisor, OS สำหรับ Admin', evidence: 'รายละเอียดระบบ 2FA / ภาพหน้าจอการเข้าสู่ระบบ', orgTypes: ['all'] },
-  { id: 8,  label: 'WAF (OWASP Top10)', icon: '🌐', done: false, note: '', desc: 'WAF ป้องกัน OWASP Top10, Review Attack Report, IP Blocklist', evidence: 'คู่มือ WAF / ผลการติดตั้ง', orgTypes: ['hospital','provincial','university','ministry','stateEnterprise'] },
+  { id: 8,  label: 'WAF (OWASP Top10)', icon: '🌐', done: false, note: '', desc: 'WAF ป้องกัน OWASP Top10, Review Attack Report, IP Blocklist', evidence: 'คู่มือ WAF / ผลการติดตั้ง', orgTypes: ['hospital_m','hospital_s','provincial_health','university','ministry','private'] },
   { id: 9,  label: 'Log Management ≥90 วัน', icon: '📝', done: false, note: '', desc: 'เก็บ Log ≥90 วัน: System, Access, Auth, Authorization, Error, Application', evidence: 'รายงาน Log ย้อนหลัง 90 วัน / คู่มือระบบ Log', orgTypes: ['all'] },
-  { id: 10, label: 'SIEM', icon: '📡', done: false, note: '', desc: 'ตรวจจับ: Brute force/Port scan, Malware, Blacklist IP, Unauthorized, DDoS, Data Breach', evidence: 'รายละเอียดระบบ SIEM / รายงานผลการตรวจจับ', orgTypes: ['hospital','provincial','district','university','ministry','stateEnterprise'] },
+  { id: 10, label: 'SIEM', icon: '📡', done: false, note: '', desc: 'ตรวจจับ: Brute force/Port scan, Malware, Blacklist IP, Unauthorized, DDoS, Data Breach', evidence: 'รายละเอียดระบบ SIEM / รายงานผลการตรวจจับ', orgTypes: ['hospital_m','hospital_s','provincial_health','district_health','university','ministry','private'] },
   { id: 11, label: 'VA Scan', icon: '🔍', done: false, note: '', desc: 'Vulnerability Assessment ≥1 ครั้ง/ปี แก้ไข Critical/High ก่อน พร้อม Risk Management', evidence: 'รายงาน VA Scan พร้อมผลสรุปผู้บริหาร', orgTypes: ['all'] },
-  { id: 12, label: 'Asset Inventory', icon: '📦', done: false, note: '', desc: 'สำรวจ IT Asset ทั้งหมด ปิดระบบที่ไม่ใช้งาน', evidence: 'Asset Inventory ระบบทั้งหมด / สถานะการใช้งาน', orgTypes: ['all'] },
+  { id: 12, label: 'Asset Inventory', icon: '📦', done: false, note: '', desc: 'สำรวจ IT Asset ทั้งหมด รวม IoMT/OT ปิดระบบที่ไม่ใช้งาน', evidence: 'Asset Inventory ระบบทั้งหมด / สถานะการใช้งาน', orgTypes: ['all'] },
   { id: 13, label: 'Software Patching', icon: '⬆', done: false, note: '', desc: 'อัปเดต Software/Patch ระบบสำคัญ เช่น HIS, ระบบบริการ', evidence: 'คู่มือการอัปเดต / รายงาน Patching', orgTypes: ['all'] },
-  { id: 14, label: 'Network Segmentation', icon: '🔲', done: false, note: '', desc: 'แบ่งแยก Network: Critical vs Guest/User ด้วย Firewall/ACL', evidence: 'Network Diagram / Firewall/ACL config', orgTypes: ['hospital','provincial','district','university','ministry','stateEnterprise'] },
+  { id: 14, label: 'Network Segmentation', icon: '🔲', done: false, note: '', desc: 'แบ่งแยก Network: Critical vs Guest/User ด้วย Firewall/VLAN/ACL', evidence: 'Network Diagram / Firewall/ACL config', orgTypes: ['hospital_m','hospital_s','provincial_health','district_health','university','ministry','private','local_gov'] },
   { id: 15, label: 'Licensed Software', icon: '📜', done: false, note: '', desc: 'ซอฟต์แวร์ถูกลิขสิทธิ์ทุกตัว จัดทำ Software Asset Inventory', evidence: 'Software Asset Inventory / หลักฐาน License', orgTypes: ['all'] },
-  { id: 16, label: 'Penetration Testing', icon: '🎯', done: false, note: '', desc: 'Pentest (Gray/Black box) ≥1 ครั้ง/ปี ไม่มีช่องโหว่ Critical/High ตาม OWASP Top10', evidence: 'รายงาน Pentest พร้อมผลสรุปผู้บริหาร / แนวทางแก้ไข', orgTypes: ['hospital','provincial','university','ministry','stateEnterprise'] },
+  { id: 16, label: 'Penetration Testing', icon: '🎯', done: false, note: '', desc: 'Pentest (Gray/Black box) ≥1 ครั้ง/ปี ไม่มีช่องโหว่ Critical/High ตาม OWASP Top10', evidence: 'รายงาน Pentest พร้อมผลสรุปผู้บริหาร / แนวทางแก้ไข', orgTypes: ['hospital_m','hospital_s','provincial_health','university','ministry','private'] },
   { id: 17, label: 'Cybersecurity & PDPA Policy', icon: '📖', done: false, note: '', desc: 'นโยบาย Cybersecurity+PDPA เป็นลายลักษณ์อักษร + อบรมบุคลากร ≥1 ครั้ง/ปี', evidence: 'เอกสารนโยบาย / รายงานการอบรม / รายชื่อผู้เข้าร่วม', orgTypes: ['all'] },
 ];
 
@@ -6909,8 +6983,10 @@ function generateExecPreview() {
   const cfg = getCfg();
   const org = cfg.orgName || 'หน่วยงาน';
   const today = new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
-  const ctamDone = CTAM_ITEMS.filter(x=>x.done).length;
-  const ctamTotal = CTAM_ITEMS.length;
+  const _oT=cfg.orgType||'provincial_health';
+  const _appC=CTAM_ITEMS.filter(it=>!it.orgTypes||it.orgTypes.includes('all')||it.orgTypes.includes(_oT));
+  const ctamDone = _appC.filter(x=>x.done).length;
+  const ctamTotal = _appC.length;
   const kpiMin = Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
   const kpiMax = Array.isArray(cfg.kpiMax)?cfg.kpiMax.filter(Boolean).length:0;
   const vulns = Array.isArray(cfg.vulns)?cfg.vulns:[];
@@ -6947,8 +7023,10 @@ function printExecReport() {
   const cfg = getCfg();
   const org = cfg.orgName || 'หน่วยงาน';
   const today = new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
-  const ctamDone = CTAM_ITEMS.filter(x=>x.done).length;
-  const ctamTotal = CTAM_ITEMS.length;
+  const _oTP=cfg.orgType||'provincial_health';
+  const _appCP=CTAM_ITEMS.filter(it=>!it.orgTypes||it.orgTypes.includes('all')||it.orgTypes.includes(_oTP));
+  const ctamDone = _appCP.filter(x=>x.done).length;
+  const ctamTotal = _appCP.length;
   const kpiMin = Array.isArray(cfg.kpiMin)?cfg.kpiMin.filter(Boolean).length:0;
   const kpiMax = Array.isArray(cfg.kpiMax)?cfg.kpiMax.filter(Boolean).length:0;
   const vulns = Array.isArray(cfg.vulns)?cfg.vulns:[];
@@ -8539,8 +8617,11 @@ function renderNistCsf(){
 // ── CTAM+ Report Generator ──
 function generateCtamReport(){
   const cfg=getCfg();
-  const ctamDone=(cfg.ctamDone||[]);
-  const passCount=ctamDone.filter(Boolean).length;
+  const _orgTR=cfg.orgType||'provincial_health';
+  const _appCR=CTAM_ITEMS.filter(it=>!it.orgTypes||it.orgTypes.includes('all')||it.orgTypes.includes(_orgTR));
+  const ctamDoneArr=(cfg.ctamDone||[]);
+  const passCount=_appCR.filter((_,i2)=>ctamDoneArr[CTAM_ITEMS.indexOf(_appCR[i2])]).length;
+  const ctamApplicableTotal=_appCR.length;
   const kpiMinDone=(cfg.kpiMin||[]).filter(Boolean).length;
   const kpiMaxDone=(cfg.kpiMax||[]).filter(Boolean).length;
   const vulns=cfg.vulns||[];
@@ -8552,7 +8633,7 @@ function generateCtamReport(){
   const trainTotal=(cfg.training||[]).length;
   const now=new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
   const scoreComponents=[
-    {l:'CTAM+ 2569',p:Math.round((passCount/17)*100)},
+    {l:'CTAM+ 2569',p:Math.round((passCount/Math.max(1,ctamApplicableTotal))*100)},
     {l:'KPI ขั้นต่ำ',p:Math.round((kpiMinDone/7)*100)},
     {l:'KPI ขั้นสูง',p:Math.round((kpiMaxDone/8)*100)},
   ];
@@ -9454,8 +9535,10 @@ function generateDailyBrief() {
   const cfg = getCfg();
   const now = new Date();
   const dateStr = now.toLocaleDateString('th-TH', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const ctamDone = (typeof CTAM_ITEMS!=='undefined') ? CTAM_ITEMS.filter(x=>(cfg.ctam||{})[x.id]).length : 0;
-  const ctamTotal = (typeof CTAM_ITEMS!=='undefined') ? CTAM_ITEMS.length : 17;
+  const _orgTDB = cfg.orgType||'provincial_health';
+  const _appCDB = (typeof CTAM_ITEMS!=='undefined') ? CTAM_ITEMS.filter(it=>!it.orgTypes||it.orgTypes.includes('all')||it.orgTypes.includes(_orgTDB)) : [];
+  const ctamDone = _appCDB.filter(x=>cfg.ctamDone[CTAM_ITEMS.indexOf(x)]).length;
+  const ctamTotal = _appCDB.length||17;
   const kpiMinItems = (typeof KPI_MIN!=='undefined') ? KPI_MIN : [];
   const kpiDone = kpiMinItems.filter(x=>(cfg.kpi||{})[x.id]).length;
   const vulns = cfg.vulns || [];
