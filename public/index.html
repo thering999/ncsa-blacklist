@@ -1235,6 +1235,74 @@ select.input{cursor:pointer}
     <div id="vendor-list" style="display:flex;flex-direction:column;gap:6px"><div class="empty">ยังไม่มีข้อมูล Vendor</div></div>
   </div>
 
+  <!-- Licensed Software Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">📀 Licensed Software Tracker — CTAM+ ข้อ 15</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="showAddLicense()">+ เพิ่ม</button>
+    </div>
+    <div id="lic-alerts" style="margin-bottom:10px"></div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.75rem">
+        <thead><tr style="border-bottom:1px solid var(--card-b)">
+          <th style="padding:6px 8px;text-align:left;color:var(--text3)">ซอฟต์แวร์</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--text3)">Vendor</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ประเภท</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">Seats</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">หมดอายุ</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">สถานะ</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)"></th>
+        </tr></thead>
+        <tbody id="lic-table-body"><tr><td colspan="7" class="empty">ไม่มีข้อมูล</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- License Modal -->
+  <div id="lic-modal" style="display:none;position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:24px;max-width:460px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <strong id="lic-modal-title">เพิ่มซอฟต์แวร์</strong>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('lic-modal').style.display='none'">✕</button>
+      </div>
+      <input type="hidden" id="lic-idx" value="-1">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อซอฟต์แวร์ *</label><input class="input" id="lic-name" placeholder="เช่น Windows Server 2022, Office 365" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">Vendor</label><input class="input" id="lic-vendor" placeholder="Microsoft, Adobe..." style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">ประเภท License</label>
+            <select class="input" id="lic-type" style="width:100%;margin-top:4px">
+              <option value="perpetual">Perpetual (ถาวร)</option>
+              <option value="subscription" selected>Subscription (รายปี)</option>
+              <option value="oem">OEM</option>
+              <option value="open">Open Source</option>
+              <option value="edu">Educational</option>
+              <option value="gov">Government/สพฐ.</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">จำนวน Seats/License</label><input class="input" type="number" id="lic-seats" placeholder="1" style="width:100%;margin-top:4px" min="1"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">วันหมดอายุ</label><input class="input" type="date" id="lic-expiry" style="width:100%;margin-top:4px"></div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">หมายเหตุ</label><input class="input" id="lic-note" placeholder="หมายเหตุ..." style="width:100%;margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('lic-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveLicense()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Policy Document Register -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">📜 Policy Document Register — CTAM+ ข้อ 17</div>
+      <span id="policy-ctam17-badge" style="font-size:.68rem;padding:2px 8px;border-radius:10px;background:rgba(255,50,50,.2);color:var(--red);font-weight:700;margin-left:auto">ยังไม่ครบ</span>
+    </div>
+    <div id="policy-register-list" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+
   <!-- Sigma Rules Library -->
   <div class="card" style="margin-top:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
@@ -2367,6 +2435,15 @@ select.input{cursor:pointer}
           <button class="btn btn-ghost btn-sm" onclick="genCtamReport()" style="font-size:.72rem">📄 สร้างรายงาน CTAM+</button>
           <div style="font-size:.7rem;color:var(--text3);align-self:center">เปิดหน้าต่างใหม่ + Print</div>
         </div>
+      </div>
+
+      <!-- MOPH 100-Point Standard -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:0">💯 MOPH Cybersecurity 100-Point Standard FY2569</div>
+          <div id="moph100-total" style="margin-left:auto;font-size:1.5rem;font-weight:900;color:var(--cyan)">—/100</div>
+        </div>
+        <div id="moph100-domains" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
 
       <!-- SOC Alerts + Quick Actions -->
@@ -4217,6 +4294,8 @@ const CFG_DEFAULT = {
   ztChecks: {},
   pdpaFlows: [],
   quizHistory: [],
+  moph100: {},
+  licenses: [],
 };
 function getCfg() {
   try {
@@ -7530,6 +7609,117 @@ function toggleKpi(type, idx) {
 
 function saveKpiStatus() { toast('บันทึก KPI status แล้ว', 'ok'); }
 
+// ── Policy Document Register ──
+const REQUIRED_POLICIES = [
+  {id:'privacy_policy',name:'Privacy Policy (นโยบายความเป็นส่วนตัว)',ctam:17,desc:'นโยบายคุ้มครองข้อมูลส่วนบุคคลขององค์กร'},
+  {id:'privacy_notice',name:'Privacy Notice (ประกาศความเป็นส่วนตัว)',ctam:17,desc:'แจ้งเจ้าของข้อมูลก่อนเก็บรวบรวม'},
+  {id:'web_security',name:'Web Security Policy (นโยบายความมั่นคงเว็บไซต์)',ctam:17,desc:'มาตรการรักษาความมั่นคงปลอดภัยเว็บไซต์'},
+  {id:'cybersec_policy',name:'Cybersecurity Policy (นโยบาย Cybersecurity)',ctam:17,desc:'นโยบายหลักด้านความมั่นคงปลอดภัยสารสนเทศ'},
+  {id:'cybersec_practices',name:'Cybersecurity Practices (แนวปฏิบัติ)',ctam:17,desc:'คู่มือแนวปฏิบัติด้าน Cybersecurity สำหรับบุคลากร'},
+];
+function renderPolicyRegister() {
+  const cfg = getCfg();
+  const policies = cfg.policies || {};
+  const el = document.getElementById('policy-register-list');
+  const badge = document.getElementById('policy-ctam17-badge');
+  if (!el) return;
+  const allApproved = REQUIRED_POLICIES.every(p=>policies[p.id]?.status==='approved');
+  if(badge){badge.textContent=allApproved?'✅ CTAM+ ข้อ 17 ผ่าน':'ยังไม่ครบ';badge.style.background=allApproved?'rgba(0,200,0,.2)':'rgba(255,50,50,.2)';badge.style.color=allApproved?'var(--green)':'var(--red)';}
+  const stLabel={approved:'✅ อนุมัติแล้ว',draft:'📝 ร่าง',review:'🔄 รอ Review',missing:'❌ ยังไม่มี'};
+  el.innerHTML = REQUIRED_POLICIES.map(p=>{
+    const pol = policies[p.id] || {status:'missing'};
+    return `<div style="padding:10px 14px;border-radius:8px;border:1px solid var(--card-b);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:.8rem;font-weight:700;color:var(--text1)">${esc(p.name)}</div>
+        <div style="font-size:.68rem;color:var(--text3);margin-top:2px">${esc(p.desc)}</div>
+        ${pol.version?`<div style="font-size:.65rem;color:var(--text3);margin-top:2px">v${esc(pol.version)} · อนุมัติ: ${pol.approved||'—'} · Review: ${pol.nextReview||'—'}</div>`:''}
+      </div>
+      <select style="padding:4px 8px;border-radius:6px;border:1px solid var(--card-b);background:var(--card-bg);color:var(--text1);font-size:.72rem" onchange="savePolicyStatus('${p.id}','status',this.value)">
+        ${['missing','draft','review','approved'].map(s=>`<option value="${s}" ${pol.status===s?'selected':''}>${stLabel[s]}</option>`).join('')}
+      </select>
+      <input class="input" placeholder="เวอร์ชัน" value="${esc(pol.version||'')}" style="width:70px;font-size:.72rem" oninput="savePolicyStatus('${p.id}','version',this.value)">
+      <input class="input" type="date" title="วันที่อนุมัติ" value="${pol.approved||''}" style="width:130px;font-size:.72rem" onchange="savePolicyStatus('${p.id}','approved',this.value)">
+      <input class="input" type="date" title="วัน Review ถัดไป" value="${pol.nextReview||''}" style="width:130px;font-size:.72rem" onchange="savePolicyStatus('${p.id}','nextReview',this.value)">
+    </div>`;
+  }).join('');
+  const ctam17 = CTAM_ITEMS.find(c=>c.id===17);
+  if(ctam17) { ctam17.done = allApproved; }
+}
+function savePolicyStatus(policyId, field, val) {
+  const cfg = getCfg(); cfg.policies = cfg.policies || {};
+  if(Array.isArray(cfg.policies)) cfg.policies = {};
+  cfg.policies[policyId] = cfg.policies[policyId] || {status:'missing'};
+  cfg.policies[policyId][field] = val; saveCfg(cfg); renderPolicyRegister();
+}
+
+// ── Licensed Software Tracker ──
+function renderLicenses() {
+  const cfg = getCfg();
+  const lics = Array.isArray(cfg.licenses) ? cfg.licenses : [];
+  const tbody = document.getElementById('lic-table-body');
+  const alertEl = document.getElementById('lic-alerts');
+  const today = new Date();
+  const soon = lics.filter(l=>l.expiry&&l.lictype!=='perpetual'&&l.lictype!=='open'&&(new Date(l.expiry)-today)/86400000<=90&&(new Date(l.expiry)-today)>=0);
+  const expired = lics.filter(l=>l.expiry&&l.lictype!=='perpetual'&&l.lictype!=='open'&&new Date(l.expiry)<today);
+  if(alertEl){alertEl.innerHTML=[...expired.map(l=>`<div style="padding:6px 10px;border-radius:6px;background:rgba(255,0,0,.1);border-left:3px solid var(--red);font-size:.73rem;color:var(--red);margin-bottom:4px">❌ หมดอายุแล้ว: ${esc(l.name)} (${l.expiry})</div>`),...soon.map(l=>`<div style="padding:6px 10px;border-radius:6px;background:rgba(255,150,0,.1);border-left:3px solid var(--orange);font-size:.73rem;color:var(--orange);margin-bottom:4px">⚠ ใกล้หมดอายุ (≤90 วัน): ${esc(l.name)} — ${l.expiry}</div>`)].join('')||'';}
+  if(!tbody)return;
+  if(!lics.length){tbody.innerHTML='<tr><td colspan="7" class="empty">ไม่มีข้อมูล</td></tr>';return;}
+  const typeLabel={perpetual:'ถาวร',subscription:'รายปี',oem:'OEM',open:'Open Source',edu:'Educational',gov:'Gov/สพฐ.'};
+  tbody.innerHTML=lics.map((l,i)=>{
+    const daysLeft=l.expiry&&l.lictype!=='perpetual'&&l.lictype!=='open'?Math.round((new Date(l.expiry)-today)/86400000):null;
+    const sc=daysLeft===null?'var(--text3)':daysLeft<0?'var(--red)':daysLeft<=90?'var(--orange)':'var(--green)';
+    const st=daysLeft===null?'—':daysLeft<0?'หมดอายุ':daysLeft<=90?daysLeft+'วัน':'ใช้งานได้';
+    return `<tr style="border-bottom:1px solid var(--card-b)22"><td style="padding:6px 8px;font-size:.78rem;font-weight:600">${esc(l.name)}</td><td style="padding:6px 8px;font-size:.72rem;color:var(--text2)">${esc(l.vendor||'—')}</td><td style="padding:6px 8px;text-align:center;font-size:.7rem;color:var(--text3)">${typeLabel[l.lictype]||l.lictype||'—'}</td><td style="padding:6px 8px;text-align:center;font-size:.75rem">${l.seats||'—'}</td><td style="padding:6px 8px;text-align:center;font-size:.72rem;font-family:monospace">${l.expiry||'ไม่จำกัด'}</td><td style="padding:6px 8px;text-align:center;font-size:.72rem;font-weight:700;color:${sc}">${st}</td><td style="padding:6px 8px;text-align:center;white-space:nowrap"><button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="editLicense(${i})">✏</button><button class="btn btn-ghost btn-sm" style="font-size:.65rem;color:var(--red)" onclick="deleteLicense(${i})">✕</button></td></tr>`;
+  }).join('');
+}
+function showAddLicense(){document.getElementById('lic-idx').value='-1';document.getElementById('lic-modal-title').textContent='เพิ่มซอฟต์แวร์';['lic-name','lic-vendor','lic-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('lic-seats').value='';document.getElementById('lic-expiry').value='';document.getElementById('lic-type').value='subscription';document.getElementById('lic-modal').style.display='flex';}
+function editLicense(i){const cfg=getCfg(),l=(cfg.licenses||[])[i];if(!l)return;document.getElementById('lic-idx').value=i;document.getElementById('lic-modal-title').textContent='แก้ไขซอฟต์แวร์';document.getElementById('lic-name').value=l.name||'';document.getElementById('lic-vendor').value=l.vendor||'';document.getElementById('lic-type').value=l.lictype||'subscription';document.getElementById('lic-seats').value=l.seats||'';document.getElementById('lic-expiry').value=l.expiry||'';document.getElementById('lic-note').value=l.note||'';document.getElementById('lic-modal').style.display='flex';}
+function saveLicense(){const name=document.getElementById('lic-name').value.trim();if(!name){toast('ใส่ชื่อซอฟต์แวร์','err');return;}const cfg=getCfg();cfg.licenses=cfg.licenses||[];const l={name,vendor:document.getElementById('lic-vendor').value.trim(),lictype:document.getElementById('lic-type').value,seats:+document.getElementById('lic-seats').value||1,expiry:document.getElementById('lic-expiry').value,note:document.getElementById('lic-note').value.trim()};const idx=+document.getElementById('lic-idx').value;if(idx>=0)cfg.licenses[idx]=l;else cfg.licenses.push(l);saveCfg(cfg);document.getElementById('lic-modal').style.display='none';renderLicenses();toast(idx>=0?'แก้ไขแล้ว':'เพิ่มซอฟต์แวร์แล้ว','ok');}
+function deleteLicense(i){if(!confirm('ลบรายการนี้?'))return;const cfg=getCfg();cfg.licenses=(cfg.licenses||[]).filter((_,idx)=>idx!==i);saveCfg(cfg);renderLicenses();toast('ลบแล้ว','ok');}
+
+// ── MOPH 100-Point Standard ──
+const MOPH100_DOMAINS = [
+  {id:'gov',name:'Governance & Policy',icon:'🏛',max:10,items:['มีนโยบาย Cybersecurity ที่ผู้บริหารอนุมัติแล้ว','มีคณะกรรมการ Cybersecurity ระดับองค์กร','มีการประเมิน Cyber Risk ประจำปี','มีแผนปฏิบัติการ Cybersecurity ประจำปี','มีการรายงานสถานะ Cyber ต่อผู้บริหารระดับสูง ≥2 ครั้ง/ปี','มีงบประมาณด้าน Cybersecurity ที่จัดสรรชัดเจน','มีผู้รับผิดชอบ CISO หรือเทียบเท่า','มีการ review นโยบายประจำปี','มีแผน Cyber Awareness ประจำปี','มีการประสานงาน ThaiCERT/NCSA']},
+  {id:'asset',name:'Asset Management',icon:'📦',max:10,items:['มี IT Asset Inventory ครบถ้วน','มีการจัดประเภท Asset ตามความสำคัญ','มีการ review Asset ทุก 6 เดือน','ปิดระบบ/บริการที่ไม่ใช้งานทั้งหมด','มีการลงทะเบียน Software ที่ได้รับอนุญาต','มีการจัดการ End-of-Life systems','มีการ scan Asset บน Network อัตโนมัติ','มีการ label/tag Asset ตาม Classification','มีการจัดการ Mobile Device (MDM)','มีการจัดการ Cloud Asset']},
+  {id:'access',name:'Access Control',icon:'🔐',max:10,items:['มีนโยบาย Least Privilege','มี MFA บน Remote Access/VPN ทุกตัว','มีการ review สิทธิ์ User ทุก 6 เดือน','Disable Default/Guest account ทั้งหมด','มี Password Policy (≥12 ตัว, complexity)','มี PAM สำหรับ Admin account','มีการ log การเข้าถึงระบบสำคัญ','มี Session timeout บนระบบสำคัญ','มีการ revoke สิทธิ์ทันทีเมื่อพนักงานลาออก','มี Single Sign-On หรือ Identity Management']},
+  {id:'incident',name:'Incident Response',icon:'🚨',max:10,items:['มี IRP ที่ทดสอบแล้ว','มี CSIRT หรือผู้รับผิดชอบ IR ชัดเจน','มีช่องทาง Report Incident 24/7','มีการซ้อม Tabletop Exercise ≥1 ครั้ง/ปี','มีการ coordinate กับ ThaiCERT เมื่อ incident','มี Forensic capability (เบื้องต้น)','มีการ document Post-Incident Report','มีการ notify ผู้บริหารภายใน 1 ชั่วโมง','มีการ notify PDPA authority ภายใน 72 ชั่วโมง (ถ้าเกี่ยวข้อง)','มีการ lessons learned หลัง incident']},
+  {id:'bcp',name:'Business Continuity',icon:'🔄',max:10,items:['มี BCP ที่ทดสอบแล้ว','มี DRP สำหรับ IT systems','Backup 3-2-1 ครบถ้วน','ทดสอบ Restore ข้อมูลจาก Backup ≥1 ครั้ง/ปี','มี RTO/RPO กำหนดชัดเจนสำหรับระบบสำคัญ','มี Offsite Backup หรือ Cloud Backup','มีการ maintain Backup ≥7 วัน','ซ้อม BCP ≥1 ครั้ง/ปี','มี Hot/Warm standby สำหรับระบบ Critical','มีการ review BCP ประจำปี']},
+  {id:'network',name:'Network Security',icon:'🌐',max:10,items:['มี Firewall ระดับ Next-Gen','มี Network Segmentation (VLAN)','มี IDS/IPS','ปิด Port/Service ที่ไม่จำเป็น','มีการ scan Network Vulnerability ≥1 ครั้ง/ปี','มีการ block Blacklist IP อัตโนมัติ','เข้ารหัส Traffic ด้วย TLS 1.2+ ทุกระบบสำคัญ','มีการ monitor Network Traffic ผิดปกติ','มีการ restrict Remote Access เฉพาะ IP ที่อนุญาต','มี VPN สำหรับ Remote Work']},
+  {id:'endpoint',name:'Endpoint Security',icon:'💻',max:10,items:['ติดตั้ง EDR/AV บน Endpoint ทุกตัว','อัปเดต Signature/Definition อัตโนมัติ','มีการ patch OS ภายใน 30 วัน (Critical)','Encrypt Hard Drive (BitLocker/FileVault)','ควบคุม USB/Removable Media','มี Application Allowlist สำหรับ Server','มีการ scan Endpoint ด้วย VA tool','Disable Autorun/AutoPlay','มีการ monitor Endpoint Health แบบ realtime','มีการ isolate Endpoint ที่ติด Malware อัตโนมัติ']},
+  {id:'app',name:'Application Security',icon:'⚙',max:10,items:['มี WAF ป้องกัน Web Application','ทำ Pentest ≥1 ครั้ง/ปี','ทำ SAST/DAST บน Application สำคัญ','มี Secure Coding Guidelines','มีการ patch Application ภายใน 30 วัน (Critical)','Scan Docker/Container image ก่อน deploy','มีการ review 3rd party library/dependency','API Security (Auth, Rate limit, Input validation)','มีการ test OWASP Top 10','มีการ disable debug mode บน Production']},
+  {id:'data',name:'Data Protection / PDPA',icon:'🔒',max:10,items:['มีการจำแนกประเภทข้อมูล (Classification)','Encrypt ข้อมูล Personal Data at rest','Encrypt ข้อมูล Personal Data in transit','มี DLP controls','มีการจำกัดการเข้าถึงข้อมูล Personal Data','มี Privacy Policy และ Privacy Notice','มีการทำ DPIA สำหรับกิจกรรมความเสี่ยงสูง','มีการ Audit Log การเข้าถึงข้อมูล Personal','มีขั้นตอน Data Breach Notification','มีการจัดการสิทธิ์เจ้าของข้อมูล (DSR)']},
+  {id:'awareness',name:'Awareness & Training',icon:'🎓',max:10,items:['อบรม Cybersecurity Awareness บุคลากรทุกคน ≥1 ครั้ง/ปี','ทดสอบ Phishing Simulation ≥1 ครั้ง/ปี','อบรม IT/Security staff เฉพาะทาง','มีการ track ผลการอบรม','ผู้บริหารผ่านการอบรม Cyber Governance','มีการ orient บุคลากรใหม่เรื่อง Cyber policy','มีเนื้อหาอบรมที่ทันสมัย (update ทุกปี)','Phishing click rate < 5%','มีการรายงานผล Awareness ต่อผู้บริหาร','มีแผน Cybersecurity Awareness Campaign']},
+];
+function renderMoph100() {
+  const el = document.getElementById('moph100-domains');
+  const totalEl = document.getElementById('moph100-total');
+  if (!el) return;
+  const cfg = getCfg();
+  const checks = cfg.moph100 || {};
+  let grandTotal = 0;
+  el.innerHTML = MOPH100_DOMAINS.map(d => {
+    const done = d.items.filter((_, i) => checks[d.id+'_'+i]).length;
+    const pct = Math.round(done/d.max*100);
+    const color = pct>=80?'var(--green)':pct>=60?'var(--cyan)':pct>=40?'var(--yellow)':pct>=20?'var(--orange)':'var(--red)';
+    grandTotal += done;
+    return `<div style="border:1px solid var(--card-b);border-radius:8px;overflow:hidden">
+      <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;background:rgba(255,255,255,.02)" onclick="toggleMoph100Domain('${d.id}')">
+        <span style="font-size:1.1rem">${d.icon}</span>
+        <span style="font-size:.8rem;font-weight:700;color:var(--text1);flex:1">${d.name}</span>
+        <span style="font-size:.75rem;font-weight:900;color:${color}">${done}/${d.max}</span>
+        <div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden"><div style="height:100%;background:${color};border-radius:2px;width:${pct}%"></div></div>
+        <span style="font-size:.8rem;color:var(--text3)">▾</span>
+      </div>
+      <div id="moph100-body-${d.id}" style="display:none;padding:8px 12px 12px;border-top:1px solid rgba(255,255,255,.05);display:grid;grid-template-columns:1fr 1fr;gap:4px">
+        ${d.items.map((item,i)=>`<label style="display:flex;align-items:flex-start;gap:6px;font-size:.72rem;color:var(--text2);cursor:pointer"><input type="checkbox" ${checks[d.id+'_'+i]?'checked':''} onchange="saveMoph100('${d.id}',${i},this.checked)" style="margin-top:2px;flex-shrink:0"><span>${item}</span></label>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  if (totalEl) { totalEl.textContent=grandTotal+'/100'; totalEl.style.color=grandTotal>=80?'var(--green)':grandTotal>=60?'var(--cyan)':grandTotal>=40?'var(--yellow)':'var(--red)'; }
+}
+function toggleMoph100Domain(id) { const el=document.getElementById('moph100-body-'+id); if(el)el.style.display=el.style.display==='none'?'grid':'none'; }
+function saveMoph100(domainId, i, val) { const cfg=getCfg(); cfg.moph100=cfg.moph100||{}; cfg.moph100[domainId+'_'+i]=val; saveCfg(cfg); renderMoph100(); }
+
 function renderCtam() {
   const cfg = getCfg();
   const orgT = cfg.orgType || 'hospital';
@@ -8866,7 +9056,7 @@ function renderThreatActors(){
   loadFeedBreakdown();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
-  renderCtam(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries();
+  renderCtam(); renderMoph100(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries(); renderLicenses(); renderPolicyRegister();
   updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
@@ -8909,6 +9099,7 @@ function renderThreatActors(){
       if (ctm) ctm.style.display = 'none';
       const qm = document.getElementById('quiz-modal');
       if (qm) qm.style.display = 'none';
+      const lm = document.getElementById('lic-modal'); if(lm) lm.style.display='none';
       const pfm = document.getElementById('pdpa-flow-modal');
       if (pfm) pfm.style.display = 'none';
       closeSettings();
