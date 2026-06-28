@@ -1345,6 +1345,25 @@ select.input{cursor:pointer}
   <section id="irp" style="margin-bottom:28px">
   <div class="section-h"><div><div class="hero-title" style="font-size:1.2rem">🚨 Incident Response Playbook</div><div class="hero-sub">แนวทางปฏิบัติเมื่อเกิดเหตุ — ตาม MOPH CIRP Framework</div></div></div>
 
+  <!-- Ransomware Readiness -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">🔒 Ransomware Readiness Score</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="calcRansomScore()">↺ คำนวณ</button>
+    </div>
+    <div id="ransom-checklist" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px;margin-bottom:14px"></div>
+    <div id="ransom-score-bar" style="display:none;padding:12px;border-radius:8px;background:rgba(0,0,0,.3)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <strong id="ransom-score-label" style="font-size:1rem">คะแนน: —</strong>
+        <span id="ransom-score-pct" style="font-size:1.4rem;font-weight:900;color:var(--green)">—</span>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+        <div id="ransom-score-fill" style="height:100%;background:var(--green);border-radius:3px;transition:width .6s ease;width:0"></div>
+      </div>
+      <div id="ransom-score-detail" style="margin-top:10px;font-size:.72rem;color:var(--text3)"></div>
+    </div>
+  </div>
+
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
     <button class="btn btn-ghost btn-sm irp-tab active" onclick="switchIrpTab(this,'irp-ransomware')" style="border-color:rgba(255,23,68,.3);color:var(--red)">🔐 Ransomware</button>
     <button class="btn btn-ghost btn-sm irp-tab" onclick="switchIrpTab(this,'irp-web')" style="color:var(--orange)">🌐 Web Attack</button>
@@ -2266,6 +2285,12 @@ select.input{cursor:pointer}
         </div>
       </div>
       <div id="gap-items" style="margin-top:12px;display:flex;flex-direction:column;gap:4px"></div>
+    </div>
+
+    <!-- Zero Trust Assessment -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title" style="margin-bottom:12px">🔰 Zero Trust Assessment — NIST SP 800-207</div>
+      <div id="zt-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px"></div>
     </div>
 
     <!-- Threat Intel Summary -->
@@ -3792,6 +3817,20 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
         </div>
       </div>
     </div>
+
+    <!-- Email Security Check -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title" style="margin-bottom:12px">📧 Email Security Checker — SPF / DKIM / DMARC</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input class="input mono" id="email-domain-check" placeholder="example.go.th หรือ moph.go.th" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')checkEmailSec()">
+        <input class="input mono" id="dkim-selector" placeholder="DKIM selector (เช่น google, default, s1)" style="width:180px">
+        <button class="btn btn-primary" onclick="checkEmailSec()">🔍 ตรวจสอบ</button>
+      </div>
+      <div id="email-sec-result" style="display:none">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px" id="email-sec-cards"></div>
+        <div id="email-sec-detail" style="font-size:.78rem;color:var(--text2)"></div>
+      </div>
+    </div>
   </section>
 
   <!-- News -->
@@ -3960,6 +3999,8 @@ const CFG_DEFAULT = {
   topoEdges: [],
   lineToken: '',
   risks: [],
+  ransomChecks: {},
+  ztChecks: {},
 };
 function getCfg() {
   try {
@@ -6417,6 +6458,79 @@ async function loadWazuhLive() {
   }
 }
 
+async function checkEmailSec() {
+  const domain = document.getElementById('email-domain-check')?.value.trim().replace(/^https?:\/\//,'').split('/')[0];
+  const selector = document.getElementById('dkim-selector')?.value.trim() || 'default';
+  if (!domain) { toast('ใส่ domain ก่อน','err'); return; }
+  const resEl = document.getElementById('email-sec-result');
+  const cardsEl = document.getElementById('email-sec-cards');
+  const detailEl = document.getElementById('email-sec-detail');
+  if (!resEl||!cardsEl||!detailEl) return;
+  resEl.style.display=''; cardsEl.innerHTML='<div style="color:var(--text3);font-size:.8rem;padding:8px">⏳ กำลังตรวจสอบ DNS records...</div>'; detailEl.innerHTML='';
+  const dnsLookup = async (name, type) => {
+    try {
+      const r = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`);
+      const d = await r.json();
+      return d.Answer || [];
+    } catch { return []; }
+  };
+  try {
+    const [spfRecs, dmarcRecs, dkimRecs] = await Promise.all([
+      dnsLookup(domain, 'TXT'),
+      dnsLookup('_dmarc.'+domain, 'TXT'),
+      dnsLookup(selector+'._domainkey.'+domain, 'TXT'),
+    ]);
+    const spf = spfRecs.find(r=>r.data?.includes('v=spf1'));
+    const dmarc = dmarcRecs.find(r=>r.data?.includes('v=DMARC1'));
+    const dkim = dkimRecs.find(r=>r.data?.includes('v=DKIM1'));
+    const mkCard = (name, found, val, ok_hint, fail_hint, detail) => {
+      const color = found ? 'var(--green)' : 'var(--red)';
+      return `<div style="padding:14px;border-radius:8px;border:1px solid ${color}33;background:${color}08">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:1.3rem">${found?'✅':'❌'}</span>
+          <strong style="color:${color}">${name}</strong>
+          <span style="margin-left:auto;font-size:.68rem;color:${color};font-weight:700">${found?'PASS':'FAIL'}</span>
+        </div>
+        <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">${found?ok_hint:fail_hint}</div>
+        ${val?`<div style="font-size:.65rem;font-family:monospace;color:var(--text3);background:rgba(0,0,0,.3);padding:6px;border-radius:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(val)}">${esc(val.substring(0,80))}${val.length>80?'…':''}</div>`:''}
+        ${detail?`<div style="font-size:.68rem;color:var(--text3);margin-top:6px">${detail}</div>`:''}
+      </div>`;
+    };
+    const spfVal = spf?.data?.replace(/"/g,'') || '';
+    let spfDetail = '';
+    if (spfVal) {
+      if (spfVal.includes('~all')) spfDetail='⚠ ~all (softfail) — แนะนำเปลี่ยนเป็น -all';
+      else if (spfVal.includes('-all')) spfDetail='✅ -all (hardfail) — ดีที่สุด';
+      else if (spfVal.includes('+all')) spfDetail='🚨 +all — อันตราย! ใครก็ส่งแทนได้';
+    }
+    const dmarcVal = dmarc?.data?.replace(/"/g,'') || '';
+    let dmarcDetail = '';
+    if (dmarcVal) {
+      const pMatch = dmarcVal.match(/p=(\w+)/);
+      const policy = pMatch?.[1] || 'none';
+      const pctMatch = dmarcVal.match(/pct=(\d+)/);
+      const pct = pctMatch?.[1] || '100';
+      dmarcDetail = `Policy: <strong style="color:${policy==='reject'?'var(--green)':policy==='quarantine'?'var(--yellow)':'var(--red)'}">${policy}</strong> · pct=${pct}%`;
+      if (policy==='none') dmarcDetail += ' ⚠ ควรตั้งเป็น quarantine หรือ reject';
+    }
+    cardsEl.innerHTML =
+      mkCard('SPF', !!spf, spfVal, 'SPF record พบแล้ว', 'ไม่พบ SPF record — ผู้ไม่หวังดีอาจปลอม domain ได้', spfDetail) +
+      mkCard('DMARC', !!dmarc, dmarcVal, 'DMARC record พบแล้ว', 'ไม่พบ DMARC — ไม่มีนโยบาย email authentication', dmarcDetail) +
+      mkCard('DKIM', !!dkim, dkim?.data?.replace(/"/g,'')||'', `DKIM selector "${selector}" พบแล้ว`, `ไม่พบ DKIM selector "${selector}" — ลองเปลี่ยน selector`, '');
+    const score = [!!spf,!!dmarc,!!dkim].filter(Boolean).length;
+    const scoreColor = score===3?'var(--green)':score>=1?'var(--orange)':'var(--red)';
+    detailEl.innerHTML = `<div style="padding:10px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--card-b);margin-top:4px">
+      <span style="font-weight:700;color:${scoreColor}">Email Security Score: ${score}/3</span> ·
+      <span style="color:var(--text3)">Domain: ${esc(domain)}</span>
+      <div style="margin-top:8px;font-size:.72rem;color:var(--text3)">
+        ${score<3?`<div style="color:var(--orange)">⚠ แนะนำ: ${[!spf&&'เพิ่ม SPF record',!dmarc&&'เพิ่ม DMARC (p=quarantine หรือ reject)',!dkim&&`ตรวจ DKIM selector (ลอง: google, s1, s2, mail, ${domain.split('.')[0]})`].filter(Boolean).join(' · ')}</div>`:'<div style="color:var(--green)">✅ Email security ครบถ้วน</div>'}
+      </div>
+    </div>`;
+  } catch(e) {
+    cardsEl.innerHTML=`<div style="color:var(--red);padding:8px">Error: ${esc(e.message)}</div>`;
+  }
+}
+
 async function loadMispEvents() {
   const url = (document.getElementById('misp-live-url')?.value||'').trim();
   const key = (document.getElementById('misp-live-key')?.value||'').trim();
@@ -6541,6 +6655,106 @@ async function loadSocMetrics() {
     if(s('sm-open-vulns')) { s('sm-open-vulns').textContent=vulns.length; s('sm-open-vulns').style.color=vulns.length>5?'var(--red)':vulns.length>0?'var(--orange)':'var(--green)'; }
     if(s('sm-training-pct')) { s('sm-training-pct').textContent=trPct+'%'; s('sm-training-pct').style.color=trPct>=80?'var(--green)':trPct>=50?'var(--orange)':'var(--red)'; }
   } catch {}
+}
+
+const ZT_PILLARS = [
+  {pillar:'Identity',icon:'🪪',checks:['MFA ทุก user/admin','Least privilege (PAM)','Identity governance (Active Directory/LDAP)','Service account review'],desc:'ยืนยันตัวตนทุกครั้ง ทุก user'},
+  {pillar:'Devices',icon:'💻',checks:['EDR บนทุก endpoint','Device compliance check','OS patching ทันสมัย','Mobile device management (MDM)'],desc:'ตรวจสอบ device ก่อน allow access'},
+  {pillar:'Networks',icon:'🔌',checks:['Network segmentation (VLAN)','Micro-segmentation','Encrypt all traffic (TLS 1.2+)','Block lateral movement'],desc:'ไม่มี implicit trust ใน network'},
+  {pillar:'Applications',icon:'⚙',checks:['WAF (OWASP Top10)','API security/auth','Application allow-listing','SAST/DAST scanning'],desc:'ตรวจสอบทุก request ก่อน execute'},
+  {pillar:'Data',icon:'🗄',checks:['Data classification','Encrypt data at rest','Encrypt data in transit','DLP controls'],desc:'ปกป้องข้อมูลทุกที่ทุกเวลา'},
+  {pillar:'Visibility',icon:'👁',checks:['SIEM logging ทุก system','Behavioral analytics','Threat hunting capability','Incident response plan'],desc:'Monitor everything, assume breach'},
+];
+
+function renderZeroTrust() {
+  const el = document.getElementById('zt-grid');
+  if (!el) return;
+  const cfg = getCfg();
+  const ztChecks = cfg.ztChecks || {};
+  el.innerHTML = ZT_PILLARS.map(p=>{
+    const done = p.checks.filter((_,i)=>ztChecks[p.pillar+'_'+i]).length;
+    const pct = Math.round(done/p.checks.length*100);
+    const color = pct>=75?'var(--green)':pct>=50?'var(--cyan)':pct>=25?'var(--orange)':'var(--red)';
+    return `<div style="padding:14px;border-radius:8px;border:1px solid ${color}33;background:${color}08">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:1.3rem">${p.icon}</span>
+        <div style="flex:1">
+          <div style="font-size:.82rem;font-weight:700;color:var(--text1)">${p.pillar}</div>
+          <div style="font-size:.65rem;color:var(--text3)">${p.desc}</div>
+        </div>
+        <span style="font-size:1rem;font-weight:900;color:${color}">${pct}%</span>
+      </div>
+      <div style="height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin-bottom:10px;overflow:hidden">
+        <div style="height:100%;background:${color};border-radius:2px;width:${pct}%;transition:width .4s"></div>
+      </div>
+      ${p.checks.map((c,i)=>`<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text2);margin-bottom:3px;cursor:pointer">
+        <input type="checkbox" ${ztChecks[p.pillar+'_'+i]?'checked':''} onchange="saveZtCheck('${p.pillar}',${i},this.checked)">
+        <span>${c}</span>
+      </label>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+function saveZtCheck(pillar, i, val) {
+  const cfg = getCfg();
+  cfg.ztChecks = cfg.ztChecks || {};
+  cfg.ztChecks[pillar+'_'+i] = val;
+  saveCfg(cfg);
+  renderZeroTrust();
+}
+
+const RANSOM_CHECKS = [
+  {id:'backup321',label:'Backup 3-2-1 (Offline copy)',weight:15,hint:'สำรองข้อมูล offline ที่ ransomware เข้าถึงไม่ได้'},
+  {id:'backupTest',label:'ทดสอบ Restore ข้อมูล Backup',weight:10,hint:'ทดสอบว่า Backup สามารถกู้คืนได้จริง'},
+  {id:'edr',label:'EDR บน Server/Endpoint ทุกตัว',weight:12,hint:'CrowdStrike, SentinelOne, Defender ATP หรือเทียบเท่า'},
+  {id:'patch',label:'OS + Application Patching ทันสมัย',weight:10,hint:'CVE Critical/High ทุกตัว patched ภายใน 30 วัน'},
+  {id:'mfa',label:'MFA ทุก Remote Access / VPN',weight:12,hint:'2FA บน VPN, RDP, Admin Portal'},
+  {id:'segment',label:'Network Segmentation (VLAN)',weight:8,hint:'แบ่งโซน: Production/DMZ/User/Management'},
+  {id:'email',label:'Email Security (SPF/DKIM/DMARC)',weight:8,hint:'ป้องกัน phishing email ซึ่งเป็น vector หลัก'},
+  {id:'awareness',label:'อบรม Phishing Awareness ≥1/ปี',weight:8,hint:'บุคลากรผ่านการทดสอบ phishing simulation'},
+  {id:'drp',label:'มี DRP + ซ้อมแผน',weight:8,hint:'ทดสอบ Disaster Recovery Plan จริง'},
+  {id:'irp',label:'มี IRP สำหรับ Ransomware',weight:5,hint:'ขั้นตอน Contain → Eradicate → Recover ชัดเจน'},
+  {id:'waf',label:'WAF ป้องกัน Web Attack',weight:7,hint:'WAF block OWASP Top10, ป้องกัน initial access ผ่าน web'},
+  {id:'monitor',label:'SIEM Monitoring 24/7',weight:7,hint:'ตรวจจับ lateral movement ได้ทัน'},
+];
+
+function initRansomChecklist() {
+  const cfg = getCfg();
+  const saved = cfg.ransomChecks || {};
+  const el = document.getElementById('ransom-checklist');
+  if (!el) return;
+  el.innerHTML = RANSOM_CHECKS.map(c=>`<label style="display:flex;align-items:flex-start;gap:8px;padding:8px;border-radius:6px;background:rgba(255,255,255,.03);cursor:pointer;border:1px solid var(--card-b)">
+    <input type="checkbox" id="rc-${c.id}" ${saved[c.id]?'checked':''} onchange="calcRansomScore()" style="margin-top:2px;flex-shrink:0">
+    <div>
+      <div style="font-size:.78rem;color:var(--text1)">${c.label}</div>
+      <div style="font-size:.65rem;color:var(--text3)">${c.hint} <span style="color:var(--cyan)">(${c.weight}%)</span></div>
+    </div>
+  </label>`).join('');
+}
+
+function calcRansomScore() {
+  const cfg = getCfg();
+  cfg.ransomChecks = cfg.ransomChecks || {};
+  let total = 0;
+  RANSOM_CHECKS.forEach(c => {
+    const checked = document.getElementById('rc-'+c.id)?.checked || false;
+    cfg.ransomChecks[c.id] = checked;
+    if (checked) total += c.weight;
+  });
+  saveCfg(cfg);
+  const barEl = document.getElementById('ransom-score-bar');
+  const lblEl = document.getElementById('ransom-score-label');
+  const pctEl = document.getElementById('ransom-score-pct');
+  const fillEl = document.getElementById('ransom-score-fill');
+  const detEl = document.getElementById('ransom-score-detail');
+  if (!barEl) return;
+  barEl.style.display='';
+  const grade = total>=85?{label:'พร้อมรับมือ Ransomware',color:'var(--green)'}:total>=65?{label:'พอรับได้ — ต้องปรับปรุง',color:'var(--cyan)'}:total>=45?{label:'เสี่ยงสูง — ต้องเร่งแก้ไข',color:'var(--orange)'}:{label:'วิกฤต — Ransomware จะสร้างความเสียหายรุนแรง',color:'var(--red)'};
+  if(lblEl){lblEl.textContent='Ransomware Readiness: '+grade.label;lblEl.style.color=grade.color;}
+  if(pctEl){pctEl.textContent=total+'%';pctEl.style.color=grade.color;}
+  if(fillEl){fillEl.style.width=total+'%';fillEl.style.background=grade.color;}
+  const missing = RANSOM_CHECKS.filter(c=>!cfg.ransomChecks[c.id]);
+  if(detEl) detEl.innerHTML = missing.length ? `<div style="color:var(--orange)">⚠ ยังขาด ${missing.length} รายการ (${missing.reduce((a,c)=>a+c.weight,0)}%): ${missing.map(c=>`<span style="color:var(--text2)">${c.label}</span>`).join(' · ')}</div>` : '<div style="color:var(--green)">✅ ผ่านทุกรายการ — พร้อมรับมือ Ransomware</div>';
 }
 
 function renderComplianceGap() {
@@ -7935,6 +8149,7 @@ function renderThreatActors(){
   renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
   renderPentestList(); renderVendorList(); renderNistCsf(); renderPhishSimList(); renderSocPerformance();
   renderCsirtContacts(); renderCustomHuntList();
+  initRansomChecklist(); calcRansomScore(); renderZeroTrust();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
