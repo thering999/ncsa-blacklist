@@ -1235,6 +1235,43 @@ select.input{cursor:pointer}
     <div id="vendor-list" style="display:flex;flex-direction:column;gap:6px"><div class="empty">ยังไม่มีข้อมูล Vendor</div></div>
   </div>
 
+  <!-- Sigma Rules Library -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">🔎 Sigma Detection Rules — Thai Health Sector</div>
+      <input class="input" id="sigma-search" placeholder="ค้นหา rule..." style="max-width:200px;margin-left:auto;font-size:.75rem" oninput="filterSigmaRules(this.value)">
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="sigma-tag-filters">
+      <button class="btn btn-ghost btn-sm sigma-tag active" onclick="filterSigmaTag('all',this)" style="font-size:.68rem">ทั้งหมด</button>
+      <button class="btn btn-ghost btn-sm sigma-tag" onclick="filterSigmaTag('ransomware',this)" style="font-size:.68rem">🔒 Ransomware</button>
+      <button class="btn btn-ghost btn-sm sigma-tag" onclick="filterSigmaTag('lateral',this)" style="font-size:.68rem">↔ Lateral Move</button>
+      <button class="btn btn-ghost btn-sm sigma-tag" onclick="filterSigmaTag('exfil',this)" style="font-size:.68rem">📤 Exfiltration</button>
+      <button class="btn btn-ghost btn-sm sigma-tag" onclick="filterSigmaTag('phishing',this)" style="font-size:.68rem">🎣 Phishing</button>
+      <button class="btn btn-ghost btn-sm sigma-tag" onclick="filterSigmaTag('webshell',this)" style="font-size:.68rem">🐚 Webshell</button>
+      <button class="btn btn-ghost btn-sm sigma-tag" onclick="filterSigmaTag('privesc',this)" style="font-size:.68rem">⬆ PrivEsc</button>
+    </div>
+    <div id="sigma-rules-list" style="display:flex;flex-direction:column;gap:8px;max-height:500px;overflow-y:auto"></div>
+  </div>
+
+  <!-- Threat Hunt Pivot -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-title" style="margin-bottom:12px">🔭 Threat Hunt — IOC Pivot &amp; Correlation</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <input class="input mono" id="hunt-ioc-input" placeholder="IP / domain / hash / username" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')huntPivot()">
+      <select class="input" id="hunt-ioc-type" style="width:130px">
+        <option value="ip">IP Address</option>
+        <option value="domain">Domain</option>
+        <option value="hash">File Hash</option>
+        <option value="user">Username</option>
+        <option value="host">Hostname</option>
+      </select>
+      <button class="btn btn-primary" onclick="huntPivot()">🔍 Pivot</button>
+    </div>
+    <div id="hunt-pivot-result" style="display:none">
+      <div id="hunt-pivot-queries" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
+
   <!-- Pentest Modal -->
   <div id="pentest-modal" style="display:none;position:fixed;inset:0;z-index:9003;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
     <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:22px;max-width:460px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
@@ -6724,6 +6761,150 @@ function printExecReport() {
 }
 
 // ── IOC Sharing ──
+// ── Threat Hunt Pivot ──
+function huntPivot() {
+  const val = document.getElementById('hunt-ioc-input')?.value.trim();
+  const type = document.getElementById('hunt-ioc-type')?.value;
+  if (!val) { toast('ใส่ IOC ก่อน','err'); return; }
+  const el = document.getElementById('hunt-pivot-result');
+  const qEl = document.getElementById('hunt-pivot-queries');
+  if (!el || !qEl) return;
+  el.style.display='';
+  const HUNT_QUERIES = {
+    ip:[
+      {siem:'Wazuh/Elastic',label:'Connection from IP',q:'agent.ip:"'+val+'" OR data.srcip:"'+val+'" OR data.dstip:"'+val+'"'},
+      {siem:'Wazuh/Elastic',label:'Auth attempt from IP',q:'rule.groups:"authentication" AND (data.srcip:"'+val+'" OR agent.ip:"'+val+'")'},
+      {siem:'Splunk',label:'Network events',q:'index=* (src_ip="'+val+'" OR dest_ip="'+val+'") | stats count by host, src_ip, dest_ip, dest_port'},
+      {siem:'Windows Event',label:'Logon from IP',q:'EventID:4624 AND IpAddress:"'+val+'"'},
+      {siem:'Firewall',label:'Block/allow events',q:'srcip="'+val+'" OR dstip="'+val+'"'},
+    ],
+    domain:[
+      {siem:'DNS Log',label:'DNS resolution',q:'dns.query.name:"'+val+'" OR dns.answers.name:"'+val+'"'},
+      {siem:'Proxy/Web',label:'HTTP requests to domain',q:'cs-host:"'+val+'" OR url:"'+val+'"'},
+      {siem:'Wazuh/Elastic',label:'Any mention in logs',q:'"'+val+'"'},
+      {siem:'Splunk',label:'Web proxy hits',q:'index=proxy url="*'+val+'*" | stats count by src_ip, url, cs_username'},
+    ],
+    hash:[
+      {siem:'Wazuh/Elastic',label:'File hash event',q:'syscheck.sha256_after:"'+val+'" OR syscheck.md5_after:"'+val+'" OR data.hash:"'+val+'"'},
+      {siem:'Windows Event',label:'Process creation',q:'EventID:4688 AND Hashes:"'+val+'"'},
+      {siem:'Splunk',label:'EDR hash lookup',q:'index=edr (sha256="'+val+'" OR md5="'+val+'") | stats count by host, file_path, parent_process'},
+    ],
+    user:[
+      {siem:'Wazuh/Elastic',label:'User activity',q:'data.srcuser:"'+val+'" OR rule.description:"'+val+'"'},
+      {siem:'Windows Event',label:'Logon events',q:'EventID:(4624 OR 4625 OR 4648) AND TargetUserName:"'+val+'"'},
+      {siem:'Splunk',label:'Authentication events',q:'index=* user="'+val+'" | stats count by action, src_ip, dest, _time | sort -_time'},
+    ],
+    host:[
+      {siem:'Wazuh/Elastic',label:'Host agent events',q:'agent.name:"'+val+'"'},
+      {siem:'Windows Event',label:'Computer account',q:'ComputerName:"'+val+'"'},
+      {siem:'Splunk',label:'All events from host',q:'index=* host="'+val+'" | stats count by sourcetype, source | sort -count'},
+    ],
+  };
+  const queries = HUNT_QUERIES[type] || [];
+  qEl.innerHTML = '<div style="font-size:.75rem;color:var(--cyan);font-weight:700;margin-bottom:6px">🎯 Pivot: <span style="font-family:monospace">'+esc(val)+'</span> ('+type+') — '+queries.length+' queries</div>'+
+    queries.map(function(q){return '<div style="padding:8px 12px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--card-b)">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
+      '<span style="font-size:.65rem;background:rgba(0,150,255,.15);color:var(--cyan);padding:1px 6px;border-radius:4px">'+esc(q.siem)+'</span>'+
+      '<span style="font-size:.75rem;font-weight:600;color:var(--text1)">'+esc(q.label)+'</span>'+
+      '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.65rem" onclick="copyText('+JSON.stringify(q.q)+')">📋</button>'+
+      '</div>'+
+      '<pre style="font-size:.7rem;font-family:monospace;color:var(--yellow);background:rgba(0,0,0,.3);padding:6px;border-radius:4px;overflow-x:auto;white-space:pre-wrap">'+esc(q.q)+'</pre>'+
+      '</div>';}).join('');
+  const osintLinks = type==='ip'?[
+    {label:'AbuseIPDB',url:'https://www.abuseipdb.com/check/'+encodeURIComponent(val)},
+    {label:'VirusTotal',url:'https://www.virustotal.com/gui/ip-address/'+encodeURIComponent(val)},
+    {label:'Shodan',url:'https://www.shodan.io/host/'+encodeURIComponent(val)},
+    {label:'ipinfo.io',url:'https://ipinfo.io/'+encodeURIComponent(val)},
+  ]:type==='domain'?[
+    {label:'VirusTotal',url:'https://www.virustotal.com/gui/domain/'+encodeURIComponent(val)},
+    {label:'URLScan',url:'https://urlscan.io/search/#domain:'+encodeURIComponent(val)},
+  ]:type==='hash'?[
+    {label:'VirusTotal',url:'https://www.virustotal.com/gui/file/'+encodeURIComponent(val)},
+    {label:'MalwareBazaar',url:'https://bazaar.abuse.ch/sample/'+encodeURIComponent(val)},
+  ]:[];
+  if(osintLinks.length){
+    qEl.innerHTML += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">'+osintLinks.map(function(l){return '<a href="'+l.url+'" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm" style="font-size:.68rem;text-decoration:none">🔗 '+l.label+'</a>';}).join('')+'</div>';
+  }
+}
+
+// ── Sigma Rules Library ──
+const SIGMA_RULES = [
+  {id:'SR001',title:'Ransomware File Extension Change (HIS/EMR)',tags:['ransomware'],level:'critical',mitre:'T1486',
+   desc:'ตรวจจับการเปลี่ยนนามสกุลไฟล์จำนวนมากใน path ระบบ HIS/EMR — บ่งชี้ Ransomware encryption',
+   sigma:'title: Ransomware File Extension Mass Rename in HIS Directory\nstatus: experimental\ndescription: Detects mass file rename events with new extensions in HIS/EMR directories\nauthor: NCSA-SOC-TH\ntags:\n  - attack.impact\n  - attack.t1486\nlogsource:\n  category: file_event\n  product: windows\ndetection:\n  selection:\n    TargetFilename|contains:\n      - \'\\\\HIS\\\\\'\n      - \'\\\\EMR\\\\\'\n      - \'\\\\HOSDATA\\\\\'\n      - \'\\\\PatientData\\\\\'\n    TargetFilename|endswith:\n      - \'.locked\'\n      - \'.encrypted\'\n      - \'.ransom\'\n      - \'.enc\'\n      - \'.crypted\'\n  condition: selection | count() by Image > 20\n  timeframe: 5m\nfalsepositives:\n  - Legitimate mass file conversion tools\nlevel: critical'},
+  {id:'SR002',title:'Suspicious PowerShell Download (Living off the Land)',tags:['lateral'],level:'high',mitre:'T1059.001',
+   desc:'PowerShell ดาวน์โหลดและรัน payload จาก internet — TTP ที่พบบ่อยใน Thai healthcare attacks',
+   sigma:'title: PowerShell Download and Execute Cradle\nstatus: experimental\ndescription: Detects PowerShell download cradles commonly used in Thai healthcare attacks\nauthor: NCSA-SOC-TH\ntags:\n  - attack.execution\n  - attack.t1059.001\nlogsource:\n  category: process_creation\n  product: windows\ndetection:\n  selection:\n    Image|endswith: \'\\\\powershell.exe\'\n    CommandLine|contains:\n      - \'DownloadString\'\n      - \'DownloadFile\'\n      - \'WebClient\'\n      - \'IEX\'\n      - \'Invoke-Expression\'\n      - \'bitsadmin\'\n  condition: selection\nfalsepositives:\n  - Legitimate admin scripts (verify with IT)\nlevel: high'},
+  {id:'SR003',title:'Webshell Upload Detection (IIS/Apache)',tags:['webshell'],level:'critical',mitre:'T1505.003',
+   desc:'ตรวจจับการอัปโหลด webshell ไปยัง web directory — พบบ่อยใน รพ./สสจ. ที่ expose web services',
+   sigma:'title: Webshell File Creation in Web Directory\nstatus: experimental\ndescription: Detects webshell file creation in IIS/Apache web directories\nauthor: NCSA-SOC-TH\ntags:\n  - attack.persistence\n  - attack.t1505.003\nlogsource:\n  category: file_event\n  product: windows\ndetection:\n  selection_path:\n    TargetFilename|contains:\n      - \'\\\\inetpub\\\\wwwroot\\\\\'\n      - \'\\\\htdocs\\\\\'\n      - \'\\\\www\\\\\'\n      - \'\\\\public_html\\\\\'\n  selection_ext:\n    TargetFilename|endswith:\n      - \'.php\'\n      - \'.aspx\'\n      - \'.asp\'\n      - \'.jsp\'\n  filter_legit:\n    Image|contains:\n      - \'\\\\deploy\\\\\'\n      - \'\\\\devops\\\\\'\n  condition: selection_path and selection_ext and not filter_legit\nfalsepositives:\n  - Legitimate web deployments\nlevel: critical'},
+  {id:'SR004',title:'Lateral Movement via PsExec/WMI',tags:['lateral'],level:'high',mitre:'T1021',
+   desc:'ตรวจจับ lateral movement ผ่าน PsExec หรือ WMI — พบใน post-compromise stage ก่อน ransomware deploy',
+   sigma:'title: Lateral Movement via PsExec or WMI\nstatus: experimental\ndescription: Detects lateral movement techniques via PsExec or WMI\nauthor: NCSA-SOC-TH\ntags:\n  - attack.lateral_movement\n  - attack.t1021\nlogsource:\n  category: process_creation\n  product: windows\ndetection:\n  selection_psexec:\n    Image|endswith: \'\\\\PSEXESVC.exe\'\n  selection_wmi:\n    Image|endswith: \'\\\\wmiprvse.exe\'\n    CommandLine|contains:\n      - \'cmd.exe\'\n      - \'powershell\'\n      - \'wscript\'\n  condition: selection_psexec or selection_wmi\nfalsepositives:\n  - Legitimate remote admin (correlate with change ticket)\nlevel: high'},
+  {id:'SR005',title:'Data Exfiltration via DNS Tunneling',tags:['exfil'],level:'high',mitre:'T1048.003',
+   desc:'DNS query ผิดปกติ — อาจเป็น DNS tunneling เพื่อ exfil ข้อมูลผู้ป่วย/HIS',
+   sigma:'title: Potential DNS Tunneling - Excessive DNS Queries\nstatus: experimental\ndescription: Detects potential DNS tunneling via excessive DNS queries to single domain\nauthor: NCSA-SOC-TH\ntags:\n  - attack.exfiltration\n  - attack.t1048.003\nlogsource:\n  category: dns\ndetection:\n  selection:\n    record_type: \'TXT\'\n  condition: selection | count(dns.question.name) by src_ip > 100\n  timeframe: 10m\nfalsepositives:\n  - Legitimate TXT record queries\nlevel: high'},
+  {id:'SR006',title:'Credential Dumping via LSASS',tags:['privesc'],level:'critical',mitre:'T1003.001',
+   desc:'ตรวจจับ process access ไปยัง lsass.exe — Mimikatz/CobaltStrike ใช้ดึง credential',
+   sigma:'title: LSASS Memory Read - Credential Dumping\nstatus: experimental\ndescription: Detects attempts to read LSASS memory for credential dumping\nauthor: NCSA-SOC-TH\ntags:\n  - attack.credential_access\n  - attack.t1003.001\nlogsource:\n  category: process_access\n  product: windows\ndetection:\n  selection:\n    TargetImage|endswith: \'\\\\lsass.exe\'\n    GrantedAccess|contains:\n      - \'0x1010\'\n      - \'0x1410\'\n      - \'0x147a\'\n      - \'0x1fffff\'\n  filter:\n    SourceImage|endswith:\n      - \'\\\\MsMpEng.exe\'\n      - \'\\\\csrss.exe\'\n      - \'\\\\werfault.exe\'\n  condition: selection and not filter\nfalsepositives:\n  - Some AV/EDR products\nlevel: critical'},
+  {id:'SR007',title:'Phishing - Suspicious Office Macro Execution',tags:['phishing'],level:'high',mitre:'T1566.001',
+   desc:'Office document รัน child process ผิดปกติ — Office macro ที่ใช้ใน spear phishing Thai healthcare',
+   sigma:'title: Suspicious Office Child Process (Macro Execution)\nstatus: experimental\ndescription: Detects Office applications spawning suspicious child processes (macro execution)\nauthor: NCSA-SOC-TH\ntags:\n  - attack.initial_access\n  - attack.t1566.001\nlogsource:\n  category: process_creation\n  product: windows\ndetection:\n  selection_parent:\n    ParentImage|endswith:\n      - \'\\\\WINWORD.EXE\'\n      - \'\\\\EXCEL.EXE\'\n      - \'\\\\POWERPNT.EXE\'\n  selection_child:\n    Image|endswith:\n      - \'\\\\cmd.exe\'\n      - \'\\\\powershell.exe\'\n      - \'\\\\wscript.exe\'\n      - \'\\\\cscript.exe\'\n      - \'\\\\mshta.exe\'\n  condition: selection_parent and selection_child\nfalsepositives:\n  - Legitimate macro-enabled documents (whitelist known processes)\nlevel: high'},
+  {id:'SR008',title:'Exfil via Cloud Storage (OneDrive/Dropbox/Google Drive)',tags:['exfil'],level:'medium',mitre:'T1567',
+   desc:'HTTP POST จำนวนมากไปยัง cloud storage API — อาจเป็น data exfil ข้อมูลผู้ป่วย',
+   sigma:'title: Data Upload to Cloud Storage Services\nstatus: experimental\ndescription: Detects large data uploads to cloud storage services\nauthor: NCSA-SOC-TH\ntags:\n  - attack.exfiltration\n  - attack.t1567\nlogsource:\n  category: proxy\ndetection:\n  selection:\n    c-uri-host|contains:\n      - \'onedrive.live.com\'\n      - \'dropbox.com\'\n      - \'drive.google.com\'\n      - \'box.com\'\n    cs-method: \'POST\'\n    sc-bytes|gte: 10000000\n  condition: selection\nfalsepositives:\n  - Legitimate cloud backup (correlate with user policy)\nlevel: medium'},
+];
+
+let sigmaTagFilter = 'all';
+
+function renderSigmaRules(rules) {
+  const el = document.getElementById('sigma-rules-list');
+  if (!el) return;
+  const levelColor = {critical:'var(--red)',high:'var(--orange)',medium:'var(--yellow)',low:'var(--green)'};
+  if (!rules.length) { el.innerHTML='<div class="empty">ไม่พบ rule ที่ตรงเงื่อนไข</div>'; return; }
+  el.innerHTML = rules.map(function(r){return '<div style="border:1px solid var(--card-b);border-left:3px solid '+(levelColor[r.level]||'var(--text3)')+';border-radius:6px;overflow:hidden">'+
+    '<div style="padding:10px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;background:rgba(255,255,255,.02)" onclick="toggleSigmaRule(\''+r.id+'\')">'+
+    '<span style="font-size:.65rem;font-family:monospace;color:var(--text3)">'+r.id+'</span>'+
+    '<strong style="font-size:.8rem;color:var(--text1);flex:1">'+esc(r.title)+'</strong>'+
+    '<span style="font-size:.65rem;font-weight:700;color:'+(levelColor[r.level]||'var(--text3)')+';">'+r.level.toUpperCase()+'</span>'+
+    '<span style="font-size:.65rem;color:var(--text3);font-family:monospace">'+r.mitre+'</span>'+
+    '<span style="font-size:.8rem;color:var(--text3)">▾</span>'+
+    '</div>'+
+    '<div id="sigma-body-'+r.id+'" style="display:none;padding:0 12px 12px">'+
+    '<div style="font-size:.75rem;color:var(--text2);margin-bottom:8px">'+esc(r.desc)+'</div>'+
+    '<pre style="background:rgba(0,0,0,.4);border:1px solid var(--card-b);border-radius:6px;padding:10px;font-size:.68rem;color:var(--cyan);overflow-x:auto;white-space:pre-wrap;line-height:1.5">'+esc(r.sigma)+'</pre>'+
+    '<button class="btn btn-ghost btn-sm" style="margin-top:6px;font-size:.68rem" onclick="copySigma(\''+r.id+'\')">📋 Copy Rule</button>'+
+    '</div>'+
+    '</div>';}).join('');
+}
+
+function toggleSigmaRule(id) {
+  const el = document.getElementById('sigma-body-'+id);
+  if(el) el.style.display = el.style.display==='none'?'':'none';
+}
+
+function copySigma(id) {
+  const r = SIGMA_RULES.find(function(x){return x.id===id;});
+  if(!r) return;
+  navigator.clipboard.writeText(r.sigma).then(function(){toast('Copy Sigma rule แล้ว','ok');}).catch(function(){toast('Copy ไม่ได้','err');});
+}
+
+function filterSigmaRules(q) {
+  const rules = SIGMA_RULES.filter(function(r){
+    const matchTag = sigmaTagFilter==='all' || r.tags.includes(sigmaTagFilter);
+    const matchQ = !q || r.title.toLowerCase().includes(q.toLowerCase()) || r.desc.toLowerCase().includes(q.toLowerCase()) || r.mitre.toLowerCase().includes(q.toLowerCase());
+    return matchTag && matchQ;
+  });
+  renderSigmaRules(rules);
+}
+
+function filterSigmaTag(tag, btn) {
+  sigmaTagFilter = tag;
+  document.querySelectorAll('.sigma-tag').forEach(function(b){b.classList.remove('active');});
+  if(btn) btn.classList.add('active');
+  filterSigmaRules(document.getElementById('sigma-search')?.value||'');
+}
+
 function generateIocReport() {
   const type = document.getElementById('ioc-type')?.value;
   const val = document.getElementById('ioc-value')?.value.trim();
@@ -8687,6 +8868,7 @@ function renderThreatActors(){
   renderCsirtContacts(); renderCustomHuntList();
   initRansomChecklist(); calcRansomScore(); renderZeroTrust();
   updateQuizStats(); renderPdpaFlow();
+  renderSigmaRules(SIGMA_RULES);
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
