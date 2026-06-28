@@ -1764,6 +1764,64 @@ select.input{cursor:pointer}
     </div>
   </div>
 
+  <!-- DRP Tracker -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">🔄 DRP Tracker — Disaster Recovery Plan (CTAM+ ข้อ 5)</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="showAddDrp()">+ เพิ่มระบบ</button>
+    </div>
+    <div id="drp-summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.75rem">
+        <thead><tr style="border-bottom:1px solid var(--card-b)">
+          <th style="padding:6px 8px;text-align:left;color:var(--text3)">ระบบ</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">RTO</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">RPO</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ทดสอบล่าสุด</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ผลทดสอบ</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ทดสอบถัดไป</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)"></th>
+        </tr></thead>
+        <tbody id="drp-table-body"><tr><td colspan="7" class="empty">ไม่มีข้อมูล — กด + เพิ่มระบบ</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- DRP Modal -->
+  <div id="drp-modal" style="display:none;position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:24px;max-width:480px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <strong id="drp-modal-title">เพิ่มระบบ DRP</strong>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('drp-modal').style.display='none'">✕</button>
+      </div>
+      <input type="hidden" id="drp-idx" value="-1">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อระบบ *</label><input class="input" id="drp-name" placeholder="เช่น HIS, EMR, PACS, AD, Email" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">RTO Target (Recovery Time)</label><input class="input" id="drp-rto" placeholder="เช่น 4 ชม., 1 วัน" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">RPO Target (Recovery Point)</label><input class="input" id="drp-rpo" placeholder="เช่น 1 ชม., 24 ชม." style="width:100%;margin-top:4px"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">วันที่ทดสอบล่าสุด</label><input class="input" type="date" id="drp-last-test" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">ผลทดสอบ</label>
+            <select class="input" id="drp-result" style="width:100%;margin-top:4px">
+              <option value="pass">✅ ผ่าน — กู้คืนได้ตาม RTO/RPO</option>
+              <option value="partial">⚠ ผ่านบางส่วน</option>
+              <option value="fail">❌ ไม่ผ่าน</option>
+              <option value="untested" selected>ยังไม่ได้ทดสอบ</option>
+            </select>
+          </div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">วันทดสอบถัดไป</label><input class="input" type="date" id="drp-next-test" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">หมายเหตุ</label><textarea class="input" id="drp-note" rows="2" placeholder="ปัญหาที่พบ, ข้อเสนอแนะ..." style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('drp-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveDrp()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CSIRT Contact Directory -->
   <div class="card" style="margin-top:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
@@ -1951,6 +2009,7 @@ select.input{cursor:pointer}
         <span>🟢 Online</span><span>🔴 Alert</span><span>⚪ Unknown</span>
         <span style="margin-left:auto">คลิกโหนดเพื่อดูรายละเอียด</span>
       </div>
+      <div id="topo-zones" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
     </div>
 
     <!-- SSL/TLS Certificate Monitor -->
@@ -4296,6 +4355,8 @@ const CFG_DEFAULT = {
   quizHistory: [],
   moph100: {},
   licenses: [],
+  drpSystems: [],
+  networkZones: [],
 };
 function getCfg() {
   try {
@@ -4448,6 +4509,7 @@ function saveAllSettings() {
   cfg.subnet2     = document.getElementById('s-sub2').value.trim()        || cfg.subnet2;
   cfg.subnet3     = document.getElementById('s-sub3').value.trim()        || cfg.subnet3;
   cfg.subnet4     = document.getElementById('s-sub4').value.trim()        || cfg.subnet4;
+  const prevOrgType = cfg.orgType;
   cfg.orgType     = document.getElementById('s-org-type')?.value          || cfg.orgType;
   cfg.siemType    = document.getElementById('s-siem-type')?.value         || cfg.siemType;
   cfg.edrType     = document.getElementById('s-edr-type')?.value          || cfg.edrType;
@@ -4459,6 +4521,22 @@ function saveAllSettings() {
     return cb ? cb.checked : cfg.ctamDone[i];
   });
 
+  // Network zone presets when orgType changes or zones empty
+  if (!cfg.networkZones || cfg.networkZones.length === 0 || cfg.orgType !== prevOrgType) {
+    const ZONE_PRESETS = {
+      hospital: ['HIS/EMR Zone','DMZ (Public Services)','Admin Zone','IoMT/Medical Device Zone','Backup Zone'],
+      provincial_health: ['Internal Network','DMZ','Admin Zone','Public Wi-Fi Zone'],
+      district_health: ['Internal Network','DMZ','Admin Zone'],
+      localGov: ['Internal Zone','Public Services Zone','Admin Zone'],
+      school: ['Student Zone','Teacher/Staff Zone','Admin Zone','Wi-Fi Zone'],
+      university: ['Student Zone','Staff Zone','Research Zone','DMZ','Admin Zone','Data Center Zone'],
+      ministry: ['Internal Zone','DMZ','Classified Zone','Admin Zone','DR Zone'],
+      private: ['Internal Zone','DMZ','Admin Zone','Cloud Zone'],
+      ngo: ['Internal Zone','Public Zone','Admin Zone'],
+      stateEnterprise: ['Internal Zone','DMZ','Admin Zone','OT/Control Zone'],
+    };
+    cfg.networkZones = (ZONE_PRESETS[cfg.orgType] || ['Internal Zone','DMZ','Admin Zone']).map(z=>({name:z,active:true}));
+  }
   saveCfg(cfg);
   applyOrgConfig();
   toast('บันทึก config หน่วยงานแล้ว', 'ok');
@@ -7209,6 +7287,13 @@ function renderTopology() {
   });
   html += `<g opacity=".5"><line x1="80" y1="30" x2="310" y2="75" stroke="var(--red)" stroke-width="1" stroke-dasharray="3 2" opacity=".4"/><polygon points="310,75 300,65 306,78" fill="var(--red)" opacity=".5"/><text x="80" y="25" font-size="9" fill="var(--red)" font-family="monospace" opacity=".6">⚠ Threats</text></g>`;
   svg.innerHTML = html;
+  // Render network zones badges
+  const zonesEl = document.getElementById('topo-zones');
+  if (zonesEl) {
+    const zones = cfg.networkZones || [];
+    const zoneColors = ['var(--cyan)','var(--green)','var(--orange)','var(--purple)','var(--yellow)','#f472b6','var(--red)'];
+    zonesEl.innerHTML = zones.filter(z=>z.active!==false).map((z,i)=>`<span style="padding:3px 10px;border-radius:12px;font-size:.68rem;border:1px solid ${zoneColors[i%zoneColors.length]}44;background:${zoneColors[i%zoneColors.length]}11;color:${zoneColors[i%zoneColors.length]}">${esc(z.name||z)}</span>`).join('');
+  }
 }
 
 async function loadSocMetrics() {
@@ -7617,6 +7702,51 @@ const REQUIRED_POLICIES = [
   {id:'cybersec_policy',name:'Cybersecurity Policy (นโยบาย Cybersecurity)',ctam:17,desc:'นโยบายหลักด้านความมั่นคงปลอดภัยสารสนเทศ'},
   {id:'cybersec_practices',name:'Cybersecurity Practices (แนวปฏิบัติ)',ctam:17,desc:'คู่มือแนวปฏิบัติด้าน Cybersecurity สำหรับบุคลากร'},
 ];
+// ── DRP Tracker ──
+function renderDrp() {
+  const cfg = getCfg();
+  const systems = Array.isArray(cfg.drpSystems) ? cfg.drpSystems : [];
+  const tbody = document.getElementById('drp-table-body');
+  const summary = document.getElementById('drp-summary');
+  const today = new Date();
+  if (summary) {
+    const pass = systems.filter(s=>s.result==='pass').length;
+    const fail = systems.filter(s=>s.result==='fail').length;
+    const untested = systems.filter(s=>!s.result||s.result==='untested').length;
+    const overdue = systems.filter(s=>s.nextTest&&new Date(s.nextTest)<today).length;
+    summary.innerHTML = [
+      {label:'ระบบทั้งหมด',val:systems.length,color:'var(--cyan)'},
+      {label:'ผ่านทดสอบ',val:pass,color:'var(--green)'},
+      {label:'ไม่ผ่าน',val:fail,color:'var(--red)'},
+      {label:'ยังไม่ทดสอบ',val:untested,color:'var(--text3)'},
+      {label:'เกินกำหนด',val:overdue,color:'var(--orange)'},
+    ].map(s=>`<div style="padding:8px;border-radius:6px;background:rgba(255,255,255,.04);text-align:center"><div style="font-size:1.1rem;font-weight:900;color:${s.color}">${s.val}</div><div style="font-size:.62rem;color:var(--text3)">${s.label}</div></div>`).join('');
+  }
+  if (!tbody) return;
+  if (!systems.length) { tbody.innerHTML='<tr><td colspan="7" class="empty">ไม่มีข้อมูล</td></tr>'; return; }
+  const resColor={pass:'var(--green)',partial:'var(--yellow)',fail:'var(--red)',untested:'var(--text3)'};
+  const resLabel={pass:'✅ ผ่าน',partial:'⚠ บางส่วน',fail:'❌ ไม่ผ่าน',untested:'—'};
+  tbody.innerHTML = systems.map((s,i)=>{
+    const overdue = s.nextTest && new Date(s.nextTest)<today;
+    return `<tr style="border-bottom:1px solid var(--card-b)22">
+      <td style="padding:6px 8px;font-size:.78rem;font-weight:600">${esc(s.name)}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:.72rem;color:var(--cyan)">${esc(s.rto||'—')}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:.72rem;color:var(--purple)">${esc(s.rpo||'—')}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:.72rem;font-family:monospace">${s.lastTest||'—'}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:.72rem;color:${resColor[s.result]||'var(--text3)'}">${resLabel[s.result]||'—'}</td>
+      <td style="padding:6px 8px;text-align:center;font-size:.72rem;font-family:monospace;color:${overdue?'var(--orange)':'var(--text2)'}">${s.nextTest||'—'}${overdue?' ⚠':''}</td>
+      <td style="padding:6px 8px;text-align:center;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="editDrp(${i})">✏</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:.65rem;color:var(--red)" onclick="deleteDrp(${i})">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+function showAddDrp(){document.getElementById('drp-idx').value='-1';document.getElementById('drp-modal-title').textContent='เพิ่มระบบ DRP';['drp-name','drp-rto','drp-rpo','drp-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('drp-last-test').value='';document.getElementById('drp-next-test').value='';document.getElementById('drp-result').value='untested';document.getElementById('drp-modal').style.display='flex';}
+function editDrp(i){const cfg=getCfg(),s=(cfg.drpSystems||[])[i];if(!s)return;document.getElementById('drp-idx').value=i;document.getElementById('drp-modal-title').textContent='แก้ไขระบบ';document.getElementById('drp-name').value=s.name||'';document.getElementById('drp-rto').value=s.rto||'';document.getElementById('drp-rpo').value=s.rpo||'';document.getElementById('drp-last-test').value=s.lastTest||'';document.getElementById('drp-result').value=s.result||'untested';document.getElementById('drp-next-test').value=s.nextTest||'';document.getElementById('drp-note').value=s.note||'';document.getElementById('drp-modal').style.display='flex';}
+function saveDrp(){const name=document.getElementById('drp-name').value.trim();if(!name){toast('ใส่ชื่อระบบ','err');return;}const cfg=getCfg();cfg.drpSystems=cfg.drpSystems||[];const s={name,rto:document.getElementById('drp-rto').value.trim(),rpo:document.getElementById('drp-rpo').value.trim(),lastTest:document.getElementById('drp-last-test').value,result:document.getElementById('drp-result').value,nextTest:document.getElementById('drp-next-test').value,note:document.getElementById('drp-note').value.trim()};const idx=+document.getElementById('drp-idx').value;if(idx>=0)cfg.drpSystems[idx]=s;else cfg.drpSystems.push(s);saveCfg(cfg);document.getElementById('drp-modal').style.display='none';renderDrp();toast(idx>=0?'แก้ไขแล้ว':'เพิ่มระบบแล้ว','ok');}
+function deleteDrp(i){if(!confirm('ลบระบบนี้?'))return;const cfg=getCfg();cfg.drpSystems=(cfg.drpSystems||[]).filter((_,idx)=>idx!==i);saveCfg(cfg);renderDrp();toast('ลบแล้ว','ok');}
+
 function renderPolicyRegister() {
   const cfg = getCfg();
   const policies = cfg.policies || {};
@@ -9056,7 +9186,7 @@ function renderThreatActors(){
   loadFeedBreakdown();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
-  renderCtam(); renderMoph100(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries(); renderLicenses(); renderPolicyRegister();
+  renderCtam(); renderMoph100(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries(); renderLicenses(); renderPolicyRegister(); renderDrp();
   updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
@@ -9100,6 +9230,7 @@ function renderThreatActors(){
       const qm = document.getElementById('quiz-modal');
       if (qm) qm.style.display = 'none';
       const lm = document.getElementById('lic-modal'); if(lm) lm.style.display='none';
+      const drpm = document.getElementById('drp-modal'); if(drpm) drpm.style.display='none';
       const pfm = document.getElementById('pdpa-flow-modal');
       if (pfm) pfm.style.display = 'none';
       closeSettings();
