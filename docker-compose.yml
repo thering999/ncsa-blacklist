@@ -1,6 +1,7 @@
 services:
   ncsa-blacklist:
     build: .
+    platform: linux/amd64
     ports:
       - "3939:3939"
     volumes:
@@ -36,6 +37,7 @@ services:
 
   ncsa-blacklist-sync:
     build: .
+    platform: linux/amd64
     command: node src/scheduler.js
     volumes:
       - ncsa-data:/data
