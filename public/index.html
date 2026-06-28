@@ -1309,6 +1309,132 @@ select.input{cursor:pointer}
     </div>
   </div>
 
+  <!-- Security Awareness Quiz -->
+  <div class="card" style="margin-top:16px" id="awareness-quiz-card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">🎓 Security Awareness Quiz — ทดสอบความรู้บุคลากร</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="startQuiz()">▶ เริ่มทดสอบ</button>
+      <button class="btn btn-ghost btn-sm" onclick="showQuizHistory()">📊 ประวัติ</button>
+    </div>
+    <div id="quiz-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:14px">
+      <div style="padding:10px;border-radius:8px;background:rgba(255,255,255,.04);text-align:center">
+        <div id="qs-attempts" style="font-size:1.4rem;font-weight:900;color:var(--cyan)">0</div>
+        <div style="font-size:.65rem;color:var(--text3)">ครั้งที่ทดสอบ</div>
+      </div>
+      <div style="padding:10px;border-radius:8px;background:rgba(255,255,255,.04);text-align:center">
+        <div id="qs-avg" style="font-size:1.4rem;font-weight:900;color:var(--green)">—</div>
+        <div style="font-size:.65rem;color:var(--text3)">คะแนนเฉลี่ย</div>
+      </div>
+      <div style="padding:10px;border-radius:8px;background:rgba(255,255,255,.04);text-align:center">
+        <div id="qs-pass" style="font-size:1.4rem;font-weight:900;color:var(--yellow)">—</div>
+        <div style="font-size:.65rem;color:var(--text3)">อัตราผ่าน (≥70%)</div>
+      </div>
+      <div style="padding:10px;border-radius:8px;background:rgba(255,255,255,.04);text-align:center">
+        <div id="qs-last" style="font-size:1rem;font-weight:700;color:var(--text2)">—</div>
+        <div style="font-size:.65rem;color:var(--text3)">ล่าสุด</div>
+      </div>
+    </div>
+    <div id="quiz-history-list" style="display:none;max-height:200px;overflow-y:auto;font-size:.75rem"></div>
+  </div>
+
+  <!-- PDPA Data Flow Register -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div class="card-title" style="margin-bottom:0">🔒 PDPA Data Flow Register — บันทึกกิจกรรมประมวลผล (มาตรา 39)</div>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="showAddPdpaFlow()">+ เพิ่มกิจกรรม</button>
+    </div>
+    <div id="pdpa-summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px"></div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.75rem">
+        <thead><tr style="border-bottom:1px solid var(--card-b)">
+          <th style="padding:6px 8px;text-align:left;color:var(--text3)">กิจกรรม</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--text3)">วัตถุประสงค์</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ประเภทข้อมูล</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ฐานกฎหมาย</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ระยะเก็บ</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)">ความเสี่ยง</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--text3)"></th>
+        </tr></thead>
+        <tbody id="pdpa-flow-body"><tr><td colspan="7" class="empty">ไม่มีข้อมูล — กด + เพิ่มกิจกรรม</td></tr></tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="exportPdpaFlow()">📥 Export CSV</button>
+    </div>
+  </div>
+
+  <!-- Quiz Modal -->
+  <div id="quiz-modal" style="display:none;position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:24px;max-width:600px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
+      <div id="quiz-content"></div>
+    </div>
+  </div>
+
+  <!-- PDPA Flow Modal -->
+  <div id="pdpa-flow-modal" style="display:none;position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:24px;max-width:520px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <strong id="pdpa-modal-title">เพิ่มกิจกรรมประมวลผล</strong>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('pdpa-flow-modal').style.display='none'">✕</button>
+      </div>
+      <input type="hidden" id="pf-idx" value="-1">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อกิจกรรม *</label><input class="input" id="pf-name" placeholder="เช่น ลงทะเบียนผู้ป่วย, การบันทึก Log" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">วัตถุประสงค์</label><input class="input" id="pf-purpose" placeholder="เช่น รักษาพยาบาล, ปฏิบัติตามกฎหมาย" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">ประเภทข้อมูล</label>
+            <select class="input" id="pf-datatype" style="width:100%;margin-top:4px" multiple size="3">
+              <option value="ชื่อ-นามสกุล" selected>ชื่อ-นามสกุล</option>
+              <option value="เลขประชาชน">เลขประชาชน</option>
+              <option value="ข้อมูลสุขภาพ">ข้อมูลสุขภาพ (Sensitive)</option>
+              <option value="ที่อยู่">ที่อยู่</option>
+              <option value="เบอร์โทร">เบอร์โทร</option>
+              <option value="Email">Email</option>
+              <option value="IP Address">IP Address</option>
+              <option value="ข้อมูลทางการเงิน">ข้อมูลทางการเงิน</option>
+            </select>
+          </div>
+          <div><label style="font-size:.72rem;color:var(--text3)">ฐานกฎหมาย (Lawful Basis)</label>
+            <select class="input" id="pf-lawbasis" style="width:100%;margin-top:4px">
+              <option value="consent">ความยินยอม (มาตรา 24(1))</option>
+              <option value="contract">สัญญา (มาตรา 24(3))</option>
+              <option value="legal">หน้าที่ตามกฎหมาย (มาตรา 24(6))</option>
+              <option value="vital">ผลประโยชน์สำคัญ (มาตรา 24(4))</option>
+              <option value="public">ประโยชน์สาธารณะ (มาตรา 24(5))</option>
+              <option value="legitimate">ประโยชน์โดยชอบ (มาตรา 24(7))</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">ระยะเวลาเก็บข้อมูล</label><input class="input" id="pf-retention" placeholder="เช่น 5 ปี, ตลอดชีวิต" style="width:100%;margin-top:4px"></div>
+          <div><label style="font-size:.72rem;color:var(--text3)">ผู้รับข้อมูล (ถ้ามี)</label><input class="input" id="pf-recipient" placeholder="เช่น สปสช., กรมบัญชีกลาง" style="width:100%;margin-top:4px"></div>
+        </div>
+        <div><label style="font-size:.72rem;color:var(--text3)">มาตรการป้องกัน</label><input class="input" id="pf-safeguard" placeholder="เช่น Encrypt at rest, Access control, Audit log" style="width:100%;margin-top:4px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">ระดับความเสี่ยง</label>
+            <select class="input" id="pf-risk" style="width:100%;margin-top:4px">
+              <option value="low">ต่ำ</option>
+              <option value="medium" selected>ปานกลาง</option>
+              <option value="high">สูง</option>
+              <option value="critical">วิกฤต (ต้องทำ DPIA)</option>
+            </select>
+          </div>
+          <div><label style="font-size:.72rem;color:var(--text3)">ทำ DPIA แล้ว?</label>
+            <select class="input" id="pf-dpia" style="width:100%;margin-top:4px">
+              <option value="no">ยังไม่ได้ทำ</option>
+              <option value="notreq">ไม่จำเป็น</option>
+              <option value="yes">ทำแล้ว</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('pdpa-flow-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="savePdpaFlow()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Phishing Sim Modal -->
   <div id="phishsim-modal" style="display:none;position:fixed;inset:0;z-index:9005;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
     <div style="background:var(--card-bg);border:1px solid var(--card-b);border-radius:var(--r);padding:22px;max-width:440px;width:calc(100% - 32px)">
@@ -4001,6 +4127,8 @@ const CFG_DEFAULT = {
   risks: [],
   ransomChecks: {},
   ztChecks: {},
+  pdpaFlows: [],
+  quizHistory: [],
 };
 function getCfg() {
   try {
@@ -6666,6 +6794,219 @@ const ZT_PILLARS = [
   {pillar:'Visibility',icon:'👁',checks:['SIEM logging ทุก system','Behavioral analytics','Threat hunting capability','Incident response plan'],desc:'Monitor everything, assume breach'},
 ];
 
+// ── Security Awareness Quiz ──
+const QUIZ_QUESTIONS = [
+  {q:'ได้รับอีเมลจากเพื่อนร่วมงานขอให้คลิก link "ด่วน" เพื่ออัพเดต password ควรทำอะไร?',opts:['คลิก link ทันที เพราะเป็นเพื่อนร่วมงาน','โทรยืนยันกับเพื่อนร่วมงานก่อนคลิก','ส่งต่อให้คนอื่นช่วยตรวจสอบ','Delete ทันทีโดยไม่ต้องทำอะไร'],ans:1,exp:'ยืนยันตัวตนผู้ส่งผ่านช่องทางอื่น (โทรศัพท์) ก่อนคลิก link — Phishing มักปลอมเป็นคนรู้จัก'},
+  {q:'รหัสผ่านที่ดีที่สุดสำหรับระบบสำคัญคือข้อใด?',opts:['Pass1234!','P@ssw0rd','aX9#mK2$vL8@qR5','ชื่อ+วันเกิด'],ans:2,exp:'รหัสผ่านที่ดี: ≥12 ตัว, มีตัวพิมพ์ใหญ่/เล็ก/ตัวเลข/อักขระพิเศษ, ไม่มีคำในพจนานุกรม'},
+  {q:'พบ USB Flash Drive วางอยู่ในที่จอดรถ ควรทำอะไร?',opts:['เสียบดูว่ามีอะไรบ้าง','ส่งให้ฝ่าย IT ตรวจสอบโดยไม่เสียบ','เก็บไว้ใช้เอง','โยนทิ้ง'],ans:1,exp:'USB ที่พบในที่สาธารณะอาจเป็น Rubber Ducky / HID attack — ห้ามเสียบ ส่ง IT โดยตรง'},
+  {q:'ข้อใดคือสัญญาณของ Ransomware infection?',opts:['คอมพิวเตอร์เร็วขึ้นผิดปกติ','ไฟล์เปลี่ยนนามสกุลและเปิดไม่ได้ มีข้อความเรียกค่าไถ่','เว็บไซต์โหลดช้า','Email ส่งไม่ออก'],ans:1,exp:'Ransomware encrypt ไฟล์และเปลี่ยนนามสกุล — ถ้าพบ: ตัด network ทันที โทรแจ้ง IT'},
+  {q:'ควรตั้ง MFA (Multi-Factor Authentication) บนระบบใด?',opts:['เฉพาะ email','เฉพาะ VPN','ทุกระบบที่รองรับ โดยเฉพาะ email/VPN/admin','ไม่จำเป็นถ้ารหัสผ่านแข็งแกร่ง'],ans:2,exp:'MFA ลดความเสี่ยง account takeover ได้ 99.9% — ตั้งทุกระบบที่ทำได้'},
+  {q:'พบว่า session หรือ account ถูกใช้งานโดยไม่ได้รับอนุญาต ควรทำอะไรก่อน?',opts:['เปลี่ยน password อย่างเดียว','แจ้ง IT Security ทันที + เปลี่ยน password + log out ทุก session','รอดูอีกสักวัน','ปล่อยไว้ถ้ายังใช้งานได้'],ans:1,exp:'Account compromise = แจ้ง Security ทันที + force logout + reset password + ตรวจ activity log'},
+  {q:'ข้อมูลใดต้องได้รับการปกป้องตาม PDPA?',opts:['ชื่อบริษัทสาธารณะ','HN/วันเกิด/ที่อยู่/เบอร์โทร/ผลตรวจ','ราคาสินค้า','รายการยา generic'],ans:1,exp:'PDPA ปกป้อง Personal Data: ข้อมูลที่ระบุตัวบุคคลได้ รวมถึงข้อมูลสุขภาพซึ่งเป็น Sensitive Data'},
+  {q:'เมื่อต้องการส่งข้อมูลผู้ป่วยทาง email ควรทำอย่างไร?',opts:['แนบไฟล์ปกติ','แนบไฟล์ + encrypt ด้วย password แจ้งผ่านช่องทางอื่น','ส่งแบบ CC ทุกคน','ไม่ส่งทาง email เลย ใช้ระบบภายในเท่านั้น'],ans:3,exp:'ข้อมูลผู้ป่วยไม่ควรส่งทาง email — ใช้ระบบที่ได้รับอนุมัติและ encrypt เท่านั้น'},
+  {q:'Social Engineering คืออะไร?',opts:['การ hack ผ่าน network','การหลอกลวงบุคคลเพื่อเข้าถึงข้อมูล/ระบบ','การติดตั้ง malware','การโจมตี DDoS'],ans:1,exp:'Social Engineering = ใช้จิตวิทยาหลอกคน เช่น Phishing, Vishing, Pretexting — เป็น attack vector หลัก'},
+  {q:'ถ้าพบช่องโหว่ด้านความมั่นคงปลอดภัยในระบบ ควรทำอะไร?',opts:['ใช้ประโยชน์จากช่องโหว่นั้น','แจ้ง IT Security ทันที','บอกเพื่อนร่วมงาน','โพสต์ใน social media'],ans:1,exp:'แจ้ง IT Security ทันที — Responsible Disclosure ช่วยให้แก้ไขก่อนถูก exploit'},
+];
+
+let quizState = {current:0, answers:[], startTime:null};
+
+function startQuiz() {
+  quizState = {current:0, answers:[], startTime:Date.now()};
+  document.getElementById('quiz-modal').style.display='flex';
+  renderQuizQuestion();
+}
+
+function renderQuizQuestion() {
+  const q = QUIZ_QUESTIONS[quizState.current];
+  const total = QUIZ_QUESTIONS.length;
+  const content = document.getElementById('quiz-content');
+  if (!content) return;
+  content.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span style="font-size:.75rem;color:var(--text3)">คำถาม ${quizState.current+1} / ${total}</span>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('quiz-modal').style.display='none'">✕</button>
+    </div>
+    <div style="height:4px;background:rgba(255,255,255,.08);border-radius:2px;margin-bottom:16px;overflow:hidden">
+      <div style="height:100%;background:var(--cyan);border-radius:2px;width:${((quizState.current)/total*100).toFixed(0)}%;transition:width .3s"></div>
+    </div>
+    <div style="font-size:.9rem;font-weight:600;color:var(--text1);margin-bottom:16px;line-height:1.5">${esc(q.q)}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${q.opts.map((opt,i)=>`<button onclick="answerQuiz(${i})" style="padding:10px 14px;border-radius:8px;border:1px solid var(--card-b);background:rgba(255,255,255,.03);color:var(--text1);text-align:left;cursor:pointer;font-size:.8rem;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='rgba(255,255,255,.03)'">${String.fromCharCode(65+i)}. ${esc(opt)}</button>`).join('')}
+    </div>`;
+}
+
+function answerQuiz(choice) {
+  const q = QUIZ_QUESTIONS[quizState.current];
+  const correct = choice === q.ans;
+  quizState.answers.push({choice,correct});
+  const content = document.getElementById('quiz-content');
+  const buttons = content.querySelectorAll('button[onclick^="answerQuiz"]');
+  buttons.forEach((btn,i)=>{
+    btn.disabled=true;
+    if(i===q.ans) btn.style.background='rgba(0,200,0,.2)',btn.style.borderColor='var(--green)';
+    else if(i===choice&&!correct) btn.style.background='rgba(255,0,0,.2)',btn.style.borderColor='var(--red)';
+  });
+  const exp = document.createElement('div');
+  exp.style.cssText='margin-top:12px;padding:10px;border-radius:8px;border-left:3px solid '+(correct?'var(--green)':'var(--orange)')+';background:rgba(0,0,0,.3);font-size:.78rem;color:var(--text2)';
+  exp.innerHTML=(correct?'✅ ถูกต้อง':'❌ ไม่ถูกต้อง — ')+esc(q.exp);
+  content.appendChild(exp);
+  const nextBtn = document.createElement('button');
+  nextBtn.className='btn btn-primary';
+  nextBtn.style.cssText='margin-top:12px;width:100%';
+  nextBtn.textContent = quizState.current+1 < QUIZ_QUESTIONS.length ? 'ถัดไป →' : '📊 ดูผล';
+  nextBtn.onclick = () => {
+    quizState.current++;
+    if(quizState.current < QUIZ_QUESTIONS.length) renderQuizQuestion();
+    else finishQuiz();
+  };
+  content.appendChild(nextBtn);
+}
+
+function finishQuiz() {
+  const correct = quizState.answers.filter(a=>a.correct).length;
+  const total = QUIZ_QUESTIONS.length;
+  const pct = Math.round(correct/total*100);
+  const pass = pct >= 70;
+  const elapsed = Math.round((Date.now()-quizState.startTime)/1000);
+  const cfg = getCfg();
+  cfg.quizHistory = cfg.quizHistory || [];
+  cfg.quizHistory.unshift({date:new Date().toISOString(),score:pct,correct,total,elapsed,pass});
+  if(cfg.quizHistory.length>50) cfg.quizHistory=cfg.quizHistory.slice(0,50);
+  saveCfg(cfg);
+  updateQuizStats();
+  const content = document.getElementById('quiz-content');
+  const color = pct>=80?'var(--green)':pct>=70?'var(--cyan)':pct>=50?'var(--orange)':'var(--red)';
+  content.innerHTML = `
+    <div style="text-align:center;padding:20px 0">
+      <div style="font-size:3.5rem;font-weight:900;color:${color};margin-bottom:4px">${pct}%</div>
+      <div style="font-size:1rem;color:${color};font-weight:700;margin-bottom:8px">${pass?'✅ ผ่าน':'❌ ไม่ผ่าน'}</div>
+      <div style="font-size:.8rem;color:var(--text3);margin-bottom:16px">ตอบถูก ${correct}/${total} ข้อ · ใช้เวลา ${elapsed}วินาที</div>
+      <div style="padding:10px;border-radius:8px;background:${color}11;border:1px solid ${color}33;font-size:.78rem;color:var(--text2);margin-bottom:16px">
+        ${pass?'🎉 ผ่านเกณฑ์ 70% — ความรู้ด้าน Cybersecurity ในระดับดี':'⚠ ควรทบทวนความรู้ Cybersecurity และทดสอบซ้ำ — เกณฑ์ผ่าน 70%'}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="btn btn-ghost" onclick="document.getElementById('quiz-modal').style.display='none'">ปิด</button>
+        <button class="btn btn-primary" onclick="startQuiz()">🔄 ทดสอบใหม่</button>
+      </div>
+    </div>`;
+}
+
+function updateQuizStats() {
+  const cfg = getCfg();
+  const h = cfg.quizHistory || [];
+  const atEl=document.getElementById('qs-attempts'),avgEl=document.getElementById('qs-avg'),passEl=document.getElementById('qs-pass'),lastEl=document.getElementById('qs-last');
+  if(atEl) atEl.textContent=h.length;
+  if(h.length){
+    const avg=Math.round(h.reduce((s,r)=>s+r.score,0)/h.length);
+    const passRate=Math.round(h.filter(r=>r.pass).length/h.length*100);
+    if(avgEl){avgEl.textContent=avg+'%';avgEl.style.color=avg>=70?'var(--green)':'var(--orange)';}
+    if(passEl) passEl.textContent=passRate+'%';
+    if(lastEl) lastEl.textContent=new Date(h[0].date).toLocaleDateString('th-TH');
+  }
+}
+
+function showQuizHistory() {
+  const el = document.getElementById('quiz-history-list');
+  if(!el) return;
+  const cfg = getCfg();
+  const h = cfg.quizHistory || [];
+  el.style.display = el.style.display==='none'?'':'none';
+  if(!h.length){el.innerHTML='<div class="empty">ยังไม่มีประวัติการทดสอบ</div>';return;}
+  el.innerHTML='<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--card-b)"><th style="padding:4px 8px;text-align:left;font-size:.68rem;color:var(--text3)">วันที่</th><th style="padding:4px 8px;text-align:center;font-size:.68rem;color:var(--text3)">คะแนน</th><th style="padding:4px 8px;text-align:center;font-size:.68rem;color:var(--text3)">ผล</th><th style="padding:4px 8px;text-align:center;font-size:.68rem;color:var(--text3)">เวลา</th></tr></thead><tbody>'+
+    h.slice(0,10).map(r=>`<tr style="border-bottom:1px solid var(--card-b)22"><td style="padding:4px 8px;font-size:.72rem">${new Date(r.date).toLocaleDateString('th-TH')}</td><td style="padding:4px 8px;text-align:center;font-size:.72rem;font-weight:700;color:${r.score>=70?'var(--green)':'var(--orange)'}">${r.score}%</td><td style="padding:4px 8px;text-align:center;font-size:.72rem">${r.pass?'✅ ผ่าน':'❌ ไม่ผ่าน'}</td><td style="padding:4px 8px;text-align:center;font-size:.72rem;color:var(--text3)">${r.elapsed}s</td></tr>`).join('')+
+  '</tbody></table>';
+}
+
+// ── PDPA Data Flow Register ──
+function renderPdpaFlow() {
+  const cfg = getCfg();
+  const flows = Array.isArray(cfg.pdpaFlows) ? cfg.pdpaFlows : [];
+  const tbody = document.getElementById('pdpa-flow-body');
+  const summary = document.getElementById('pdpa-summary');
+  if (summary) {
+    const riskCounts = {low:0,medium:0,high:0,critical:0};
+    flows.forEach(f=>{ if(riskCounts[f.risk]!==undefined) riskCounts[f.risk]++; });
+    const dpiaDone = flows.filter(f=>f.dpia==='yes').length;
+    summary.innerHTML = [
+      {label:'กิจกรรมทั้งหมด',val:flows.length,color:'var(--cyan)'},
+      {label:'ความเสี่ยงสูง/วิกฤต',val:riskCounts.high+riskCounts.critical,color:'var(--red)'},
+      {label:'ทำ DPIA แล้ว',val:dpiaDone,color:'var(--green)'},
+      {label:'ต้องทำ DPIA',val:flows.filter(f=>f.risk==='critical'&&f.dpia!=='yes').length,color:'var(--orange)'},
+    ].map(s=>`<div style="padding:8px;border-radius:6px;background:rgba(255,255,255,.04);text-align:center"><div style="font-size:1.2rem;font-weight:900;color:${s.color}">${s.val}</div><div style="font-size:.63rem;color:var(--text3)">${s.label}</div></div>`).join('');
+  }
+  if (!tbody) return;
+  if (!flows.length) { tbody.innerHTML='<tr><td colspan="7" class="empty">ไม่มีข้อมูล — กด + เพิ่มกิจกรรม</td></tr>'; return; }
+  const riskLabel={low:'ต่ำ',medium:'ปานกลาง',high:'สูง',critical:'วิกฤต'};
+  const riskColor={low:'var(--green)',medium:'var(--yellow)',high:'var(--orange)',critical:'var(--red)'};
+  const lawLabel={consent:'ความยินยอม',contract:'สัญญา',legal:'กฎหมาย',vital:'ผลประโยชน์สำคัญ',public:'สาธารณะ',legitimate:'ชอบโดยกฎหมาย'};
+  tbody.innerHTML = flows.map((f,i)=>`<tr style="border-bottom:1px solid var(--card-b)22">
+    <td style="padding:6px 8px;font-size:.78rem;font-weight:600">${esc(f.name)}</td>
+    <td style="padding:6px 8px;font-size:.72rem;color:var(--text2)">${esc(f.purpose||'—')}</td>
+    <td style="padding:6px 8px;text-align:center;font-size:.68rem">${(f.datatype||[]).map(d=>`<span style="background:rgba(0,150,255,.15);color:var(--cyan);padding:1px 5px;border-radius:4px;margin:1px;display:inline-block">${esc(d)}</span>`).join('')||'—'}</td>
+    <td style="padding:6px 8px;text-align:center;font-size:.7rem;color:var(--text2)">${lawLabel[f.lawbasis]||f.lawbasis||'—'}</td>
+    <td style="padding:6px 8px;text-align:center;font-size:.7rem">${esc(f.retention||'—')}</td>
+    <td style="padding:6px 8px;text-align:center"><span style="color:${riskColor[f.risk]||'var(--text3)'};font-size:.72rem;font-weight:700">${riskLabel[f.risk]||f.risk||'—'}</span>${f.risk==='critical'&&f.dpia!=='yes'?'<br><span style="font-size:.6rem;color:var(--red)">⚠ ต้องทำ DPIA</span>':''}</td>
+    <td style="padding:6px 8px;text-align:center;white-space:nowrap">
+      <button class="btn btn-ghost btn-sm" style="font-size:.65rem" onclick="editPdpaFlow(${i})">✏</button>
+      <button class="btn btn-ghost btn-sm" style="font-size:.65rem;color:var(--red)" onclick="deletePdpaFlow(${i})">✕</button>
+    </td>
+  </tr>`).join('');
+}
+
+function showAddPdpaFlow() {
+  document.getElementById('pf-idx').value='-1';
+  document.getElementById('pdpa-modal-title').textContent='เพิ่มกิจกรรมประมวลผล';
+  ['pf-name','pf-purpose','pf-retention','pf-recipient','pf-safeguard'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('pf-lawbasis').value='consent';
+  document.getElementById('pf-risk').value='medium';
+  document.getElementById('pf-dpia').value='no';
+  document.getElementById('pdpa-flow-modal').style.display='flex';
+}
+
+function editPdpaFlow(i) {
+  const cfg=getCfg(),f=(cfg.pdpaFlows||[])[i];if(!f)return;
+  document.getElementById('pf-idx').value=i;
+  document.getElementById('pdpa-modal-title').textContent='แก้ไขกิจกรรม';
+  document.getElementById('pf-name').value=f.name||'';
+  document.getElementById('pf-purpose').value=f.purpose||'';
+  document.getElementById('pf-retention').value=f.retention||'';
+  document.getElementById('pf-recipient').value=f.recipient||'';
+  document.getElementById('pf-safeguard').value=f.safeguard||'';
+  document.getElementById('pf-lawbasis').value=f.lawbasis||'consent';
+  document.getElementById('pf-risk').value=f.risk||'medium';
+  document.getElementById('pf-dpia').value=f.dpia||'no';
+  const dtSel=document.getElementById('pf-datatype');
+  if(dtSel){Array.from(dtSel.options).forEach(o=>o.selected=(f.datatype||[]).includes(o.value));}
+  document.getElementById('pdpa-flow-modal').style.display='flex';
+}
+
+function savePdpaFlow() {
+  const name=document.getElementById('pf-name').value.trim();
+  if(!name){toast('ใส่ชื่อกิจกรรม','err');return;}
+  const dtSel=document.getElementById('pf-datatype');
+  const datatype=dtSel?Array.from(dtSel.selectedOptions).map(o=>o.value):[];
+  const cfg=getCfg();cfg.pdpaFlows=cfg.pdpaFlows||[];
+  const f={name,purpose:document.getElementById('pf-purpose').value.trim(),datatype,lawbasis:document.getElementById('pf-lawbasis').value,retention:document.getElementById('pf-retention').value.trim(),recipient:document.getElementById('pf-recipient').value.trim(),safeguard:document.getElementById('pf-safeguard').value.trim(),risk:document.getElementById('pf-risk').value,dpia:document.getElementById('pf-dpia').value,created:new Date().toISOString()};
+  const idx=+document.getElementById('pf-idx').value;
+  if(idx>=0)cfg.pdpaFlows[idx]=f;else cfg.pdpaFlows.push(f);
+  saveCfg(cfg);document.getElementById('pdpa-flow-modal').style.display='none';
+  renderPdpaFlow();toast(idx>=0?'แก้ไขแล้ว':'เพิ่มกิจกรรมแล้ว','ok');
+}
+
+function deletePdpaFlow(i) {
+  if(!confirm('ลบกิจกรรมนี้?'))return;
+  const cfg=getCfg();cfg.pdpaFlows=(cfg.pdpaFlows||[]).filter((_,idx)=>idx!==i);
+  saveCfg(cfg);renderPdpaFlow();toast('ลบแล้ว','ok');
+}
+
+function exportPdpaFlow() {
+  const cfg=getCfg(),flows=cfg.pdpaFlows||[];
+  const hdr='ชื่อกิจกรรม,วัตถุประสงค์,ประเภทข้อมูล,ฐานกฎหมาย,ระยะเก็บ,ผู้รับข้อมูล,มาตรการ,ความเสี่ยง,DPIA\n';
+  const rows=flows.map(f=>[f.name,f.purpose,(f.datatype||[]).join('|'),f.lawbasis,f.retention,f.recipient,f.safeguard,f.risk,f.dpia].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['﻿'+hdr+rows],{type:'text/csv'});
+  Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'pdpa-data-flow.csv'}).click();
+}
+
 function renderZeroTrust() {
   const el = document.getElementById('zt-grid');
   if (!el) return;
@@ -8150,6 +8491,7 @@ function renderThreatActors(){
   renderPentestList(); renderVendorList(); renderNistCsf(); renderPhishSimList(); renderSocPerformance();
   renderCsirtContacts(); renderCustomHuntList();
   initRansomChecklist(); calcRansomScore(); renderZeroTrust();
+  updateQuizStats(); renderPdpaFlow();
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
@@ -8181,6 +8523,10 @@ function renderThreatActors(){
       if (psm) psm.style.display = 'none';
       const ctm = document.getElementById('contact-modal');
       if (ctm) ctm.style.display = 'none';
+      const qm = document.getElementById('quiz-modal');
+      if (qm) qm.style.display = 'none';
+      const pfm = document.getElementById('pdpa-flow-modal');
+      if (pfm) pfm.style.display = 'none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
