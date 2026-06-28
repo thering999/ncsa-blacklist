@@ -429,6 +429,179 @@ systemctl status ncsa-blacklist
 
 ---
 
+## 🪟 การติดตั้งบนเครื่อง Windows (คู่มือละเอียด)
+
+### ขั้นตอนที่ 1: ติดตั้ง Docker Desktop
+
+1. ดาวน์โหลด **Docker Desktop for Windows** จาก https://www.docker.com/products/docker-desktop/
+2. รันไฟล์ `Docker Desktop Installer.exe` (ต้องการสิทธิ์ Admin)
+3. ติ๊ก ✅ **Use WSL 2 instead of Hyper-V** (แนะนำ)
+4. คลิก **OK** รอติดตั้งเสร็จ ~5 นาที
+5. **Restart เครื่อง** (บังคับ)
+6. เปิด **Docker Desktop** จาก Start Menu
+7. รอจน icon 🐳 ใน Taskbar ล่างขวา **หยุดหมุน** = พร้อมใช้งาน
+
+> ⚠️ ถ้าขึ้น "WSL 2 kernel update required":  
+> ดาวน์โหลด [WSL2 Linux kernel update](https://aka.ms/wsl2kernel) ติดตั้ง แล้วเปิด Docker Desktop ใหม่
+
+### ขั้นตอนที่ 2: ดาวน์โหลดโปรแกรม
+
+เปิด **Command Prompt** หรือ **PowerShell**:
+
+```cmd
+git clone https://github.com/YOUR_ORG/ncsa-blacklist.git
+cd ncsa-blacklist
+```
+
+หรือ Download ZIP: GitHub → **Code** → **Download ZIP** → แตกไฟล์ → `cd ncsa-blacklist`
+
+### ขั้นตอนที่ 3: สร้างและแก้ไฟล์ .env
+
+```cmd
+copy .env.example .env
+notepad .env
+```
+
+แก้ไข `ADMIN_TOKEN` เป็น password ที่ยากเดา (≥20 ตัวอักษร):
+```env
+ADMIN_TOKEN=MySecureToken2569!ChangeThis
+```
+
+### ขั้นตอนที่ 4: รัน Dashboard (ครั้งแรก)
+
+```cmd
+docker-compose up -d --build
+```
+
+รอประมาณ **3-5 นาที** ผลลัพธ์ที่ถูกต้อง:
+```
+[+] Running 2/2
+ ✔ Container ncsa-blacklist-1       Healthy
+ ✔ Container ncsa-blacklist-sync-1  Started
+```
+
+### ขั้นตอนที่ 5: เปิด Dashboard
+
+เปิด Chrome/Edge/Firefox → **http://localhost:3939** 🎉
+
+---
+
+## 🔧 การแก้ปัญหาบน Windows
+
+### Error: `load metadata for docker.io/library/node:20-alpine`
+
+```
+ERROR [ncsa-blacklist-sync internal] load metadata for docker.io/library/node:20-alpine
+```
+
+**สาเหตุ**: Docker Desktop ใน Windows บางเวอร์ชันมีปัญหาดึง image metadata ผ่าน BuildKit
+
+**วิธีแก้ข้อ 1 — Disable BuildKit (แก้ได้เร็วที่สุด):**
+
+```cmd
+# Command Prompt
+set DOCKER_BUILDKIT=0
+docker-compose up -d --build
+```
+
+```powershell
+# PowerShell
+$env:DOCKER_BUILDKIT=0
+docker-compose up -d --build
+```
+
+**วิธีแก้ข้อ 2 — Pre-pull image ก่อน:**
+
+```cmd
+docker pull node:20-alpine
+docker-compose up -d --build
+```
+
+**วิธีแก้ข้อ 3 — Restart Docker Desktop:**
+1. คลิกขวา icon 🐳 ใน Taskbar → **Restart Docker Desktop**
+2. รอ icon หยุดหมุน → รัน `docker-compose up -d --build` ใหม่
+
+**วิธีแก้ข้อ 4 — เปิด Docker Desktop Settings:**
+1. Docker Desktop → ⚙ Settings → Docker Engine
+2. เพิ่ม `"features": {"buildkit": false}` ใน JSON
+3. Apply & Restart
+
+### Error: `Docker Desktop is not running`
+
+```
+error during connect: This error may indicate that the docker daemon is not running
+```
+
+**แก้**: เปิด **Docker Desktop** จาก Start Menu รอ icon หยุดหมุน แล้วรัน command ใหม่
+
+### Port 3939 ถูกใช้งานอยู่แล้ว
+
+```
+Error: port is already allocated
+```
+
+แก้ไขใน `docker-compose.yml`:
+```yaml
+ports:
+  - "3940:3939"  # เปลี่ยน 3940 เป็น port ที่ว่าง
+```
+แล้วเปิดที่ **http://localhost:3940**
+
+### Dashboard เปิดไม่ได้ (cannot connect)
+
+```bash
+# ตรวจสอบสถานะ
+docker-compose ps
+
+# ดู logs
+docker-compose logs ncsa-blacklist
+
+# รีสตาร์ท
+docker-compose restart
+```
+
+### Feed ว่างเปล่า / ไม่มีข้อมูล
+
+```cmd
+# Sync ด้วยมือ (ต้องใส่ ADMIN_TOKEN ที่ตั้งไว้ใน .env)
+curl -X POST http://localhost:3939/admin/sync -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+### ลืมตั้งค่า Setup Wizard ไม่ขึ้น
+
+กด **F12** → Console → พิมพ์:
+```javascript
+localStorage.removeItem('org_config'); location.reload();
+```
+
+---
+
+## 💾 การสำรองและกู้คืนข้อมูล
+
+### Export ข้อมูลทั้งหมด
+1. ไปที่ **Integrations** → Export/Import
+2. คลิก **📥 Export ข้อมูลทั้งหมด**
+3. บันทึกไฟล์ `dashboard-backup-[date].json`
+
+> ไฟล์รวม: CTAM+, Risk Register, Assets, Incidents, PDPA, Policies, Quiz History
+
+### Import ข้อมูล (กู้คืน)
+1. ไปที่ **Integrations** → Export/Import
+2. คลิก **📤 Import** → เลือกไฟล์ `.json`
+
+### Backup Docker Volume
+```bash
+# Backup feed data
+docker run --rm -v ncsa-data:/data -v $(pwd):/backup ubuntu \
+  tar czf /backup/ncsa-feed-backup.tar.gz /data
+
+# Restore
+docker run --rm -v ncsa-data:/data -v $(pwd):/backup ubuntu \
+  tar xzf /backup/ncsa-feed-backup.tar.gz -C /
+```
+
+---
+
 ## การอัปเดตระบบ
 
 ```bash
