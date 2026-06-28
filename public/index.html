@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#00e5ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>NCSA Blacklist Intelligence</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
@@ -1570,6 +1574,52 @@ select.input{cursor:pointer}
     </div>
   </div>
 
+  <!-- OT / IoMT Security -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🏥 OT / IoMT Security — อุปกรณ์การแพทย์และ IoT</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.72rem" onclick="showAddIomt()">+ เพิ่มอุปกรณ์</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--text3);margin-bottom:10px">ติดตามอุปกรณ์การแพทย์ (Medical Devices) และ IoT บน Network — ความเสี่ยงสูงหากไม่แยก VLAN</div>
+    <div id="iomt-list" style="display:flex;flex-direction:column;gap:6px">
+      <div style="padding:14px;text-align:center;color:var(--text3);font-size:.82rem">ยังไม่มีข้อมูลอุปกรณ์ OT/IoMT</div>
+    </div>
+  </div>
+  <div id="iomt-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+    <div style="background:var(--card-bg);border:1px solid rgba(0,229,255,.3);border-radius:14px;padding:24px;max-width:480px;width:calc(100% - 32px)">
+      <div style="font-size:1rem;font-weight:800;color:var(--cyan);margin-bottom:16px">🏥 เพิ่ม OT/IoMT Device</div>
+      <input type="hidden" id="iomt-edit-idx" value="-1">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="setting-row"><div class="setting-label">ชื่ออุปกรณ์ *</div><input class="input" id="iomt-name" placeholder="Ventilator / PACS / BMS"></div>
+        <div class="setting-row"><div class="setting-label">ประเภท</div>
+          <select class="input" id="iomt-type">
+            <option value="medical">🏥 Medical Device</option>
+            <option value="iot">📡 IoT Sensor</option>
+            <option value="ot">🏭 OT/SCADA</option>
+            <option value="cctv">📹 CCTV</option>
+            <option value="building">🏢 Building Mgmt</option>
+          </select>
+        </div>
+        <div class="setting-row"><div class="setting-label">IP Address</div><input class="input mono" id="iomt-ip" placeholder="10.x.x.x"></div>
+        <div class="setting-row"><div class="setting-label">VLAN / Zone</div><input class="input" id="iomt-vlan" placeholder="IoMT-VLAN / Isolated"></div>
+        <div class="setting-row"><div class="setting-label">OS / Firmware</div><input class="input" id="iomt-os" placeholder="Windows XP / Embedded"></div>
+        <div class="setting-row"><div class="setting-label">สถานะ</div>
+          <select class="input" id="iomt-status">
+            <option value="isolated">✅ Isolated VLAN</option>
+            <option value="monitored">👁 Monitored</option>
+            <option value="exposed">⚠️ Exposed</option>
+            <option value="offline">⭕ Offline</option>
+          </select>
+        </div>
+        <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">หมายเหตุ / ความเสี่ยง</div><input class="input" id="iomt-note" placeholder="Legacy OS, ไม่สามารถอัพเดทได้..."></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('iomt-modal').style.display='none'">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveIomt()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
 </section>
 
   <!-- IRP -->
@@ -1946,6 +1996,16 @@ select.input{cursor:pointer}
           <div class="stat-val" id="sm-training-pct" style="font-size:1.8rem;color:var(--yellow)">—</div>
         </div>
       </div>
+    </div>
+
+    <!-- SOC Daily Brief -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">☀️ SOC Daily Brief — สรุปประจำวัน</div>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="generateDailyBrief()">📋 สร้างสรุป</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyDailyBrief()">📋 Copy</button>
+      </div>
+      <div id="daily-brief-content" style="background:rgba(0,0,0,.3);border-radius:8px;padding:14px;font-size:.78rem;color:var(--text2);line-height:1.7;white-space:pre-line;min-height:80px">คลิก "สร้างสรุป" เพื่อสร้างรายงานประจำวัน…</div>
     </div>
 
     <!-- SOC Performance Metrics -->
@@ -2669,6 +2729,17 @@ select.input{cursor:pointer}
       </div>
       <div id="nist-csf-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px"></div>
       <div style="margin-top:12px;font-size:.68rem;color:var(--text3)">คะแนนประมาณจากข้อมูลที่บันทึกไว้ในระบบ — คลิกแต่ละ Pillar เพื่อดูรายละเอียด</div>
+    </div>
+
+    <!-- Cloud Security Posture (CSPM-Lite) -->
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div class="card-title" style="margin-bottom:0">☁️ Cloud Security Posture (CSPM-Lite)</div>
+        <span id="cspm-score-badge" style="font-size:.72rem;padding:2px 10px;border-radius:10px;background:rgba(0,229,255,.1);color:var(--cyan);font-weight:700;margin-left:auto">0/20</span>
+        <button class="btn btn-ghost btn-sm" onclick="saveCspm()">💾 บันทึก</button>
+      </div>
+      <div style="font-size:.72rem;color:var(--text3);margin-bottom:12px">ตรวจสอบความมั่นคงปลอดภัยบน Cloud — อ้างอิง CIS Cloud Benchmarks v2.0</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="cspm-grid"></div>
     </div>
   </section>
 
@@ -9192,7 +9263,7 @@ function renderThreatActors(){
   renderRisks(); renderRiskMatrix(); renderThreatActors();
   renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
   renderPentestList(); renderVendorList(); renderNistCsf(); renderPhishSimList(); renderSocPerformance();
-  renderCsirtContacts(); renderCustomHuntList();
+  renderCsirtContacts(); renderCustomHuntList(); renderCspm(); renderIomtList();
   initRansomChecklist(); calcRansomScore(); renderZeroTrust();
   updateQuizStats(); renderPdpaFlow();
   renderSigmaRules(SIGMA_RULES);
@@ -9233,6 +9304,7 @@ function renderThreatActors(){
       const drpm = document.getElementById('drp-modal'); if(drpm) drpm.style.display='none';
       const pfm = document.getElementById('pdpa-flow-modal');
       if (pfm) pfm.style.display = 'none';
+      const iotm = document.getElementById('iomt-modal'); if(iotm) iotm.style.display='none';
       closeSettings();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -9252,6 +9324,187 @@ function renderThreatActors(){
     });
   }), 2000);
 })();
+
+// === CLOUD CSPM ===
+const CSPM_ITEMS = [
+  'MFA เปิดใช้งานบัญชี Admin ทุกบัญชี',
+  'Root/Admin account ไม่มี Access Key',
+  'CloudTrail / Audit Log เปิดใช้งาน',
+  'Storage/S3 Bucket ไม่เป็น Public',
+  'Encryption at Rest (DB, Storage, Backup)',
+  'Encryption in Transit บังคับ TLS 1.2+',
+  'Security Group จำกัด SSH/RDP Inbound',
+  'ไม่มี IAM User / Service Account ที่ไม่ใช้',
+  'Least Privilege บน IAM Role ทุกตัว',
+  'Vulnerability Scanner ใน CI/CD Pipeline',
+  'Auto-Patching OS และ Middleware',
+  'Backup Policy พร้อม Restore Test',
+  'Security Alert ส่งถึง SOC/SIEM',
+  'Egress Traffic ตรวจและกรอง',
+  'WAF ป้องกัน Web App สาธารณะ',
+  'DDoS Protection บน Public Endpoint',
+  'Secrets Manager ไม่มี Credential Plaintext',
+  'CSPM Tool Scan ต่อเนื่อง',
+  'Compliance Posture ทบทวนทุกไตรมาส',
+  'Cloud Architecture Documentation อัปเดต',
+];
+function renderCspm() {
+  const cfg = getCfg();
+  const saved = cfg.cspmChecks || {};
+  const grid = document.getElementById('cspm-grid');
+  if (!grid) return;
+  let checked = 0;
+  grid.innerHTML = CSPM_ITEMS.map((item, i) => {
+    const on = !!saved[i];
+    if (on) checked++;
+    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;background:${on?'rgba(0,230,118,.08)':'rgba(255,255,255,.02)'};border:1px solid ${on?'rgba(0,230,118,.2)':'var(--card-b)'};cursor:pointer;font-size:.73rem;color:var(--text2)">
+      <input type="checkbox" ${on?'checked':''} onchange="toggleCspm(${i},this.checked)" style="margin-top:2px;accent-color:var(--green)">
+      <span>${item}</span>
+    </label>`;
+  }).join('');
+  const badge = document.getElementById('cspm-score-badge');
+  if (badge) {
+    const pct = Math.round(checked / CSPM_ITEMS.length * 100);
+    badge.textContent = `${checked}/${CSPM_ITEMS.length} (${pct}%)`;
+    badge.style.color = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+    badge.style.background = pct >= 80 ? 'rgba(0,230,118,.1)' : pct >= 50 ? 'rgba(255,214,0,.1)' : 'rgba(255,23,68,.1)';
+  }
+}
+function toggleCspm(idx, val) {
+  const cfg = getCfg();
+  if (!cfg.cspmChecks) cfg.cspmChecks = {};
+  cfg.cspmChecks[idx] = val;
+  saveCfg(cfg);
+  renderCspm();
+}
+function saveCspm() { const cfg=getCfg(); saveCfg(cfg); toast('บันทึก CSPM แล้ว','ok'); renderCspm(); }
+
+// === OT/IoMT ===
+function renderIomtList() {
+  const cfg = getCfg();
+  const devs = cfg.iomtDevices || [];
+  const el = document.getElementById('iomt-list');
+  if (!el) return;
+  if (!devs.length) { el.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text3);font-size:.82rem">ยังไม่มีข้อมูลอุปกรณ์ OT/IoMT</div>'; return; }
+  const statusColor = {isolated:'var(--green)',monitored:'var(--cyan)',exposed:'var(--red)',offline:'var(--text3)'};
+  const statusLabel = {isolated:'✅ Isolated',monitored:'👁 Monitored',exposed:'⚠️ Exposed',offline:'⭕ Offline'};
+  el.innerHTML = devs.map((d,i) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--card-b);font-size:.78rem">
+    <div style="flex:1">
+      <div style="font-weight:700;color:var(--text)">${d.name}</div>
+      <div style="color:var(--text3);font-size:.7rem">${d.type||'IoT'} · ${d.ip||'—'} · ${d.vlan||'No VLAN'} · OS: ${d.os||'Unknown'}</div>
+      ${d.note?`<div style="color:var(--orange);font-size:.68rem;margin-top:2px">${d.note}</div>`:''}
+    </div>
+    <span style="color:${statusColor[d.status]||'var(--text3)'};font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:8px;background:rgba(255,255,255,.04)">${statusLabel[d.status]||d.status}</span>
+    <button class="btn btn-ghost btn-sm" style="font-size:.68rem;padding:3px 8px" onclick="editIomt(${i})">✏️</button>
+    <button class="btn btn-ghost btn-sm" style="font-size:.68rem;padding:3px 8px;color:var(--red)" onclick="deleteIomt(${i})">🗑</button>
+  </div>`).join('');
+}
+function showAddIomt() {
+  document.getElementById('iomt-edit-idx').value = '-1';
+  ['iomt-name','iomt-ip','iomt-vlan','iomt-os','iomt-note'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  const t=document.getElementById('iomt-type'); if(t) t.value='medical';
+  const s=document.getElementById('iomt-status'); if(s) s.value='isolated';
+  const m = document.getElementById('iomt-modal');
+  if(m) { m.style.display='flex'; m.style.zIndex='9999'; }
+}
+function editIomt(i) {
+  const cfg = getCfg();
+  const d = (cfg.iomtDevices||[])[i];
+  if(!d) return;
+  document.getElementById('iomt-edit-idx').value = i;
+  document.getElementById('iomt-name').value = d.name||'';
+  document.getElementById('iomt-ip').value = d.ip||'';
+  document.getElementById('iomt-vlan').value = d.vlan||'';
+  document.getElementById('iomt-os').value = d.os||'';
+  document.getElementById('iomt-note').value = d.note||'';
+  document.getElementById('iomt-type').value = d.type||'medical';
+  document.getElementById('iomt-status').value = d.status||'isolated';
+  const m = document.getElementById('iomt-modal');
+  if(m) { m.style.display='flex'; m.style.zIndex='9999'; }
+}
+function saveIomt() {
+  const name = (document.getElementById('iomt-name').value||'').trim();
+  if (!name) { toast('กรุณาระบุชื่ออุปกรณ์','warn'); return; }
+  const cfg = getCfg();
+  if (!cfg.iomtDevices) cfg.iomtDevices = [];
+  const d = {
+    name, type: document.getElementById('iomt-type').value,
+    ip: (document.getElementById('iomt-ip').value||'').trim(),
+    vlan: (document.getElementById('iomt-vlan').value||'').trim(),
+    os: (document.getElementById('iomt-os').value||'').trim(),
+    status: document.getElementById('iomt-status').value,
+    note: (document.getElementById('iomt-note').value||'').trim(),
+    updated: new Date().toISOString().slice(0,10)
+  };
+  const idx = parseInt(document.getElementById('iomt-edit-idx').value);
+  if (idx >= 0) cfg.iomtDevices[idx] = d; else cfg.iomtDevices.push(d);
+  saveCfg(cfg);
+  document.getElementById('iomt-modal').style.display='none';
+  renderIomtList();
+  toast('บันทึกอุปกรณ์ OT/IoMT แล้ว','ok');
+}
+function deleteIomt(i) {
+  const cfg = getCfg(); if(!cfg.iomtDevices) return;
+  cfg.iomtDevices.splice(i,1); saveCfg(cfg); renderIomtList();
+  toast('ลบอุปกรณ์แล้ว','ok');
+}
+
+// === SOC Daily Brief ===
+function generateDailyBrief() {
+  const cfg = getCfg();
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('th-TH', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const ctamDone = (typeof CTAM_ITEMS!=='undefined') ? CTAM_ITEMS.filter(x=>(cfg.ctam||{})[x.id]).length : 0;
+  const ctamTotal = (typeof CTAM_ITEMS!=='undefined') ? CTAM_ITEMS.length : 17;
+  const kpiMinItems = (typeof KPI_MIN!=='undefined') ? KPI_MIN : [];
+  const kpiDone = kpiMinItems.filter(x=>(cfg.kpi||{})[x.id]).length;
+  const vulns = cfg.vulns || [];
+  const critVulns = vulns.filter(v=>v.severity==='critical'||v.severity==='high').length;
+  const openInc = (cfg.incidents||[]).filter(inc=>inc.status!=='closed').length;
+  const expiringLic = (cfg.licSoftware||[]).filter(l=>{
+    if(!l.expiry) return false;
+    const days=Math.floor((new Date(l.expiry)-now)/86400000);
+    return days>=0&&days<=90;
+  }).length;
+  const expiringSSL = (cfg.sslDomains||[]).filter(s=>s.daysLeft!==undefined&&s.daysLeft<=30&&s.daysLeft>=0).length;
+  const training = cfg.training||[];
+  const trainPct = training.length ? Math.round(training.filter(t=>t.completed).length/training.length*100) : 0;
+  const iomtExposed = (cfg.iomtDevices||[]).filter(d=>d.status==='exposed').length;
+  const cspmChecked = Object.values(cfg.cspmChecks||{}).filter(Boolean).length;
+
+  const brief = `📋 SOC DAILY BRIEF — ${dateStr}
+หน่วยงาน: ${cfg.orgName||'หน่วยงาน'}
+ผู้จัดทำ: SOC Dashboard (Auto-Generated)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🛡 CTAM+ 2569: ${ctamDone}/${ctamTotal} เกณฑ์ผ่าน (${Math.round(ctamDone/Math.max(ctamTotal,1)*100)}%)
+📊 KPI ขั้นต่ำ: ${kpiDone}/${Math.max(kpiMinItems.length,1)} รายการ
+☁️ Cloud CSPM: ${cspmChecked}/20 controls
+🚨 Incident เปิดอยู่: ${openInc} รายการ
+🐛 Vuln Critical/High: ${critVulns} รายการ
+🏥 IoMT Exposed: ${iomtExposed} อุปกรณ์
+
+⚠️ สิ่งที่ต้องดำเนินการ:
+${critVulns>0?`• มี ${critVulns} ช่องโหว่ Critical/High รอแพทช์`:'• ไม่มีช่องโหว่ Critical ค้างอยู่'}
+${openInc>0?`• มี ${openInc} Incident ที่ยังไม่ปิด`:'• ไม่มี Incident ค้างอยู่'}
+${expiringLic>0?`• License ใกล้หมดอายุ (≤90 วัน): ${expiringLic} รายการ`:'• License ไม่มีรายการใกล้หมด'}
+${expiringSSL>0?`• SSL Cert ใกล้หมดอายุ (≤30 วัน): ${expiringSSL} domain`:'• SSL Cert ไม่มีรายการใกล้หมด'}
+${iomtExposed>0?`• ⚠️ OT/IoMT Exposed บน Network: ${iomtExposed} อุปกรณ์`:'• OT/IoMT Isolated ครบ'}
+
+📚 Training Awareness: ${trainPct}% ผ่านการอบรม
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+สร้างโดย NCSA Blacklist SOC Dashboard
+เวลา: ${now.toLocaleTimeString('th-TH')}`;
+
+  const el = document.getElementById('daily-brief-content');
+  if (el) el.textContent = brief;
+}
+function copyDailyBrief() {
+  const el = document.getElementById('daily-brief-content');
+  if (!el||el.textContent.includes('คลิก')) { toast('กรุณาสร้างสรุปก่อน','warn'); return; }
+  navigator.clipboard.writeText(el.textContent).then(()=>toast('Copy แล้ว','ok')).catch(()=>toast('Copy ไม่ได้','warn'));
+}
 </script>
 
 <!-- First-run Wizard -->
