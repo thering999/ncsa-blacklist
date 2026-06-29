@@ -866,6 +866,18 @@ select.input option{background:#0d1117;color:var(--text)}
     </div>
     <input type="file" id="s-import-file" accept=".json" style="display:none" onchange="importOrgConfig(this)">
     <div class="setting-desc" style="margin-top:8px">Export/Import config เพื่อแชร์กับหน่วยงานอื่น</div>
+
+    <div style="height:1px;background:rgba(0,229,255,.1);margin:10px 0"></div>
+    <div style="font-size:.68rem;font-weight:800;color:var(--cyan);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">🔔 การแจ้งเตือน &amp; Profiles</div>
+    <button class="btn btn-ghost btn-sm" onclick="subscribePush()" style="width:100%;margin-bottom:8px">🔔 เปิดการแจ้งเตือน Push Notification</button>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <select id="org-profile-select" onchange="switchOrgProfile(this.value)" style="flex:1;background:var(--card-bg);color:var(--text);border:1px solid rgba(255,255,255,.1);padding:5px 8px;border-radius:6px;font-size:.8rem">
+        <option value="current">หน่วยงานปัจจุบัน</option>
+      </select>
+      <button onclick="saveCurrentAsProfile()" title="บันทึก Profile" style="background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.2);color:var(--cyan);border-radius:6px;padding:5px 10px;font-size:.8rem;cursor:pointer">💾</button>
+      <button onclick="addNewOrgProfile()" title="เพิ่ม Profile ใหม่" style="background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.2);color:var(--green);border-radius:6px;padding:5px 10px;font-size:.8rem;cursor:pointer">+</button>
+    </div>
+    <div class="setting-desc">บันทึก/สลับ config ระหว่างหลายหน่วยงาน</div>
   </div>
 </aside>
 
@@ -970,8 +982,28 @@ select.input option{background:#0d1117;color:var(--text)}
         <div id="tab-scan" class="tab-panel">
           <label class="label">Paste firewall log or any text — IPs extracted &amp; checked automatically</label>
           <textarea class="input" id="scan-val" placeholder="[Mon Jun 27] Connection from 1.2.3.4 port 22 denied…" style="height:140px"></textarea>
-          <div style="margin-top:10px"><button class="btn btn-primary" onclick="scanLog()">⚡ Scan Log</button></div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="scanLog()">⚡ Scan Log</button></div>
           <div id="scan-result"></div>
+          <!-- Log File Upload -->
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07)">
+            <label class="label">📁 Upload Log File — Extract IPs อัตโนมัติ (สูงสุด 10MB)</label>
+            <div id="log-dropzone" ondragover="event.preventDefault()" ondrop="handleLogDrop(event)"
+              onclick="document.getElementById('log-file-input').click()"
+              style="border:2px dashed rgba(0,229,255,.3);border-radius:8px;padding:1.5rem;text-align:center;cursor:pointer;margin:8px 0;transition:.2s">
+              <div style="font-size:1.5rem">📂</div>
+              <div style="font-size:.82rem;color:var(--text2)">ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</div>
+              <div style="font-size:.72rem;color:var(--text3)">.log .txt .csv</div>
+            </div>
+            <input type="file" id="log-file-input" accept=".log,.txt,.csv" style="display:none" onchange="handleLogFile(this.files[0])">
+            <div id="log-scan-result" style="display:none;margin-top:8px">
+              <div id="log-ip-count" style="font-size:.8rem;color:var(--text2);margin-bottom:6px"></div>
+              <div style="display:flex;gap:8px">
+                <button onclick="runLogBulkCheck()" class="btn btn-primary btn-sm">🔍 Bulk Check IPs</button>
+                <button onclick="exportLogIPs()" class="btn btn-ghost btn-sm">📥 Export IP List</button>
+              </div>
+            </div>
+            <div id="log-bulk-output"></div>
+          </div>
         </div>
 
         <div id="tab-search" class="tab-panel">
@@ -1032,6 +1064,17 @@ select.input option{background:#0d1117;color:var(--text)}
             </div>
             <div class="watch-list" id="allow-list"><div class="empty">No items</div></div>
           </div>
+          <!-- FortiGate Auto-Block -->
+          <details style="margin-top:12px;border-top:1px solid rgba(255,255,255,.07);padding-top:10px">
+            <summary style="cursor:pointer;font-size:.78rem;color:var(--cyan);font-weight:600">🔒 FortiGate Auto-Block Watchlist IPs</summary>
+            <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <input type="text" id="fg-host" class="input mono" placeholder="FortiGate IP/hostname">
+              <input type="password" id="fg-token" class="input mono" placeholder="API Token">
+              <input type="text" id="fg-vdom" class="input mono" placeholder="VDOM (root)" style="grid-column:1/-1">
+            </div>
+            <button onclick="fortigateBlockWatchlist()" class="btn btn-primary btn-sm" style="margin-top:8px;background:rgba(255,23,68,.15);border-color:rgba(255,23,68,.3);color:var(--red)">🚫 Block IPs บน FortiGate</button>
+            <div id="fg-block-status" style="margin-top:6px;font-size:.75rem"></div>
+          </details>
         </div>
       </div>
     </div>
@@ -1044,9 +1087,11 @@ select.input option{background:#0d1117;color:var(--text)}
       <div class="hero-title" style="font-size:1.2rem">📦 Asset Inventory</div>
       <div class="hero-sub">ทะเบียนสินทรัพย์สารสนเทศ — CTAM+ ข้อที่ 12</div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary btn-sm" onclick="showAddAsset()">+ เพิ่ม Asset</button>
       <button class="btn btn-ghost btn-sm" onclick="exportAssets()">⬇ Export CSV</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('asset-csv-input').click()">📥 Import CSV</button>
+      <input type="file" id="asset-csv-input" accept=".csv" style="display:none" onchange="importAssetCSV(this)">
     </div>
   </div>
 
@@ -1075,6 +1120,10 @@ select.input option{background:#0d1117;color:var(--text)}
           </select>
         </div>
         <div class="setting-row" style="grid-column:1/-1"><div class="setting-label">Software/OS</div><input class="input" id="a-os" placeholder="Ubuntu 22.04 / Windows Server 2019"></div>
+        <div style="grid-column:1/-1">
+          <button type="button" onclick="cveLookupForAsset()" class="btn btn-ghost btn-sm" style="font-size:.72rem;margin-bottom:4px">🔍 ค้น CVE อัตโนมัติตาม OS/Software</button>
+          <div id="cve-asset-suggest"></div>
+        </div>
         <div class="setting-row"><div class="setting-label">จัดซื้อ (ปี พ.ศ.)</div><input class="input" id="a-year" placeholder="2567"></div>
         <div class="setting-row"><div class="setting-label">สถานะ</div>
           <select class="input" id="a-status">
@@ -2083,7 +2132,7 @@ select.input option{background:#0d1117;color:var(--text)}
 
     <!-- Executive Report -->
     <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
         <div class="card-title" style="margin-bottom:0">📄 Executive Security Report — สรุปสำหรับผู้บริหาร</div>
         <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="printExecReport()">🖨 พิมพ์ / Export PDF</button>
       </div>
@@ -2091,6 +2140,17 @@ select.input option{background:#0d1117;color:var(--text)}
       <div id="exec-preview" style="padding:16px;border:1px solid var(--card-b);border-radius:8px;background:rgba(255,255,255,.02);font-size:.78rem;color:var(--text2)">
         <button class="btn btn-ghost btn-sm" onclick="generateExecPreview()">👁 Preview รายงาน</button>
       </div>
+      <!-- Send Report by Email -->
+      <details style="margin-top:12px;border-top:1px solid rgba(255,255,255,.07);padding-top:10px">
+        <summary style="cursor:pointer;font-size:.78rem;color:var(--cyan);font-weight:600">📧 ส่งรายงานทาง Email</summary>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <input type="email" id="report-email-to" class="input" placeholder="ส่งถึง email" style="flex:1;min-width:180px">
+          <input type="text" id="report-email-subject" class="input" placeholder="Subject" value="รายงาน Cybersecurity ประจำสัปดาห์" style="flex:2;min-width:200px">
+        </div>
+        <button onclick="sendReportEmail()" class="btn btn-primary btn-sm" style="margin-top:8px">📧 ส่งทันที</button>
+        <div id="report-email-status" style="margin-top:6px;font-size:.75rem"></div>
+        <div class="setting-desc">ต้องตั้งค่า SMTP ใน .env ก่อน (SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_TO)</div>
+      </details>
     </div>
 
     <!-- Network Topology -->
@@ -2800,6 +2860,7 @@ select.input option{background:#0d1117;color:var(--text)}
         <button class="int-tab" onclick="switchIntTab(this,'nas')">💾 NAS / Storage</button>
         <button class="int-tab" onclick="switchIntTab(this,'webmon')">🌍 Web Monitor</button>
         <button class="int-tab" onclick="switchIntTab(this,'api')">💻 API / Code</button>
+        <button class="int-tab" onclick="switchIntTab(this,'feeds');loadFeedsUI()">📡 Extra Feeds</button>
         <button class="int-tab" onclick="switchIntTab(this,'geofence');renderGeofencePanel()">🌏 Geofence</button>
       </div>
 
@@ -3528,6 +3589,19 @@ print(f<span class="str">'{len(hits)}/{len(ips)} MISP IOCs confirmed in NCSA bla
             </table>
           </div>
           <div style="font-size:.63rem;color:rgba(255,255,255,.22);margin-top:5px">⚠ API key ไม่ได้บันทึก — กรอกใหม่ทุก session เพื่อความปลอดภัย</div>
+          <!-- MISP Push IOC -->
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07)">
+            <div style="font-size:.78rem;font-weight:700;color:var(--cyan);margin-bottom:8px">📤 Push IOC ไปยัง MISP</div>
+            <select id="misp-push-tlp" class="input" style="width:auto;margin-bottom:8px">
+              <option value="tlp:white">TLP:WHITE</option>
+              <option value="tlp:green">TLP:GREEN</option>
+              <option value="tlp:amber">TLP:AMBER</option>
+              <option value="tlp:red">TLP:RED</option>
+            </select>
+            <textarea id="misp-push-iocs" class="input" placeholder="ใส่ IOC ทีละบรรทัด (IP / domain / hash)" rows="3" style="width:100%;margin-bottom:8px;resize:vertical"></textarea>
+            <button onclick="pushToMISP()" class="btn btn-primary btn-sm">📤 Push ไปยัง MISP</button>
+            <div id="misp-push-status" style="margin-top:6px;font-size:.75rem"></div>
+          </div>
         </div>
       </div>
 
@@ -4131,6 +4205,22 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
         </div>
       </div>
 
+      <!-- Extra Feeds Panel -->
+      <div class="int-panel" id="int-feeds" style="display:none">
+        <div class="int-desc"><strong style="color:var(--cyan)">📡 จัดการ Extra Feeds</strong> — เพิ่ม/ลบ Feed นอกเหนือจาก NCSA Blacklist (ต้องการ Admin Token)</div>
+        <div id="feeds-list" style="margin:12px 0;min-height:40px"></div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <input type="text" id="feed-name-input" placeholder="ชื่อ Feed" class="input" style="flex:1;min-width:120px">
+          <input type="text" id="feed-url-input" placeholder="URL (https://...)" class="input" style="flex:3;min-width:200px">
+          <button onclick="addFeedEntry()" class="btn btn-ghost btn-sm">+ เพิ่ม</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button onclick="saveFeeds()" class="btn btn-primary btn-sm">💾 บันทึก Feeds</button>
+          <button onclick="loadFeedsUI()" class="btn btn-ghost btn-sm">↺ โหลด</button>
+        </div>
+        <div id="feeds-status" style="margin-top:6px;font-size:.75rem"></div>
+      </div>
+
       <!-- Geofence Panel -->
       <div class="int-panel" id="int-geofence" style="display:none">
         <div class="int-desc"><strong style="color:var(--cyan)">🌏 Geofence Country Block Policy</strong> — กำหนดนโยบายบล็อกประเทศต้นทาง ใช้ร่วมกับ FortiGate/iptables/nginx</div>
@@ -4200,6 +4290,11 @@ WEBHOOK_URL=http://n8n-host:5678/webhook/ncsa-alert</pre>
     <div class="card" style="margin-top:16px">
       <div class="card-title" style="margin-bottom:12px">📊 Feed Source Breakdown</div>
       <div id="feed-breakdown" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px"></div>
+    </div>
+    <!-- Trend History -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title" style="margin-bottom:12px">📈 Trend History — IOC Count 90 วัน</div>
+      <div id="trend-chart-wrap"><div class="empty">Loading…</div></div>
     </div>
   </section>
 
@@ -9337,7 +9432,7 @@ function renderThreatActors(){
   loadFreshnessBar();
   loadFeedBreakdown();
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
-  loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews();
+  loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews(); loadTrendChart(); loadOrgProfiles();
   renderCtam(); renderMoph100(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries(); renderLicenses(); renderPolicyRegister(); renderDrp();
   updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
   renderComplianceGap();
@@ -9587,6 +9682,264 @@ function copyDailyBrief() {
   const el = document.getElementById('daily-brief-content');
   if (!el||el.textContent.includes('คลิก')) { toast('กรุณาสร้างสรุปก่อน','warn'); return; }
   navigator.clipboard.writeText(el.textContent).then(()=>toast('Copy แล้ว','ok')).catch(()=>toast('Copy ไม่ได้','warn'));
+}
+
+// ── Service Worker & Push Notifications ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(reg => { window._swReg = reg; }).catch(e => console.warn('SW reg failed', e));
+}
+function subscribePush() {
+  if (!window._swReg) return toast('Service Worker ยังไม่พร้อม','warn');
+  Notification.requestPermission().then(perm => {
+    if (perm !== 'granted') return toast('ไม่ได้รับสิทธิ์แจ้งเตือน','warn');
+    toast('เปิดการแจ้งเตือนแล้ว','ok');
+  });
+}
+
+// ── Log File Scanner ──
+let _logExtractedIPs = [];
+function handleLogDrop(e) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleLogFile(f); }
+function handleLogFile(file) {
+  if (!file) return;
+  if (file.size > 10*1024*1024) return toast('ไฟล์ใหญ่เกิน 10MB','warn');
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const text = ev.target.result;
+    const ipRegex = /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+    const found = [...new Set(text.match(ipRegex) || [])];
+    _logExtractedIPs = found.filter(ip => !ip.match(/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.)/));
+    document.getElementById('log-ip-count').textContent = `พบ ${_logExtractedIPs.length} IP สาธารณะ (จากทั้งหมด ${found.length} IP)`;
+    document.getElementById('log-scan-result').style.display = '';
+    document.getElementById('log-dropzone').style.borderColor = '#22c55e';
+  };
+  reader.readAsText(file);
+}
+async function runLogBulkCheck() {
+  if (!_logExtractedIPs.length) return;
+  const out = document.getElementById('log-bulk-output');
+  out.innerHTML = '<div class="empty">กำลังตรวจสอบ...</div>';
+  try {
+    const res = await fetch('/bulk', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({items: _logExtractedIPs.slice(0,10000)})});
+    const data = await res.json();
+    const hits = data.results ? data.results.filter(r => r.found) : [];
+    out.innerHTML = `<div style="margin-top:1rem"><b style="color:var(--red)">${hits.length} รายการพบใน Blacklist</b> จาก ${_logExtractedIPs.length} IP<br><br>` +
+      (hits.length ? hits.map(r => `<span style="background:rgba(255,23,68,.12);padding:2px 8px;border-radius:4px;margin:2px;display:inline-block;color:var(--red)">${esc(r.item||r.value||r.ip||'')}</span>`).join('') : '<span style="color:var(--green)">✅ ไม่พบ IP ใน Blacklist</span>') + '</div>';
+  } catch(e) { out.innerHTML = `<div class="empty">ตรวจสอบไม่ได้: ${esc(e.message)}</div>`; }
+}
+function exportLogIPs() {
+  const blob = new Blob([_logExtractedIPs.join('\n')], {type:'text/plain'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'extracted-ips.txt'; a.click();
+}
+
+// ── Trend History Chart ──
+async function loadTrendChart() {
+  try {
+    const data = await fetch('/trend').then(r => r.json());
+    if (!data || !data.length) { document.getElementById('trend-chart-wrap').innerHTML = '<div class="empty">ยังไม่มีข้อมูล Trend (จะมีข้อมูลหลังจาก sync ครั้งแรก)</div>'; return; }
+    const labels = data.map(d => d.date);
+    const counts = data.map(d => d.total || d.count || 0);
+    const wrap = document.getElementById('trend-chart-wrap');
+    if (!wrap) return;
+    const maxV = Math.max(...counts) || 1;
+    const barW = Math.max(3, Math.floor(560 / data.length));
+    const svgH = 80;
+    wrap.innerHTML = `<div style="overflow-x:auto"><svg viewBox="0 0 ${data.length*barW+40} ${svgH+24}" style="width:100%;min-width:300px;height:${svgH+30}px">
+      ${data.map((d,i) => { const h = Math.max(2, Math.round((d.total||d.count||0)/maxV*(svgH-10))); return `<rect x="${i*barW+20}" y="${svgH-h}" width="${barW-1}" height="${h}" fill="rgba(0,229,255,.5)" rx="1"><title>${d.date}: ${d.total||d.count||0}</title></rect>`; }).join('')}
+      ${data.filter((_,i)=>i%(Math.ceil(data.length/6))===0).map((d,_,a,i2=data.indexOf(d)) => `<text x="${i2*barW+20}" y="${svgH+16}" font-size="9" fill="var(--text3)" text-anchor="middle">${d.date.slice(5)}</text>`).join('')}
+    </svg></div>
+    <div style="font-size:.72rem;color:var(--text3);margin-top:4px">สูงสุด: ${maxV.toLocaleString()} IOC · ${data.length} วันล่าสุด</div>`;
+  } catch(e) { console.warn('trend load failed', e); }
+}
+
+// ── Extra Feeds UI ──
+let _feedsList = [];
+async function loadFeedsUI() {
+  const el = document.getElementById('feeds-list'); if (!el) return;
+  try {
+    const tok = localStorage.getItem('adminToken') || '';
+    const data = await fetch('/admin/feeds', {headers:{'Authorization':'Bearer '+tok}}).then(r=>r.json());
+    _feedsList = data.feeds || [];
+    renderFeedsList();
+  } catch(e) { el.innerHTML = '<small style="color:var(--text3)">ต้องการ Admin Token ใน Settings</small>'; }
+}
+function renderFeedsList() {
+  const el = document.getElementById('feeds-list'); if (!el) return;
+  el.innerHTML = _feedsList.map((f,i) =>
+    `<div style="display:flex;gap:0.5rem;align-items:center;margin:0.25rem 0;font-size:.8rem">
+      <span style="flex:1;color:var(--cyan)">${esc(f.name)}</span><span style="flex:3;color:var(--text3)">${esc(f.url)}</span>
+      <button onclick="_feedsList.splice(${i},1);renderFeedsList()" style="color:var(--red);background:none;border:none;cursor:pointer;padding:0 4px">✕</button>
+    </div>`).join('') || '<small style="color:var(--text3)">ไม่มี extra feeds</small>';
+}
+function addFeedEntry() {
+  const name = document.getElementById('feed-name-input').value.trim();
+  const url = document.getElementById('feed-url-input').value.trim();
+  if (!name || !url) return toast('ใส่ชื่อและ URL ก่อน','warn');
+  _feedsList.push({name, url}); renderFeedsList();
+  document.getElementById('feed-name-input').value = ''; document.getElementById('feed-url-input').value = '';
+}
+async function saveFeeds() {
+  const tok = localStorage.getItem('adminToken') || '';
+  const st = document.getElementById('feeds-status');
+  try {
+    await fetch('/admin/feeds', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({feeds: _feedsList})});
+    if (st) st.innerHTML = '<span style="color:var(--green)">บันทึกแล้ว — Feed จะ sync ในรอบถัดไป</span>';
+    toast('บันทึก Feeds แล้ว','ok');
+  } catch(e) { if (st) st.innerHTML = `<span style="color:var(--red)">Error: ${esc(e.message)}</span>`; }
+}
+
+// ── Import Assets from CSV ──
+function importAssetCSV(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const lines = ev.target.result.split('\n').filter(Boolean);
+    if (lines.length < 2) return toast('ไฟล์ว่างหรือไม่มีข้อมูล','warn');
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g,''));
+    let count = 0;
+    const assets = JSON.parse(localStorage.getItem('assets') || '[]');
+    lines.slice(1).forEach(line => {
+      const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g,''));
+      const obj = {}; headers.forEach((h, i) => obj[h] = vals[i] || '');
+      const name = obj.name || obj['ชื่อ'] || obj['ชื่อระบบ'] || '';
+      if (name) {
+        assets.push({ id: Date.now()+Math.random(), name, type: obj.type||obj['ประเภท']||'other', ip: obj.ip||'', port: obj.port||'', os: obj.os||obj['software/os']||'', year: obj.year||obj['ปีจัดซื้อ']||'', status: 'ok', note: obj.note||obj['หมายเหตุ']||'' });
+        count++;
+      }
+    });
+    localStorage.setItem('assets', JSON.stringify(assets));
+    toast(`Import สำเร็จ ${count} รายการ`,'ok');
+    if (typeof renderAssets === 'function') renderAssets();
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ── FortiGate Auto-Block ──
+async function fortigateBlockWatchlist() {
+  const host = document.getElementById('fg-host')?.value.trim();
+  const token = document.getElementById('fg-token')?.value.trim();
+  const vdom = document.getElementById('fg-vdom')?.value.trim() || 'root';
+  if (!host || !token) return toast('ใส่ FortiGate host และ API Token ก่อน','warn');
+  localStorage.setItem('fgHost', host); localStorage.setItem('fgToken', token); localStorage.setItem('fgVdom', vdom);
+  const wl = JSON.parse(localStorage.getItem('watchlist') || '[]');
+  const ips = wl.filter(w => /^\d+\.\d+\.\d+\.\d+/.test(w.value||w)).map(w => w.value||w);
+  if (!ips.length) return toast('ไม่มี IP ใน Watch List','warn');
+  const adminTok = localStorage.getItem('adminToken') || '';
+  const st = document.getElementById('fg-block-status');
+  if (st) st.innerHTML = '⏳ กำลัง block...';
+  try {
+    const res = await fetch('/admin/fortigate-block', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+adminTok}, body: JSON.stringify({host, token, vdom, ips})});
+    const data = await res.json();
+    if (st) st.innerHTML = res.ok ? `<span style="color:var(--green)">✅ Block สำเร็จ ${ips.length} IPs</span>` : `<span style="color:var(--red)">Error: ${esc(data.error||'Unknown')}</span>`;
+  } catch(e) { if (st) st.innerHTML = `<span style="color:var(--red)">Error: ${esc(e.message)}</span>`; }
+}
+
+// ── MISP Push IOC ──
+async function pushToMISP() {
+  const urlEl = document.getElementById('misp-live-url');
+  const keyEl = document.getElementById('misp-live-key');
+  const url = urlEl?.value.trim() || '';
+  const apikey = keyEl?.value.trim() || '';
+  if (!url || !apikey) return toast('ใส่ MISP URL และ API Key ใน MISP Live Events ก่อน','warn');
+  const raw = document.getElementById('misp-push-iocs')?.value.trim();
+  if (!raw) return toast('ใส่ IOC ก่อน','warn');
+  const tlp = document.getElementById('misp-push-tlp')?.value || 'tlp:white';
+  const iocs = raw.split('\n').filter(Boolean).map(v => {
+    v = v.trim();
+    const type = /^\d+\.\d+\.\d+\.\d+$/.test(v) ? 'ip-dst' : /^[0-9a-fA-F]{32,}$/.test(v) ? 'md5' : 'domain';
+    return {type, value: v, comment: 'Pushed from NCSA Dashboard'};
+  });
+  const adminTok = localStorage.getItem('adminToken') || '';
+  const st = document.getElementById('misp-push-status');
+  if (st) st.innerHTML = '⏳ กำลัง push...';
+  try {
+    const res = await fetch('/admin/misp-push', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+adminTok}, body: JSON.stringify({url, apikey, iocs, tlp})});
+    const data = await res.json();
+    if (st) st.innerHTML = res.ok ? `<span style="color:var(--green)">✅ Push สำเร็จ — Event ID: ${esc(String(data.event_id||'?'))}</span>` : `<span style="color:var(--red)">Error: ${esc(data.error||'Unknown')}</span>`;
+  } catch(e) { if (st) st.innerHTML = `<span style="color:var(--red)">Error: ${esc(e.message)}</span>`; }
+}
+
+// ── Multi-Org Profile Switcher ──
+function loadOrgProfiles() {
+  const profiles = JSON.parse(localStorage.getItem('org_profiles') || '[]');
+  const current = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
+  const sel = document.getElementById('org-profile-select'); if (!sel) return;
+  const opts = (current ? [{name: current.orgName || 'หน่วยงานปัจจุบัน', id:'current'}] : []).concat(profiles);
+  sel.innerHTML = opts.map(p => `<option value="${esc(p.id||'current')}">${esc(p.name||p.orgName||'?')}</option>`).join('');
+}
+function switchOrgProfile(id) {
+  if (id === 'current') return;
+  const profiles = JSON.parse(localStorage.getItem('org_profiles') || '[]');
+  const p = profiles.find(x => x.id === id); if (!p) return;
+  localStorage.setItem(CFG_KEY, JSON.stringify(p.config));
+  toast('เปลี่ยนเป็น: ' + p.name, 'ok');
+  setTimeout(() => location.reload(), 800);
+}
+function saveCurrentAsProfile() {
+  const config = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
+  const name = prompt('ชื่อ Profile:', config.orgName || ''); if (!name) return;
+  const profiles = JSON.parse(localStorage.getItem('org_profiles') || '[]');
+  profiles.push({id:'profile_'+Date.now(), name, config});
+  localStorage.setItem('org_profiles', JSON.stringify(profiles));
+  loadOrgProfiles(); toast('บันทึก Profile แล้ว: ' + name,'ok');
+}
+function addNewOrgProfile() {
+  const name = prompt('ชื่อหน่วยงานใหม่:'); if (!name) return;
+  const profiles = JSON.parse(localStorage.getItem('org_profiles') || '[]');
+  profiles.push({id:'profile_'+Date.now(), name, config:{orgName:name}});
+  localStorage.setItem('org_profiles', JSON.stringify(profiles));
+  loadOrgProfiles(); toast('เพิ่ม Profile: ' + name,'ok');
+}
+
+// ── CVE Auto-Match for Asset Form ──
+async function cveLookupForAsset() {
+  const os = document.getElementById('a-os')?.value.trim();
+  if (!os) return toast('ใส่ Software/OS ก่อน','warn');
+  const out = document.getElementById('cve-asset-suggest'); if (!out) return;
+  out.innerHTML = '⏳ ค้นหา CVE...';
+  try {
+    const res = await fetch(`https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=${encodeURIComponent(os)}&resultsPerPage=5`);
+    const data = await res.json();
+    const vulns = data.vulnerabilities || [];
+    if (!vulns.length) { out.innerHTML = '<small style="color:var(--green)">ไม่พบ CVE สำหรับ OS/Software นี้</small>'; return; }
+    out.innerHTML = '<small style="color:var(--text3)"><b>CVE ที่เกี่ยวข้อง:</b></small><br>' + vulns.map(v => {
+      const cve = v.cve;
+      const score = cve.metrics?.cvssMetricV31?.[0]?.cvssData?.baseScore || cve.metrics?.cvssMetricV2?.[0]?.cvssData?.baseScore || '?';
+      const sev = cve.metrics?.cvssMetricV31?.[0]?.cvssData?.baseSeverity || '';
+      const color = sev==='CRITICAL'?'var(--red)':sev==='HIGH'?'var(--orange)':sev==='MEDIUM'?'var(--yellow)':'var(--green)';
+      return `<div style="margin:.2rem 0;padding:.25rem .5rem;background:rgba(255,255,255,.03);border-radius:4px;font-size:.76rem;display:flex;align-items:center;gap:.5rem">
+        <span style="color:${color};font-weight:700;white-space:nowrap">${esc(cve.id)}</span>
+        <span style="color:var(--text3)">CVSS ${score}</span>
+        <span style="flex:1;color:var(--text2)">${esc((cve.descriptions?.[0]?.value||'').substring(0,70))}…</span>
+        <button onclick="addCVEToTracker('${esc(cve.id)}','${score}')" style="background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.2);color:var(--cyan);border-radius:4px;padding:1px 6px;font-size:.7rem;cursor:pointer">+Tracker</button>
+      </div>`;
+    }).join('');
+  } catch(e) { out.innerHTML = `<small style="color:var(--red)">ค้นหาไม่ได้: ${esc(e.message)}</small>`; }
+}
+function addCVEToTracker(cveId, score) {
+  const vulns = JSON.parse(localStorage.getItem('vulnerabilities') || '[]');
+  if (vulns.find(v => v.cveId === cveId)) return toast(cveId + ' มีใน Tracker แล้ว','warn');
+  vulns.push({id:Date.now(), cveId, cvss:score, status:'Open', date:new Date().toISOString().split('T')[0], note:'Auto-added จาก Asset Form'});
+  localStorage.setItem('vulnerabilities', JSON.stringify(vulns));
+  toast('เพิ่ม '+cveId+' ใน Vulnerability Tracker แล้ว','ok');
+  if (typeof renderVulns === 'function') renderVulns();
+}
+
+// ── Scheduled Email Report ──
+async function sendReportEmail() {
+  const to = document.getElementById('report-email-to')?.value.trim();
+  const subject = document.getElementById('report-email-subject')?.value.trim() || 'รายงาน Cybersecurity';
+  if (!to) return toast('ใส่ email ปลายทาง','warn');
+  const reportEl = document.getElementById('exec-preview');
+  const html = reportEl ? reportEl.innerHTML : '<p>รายงาน Cybersecurity Dashboard</p>';
+  const adminTok = localStorage.getItem('adminToken') || '';
+  const st = document.getElementById('report-email-status');
+  if (st) st.innerHTML = '⏳ กำลังส่ง...';
+  try {
+    const res = await fetch('/admin/report-email', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+adminTok}, body: JSON.stringify({to, subject, html})});
+    if (st) st.innerHTML = res.ok ? '<span style="color:var(--green)">✅ ส่งสำเร็จแล้ว</span>' : '<span style="color:var(--red)">ส่งไม่ได้ — ตรวจสอบ SMTP config ใน .env</span>';
+    toast(res.ok ? 'ส่ง Email สำเร็จ' : 'ส่ง Email ไม่ได้', res.ok ? 'ok' : 'err');
+  } catch(e) { if (st) st.innerHTML = `<span style="color:var(--red)">Error: ${esc(e.message)}</span>`; }
 }
 </script>
 
