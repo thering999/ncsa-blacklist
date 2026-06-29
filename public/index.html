@@ -5764,11 +5764,11 @@ document.querySelectorAll('.card').forEach(card => {
 async function loadTicker() {
   try {
     const [rip, rdom] = await Promise.all([
-      apiFetch('/search?type=ip&q=1&limit=30').then(r=>r.json()).catch(()=>({results:[]})),
-      apiFetch('/search?type=domain&q=a&limit=15').then(r=>r.json()).catch(()=>({results:[]}))
+      apiFetch('/recent?type=ip&limit=50').then(r=>r.json()).catch(()=>({entries:[]})),
+      apiFetch('/recent?type=domain&limit=20').then(r=>r.json()).catch(()=>({entries:[]}))
     ]);
-    const ips = (rip.results||[]).slice(0,20);
-    const doms = (rdom.results||[]).slice(0,10);
+    const ips = (rip.entries||[]).flatMap(e=>(e.added_sample||[]).map(s=>s.ip||s.value)).filter(Boolean).slice(0,20);
+    const doms = (rdom.entries||[]).flatMap(e=>(e.added_sample||[]).map(s=>s.value||s.ip)).filter(Boolean).slice(0,10);
     const items = [
       ...ips.map(ip=>`<span class="ticker-item"><span class="ti-type tag bad">IP</span><span class="ti-ip">${esc(ip)}</span></span>`),
       ...doms.map(d=>`<span class="ticker-item"><span class="ti-type" style="padding:1px 6px;border-radius:3px;font-size:.64rem;font-weight:800;background:rgba(139,92,246,.15);color:#c4b5fd">DOM</span><span class="ti-ip">${esc(d)}</span></span>`)
