@@ -2171,11 +2171,8 @@ select.input option{background:#0d1117;color:var(--text)}
       </div>
     </div>
 
-    <!-- Network Topology mini (dynamic) -->
-    <div class="card" style="margin-bottom:16px;padding:16px 20px">
-      <div class="card-title" style="margin-bottom:12px">🗺 Network Topology — <span id="topo-orgname">หน่วยงาน</span></div>
-      <div id="net-topo"></div>
-    </div>
+    <!-- Network Topology placeholder for renderNetworkTopology compat -->
+    <div id="net-topo" style="display:none"></div>
 
     <!-- SOC Metrics -->
     <div class="card" style="margin-bottom:16px">
@@ -2300,7 +2297,7 @@ select.input option{background:#0d1117;color:var(--text)}
         <span style="color:#64748b">| คลิก = รายละเอียด · คลิกขวา = เมนู · ลาก = ย้าย</span>
       </div>
       <div style="position:relative">
-        <canvas id="topology-canvas" style="width:100%;border:1px solid #334155;border-radius:8px;background:#0d1117;cursor:crosshair;display:block;touch-action:none"></canvas>
+        <canvas id="topology-canvas" width="800" height="440" style="width:100%;border:1px solid #334155;border-radius:8px;background:#0d1117;cursor:crosshair;display:block;touch-action:none"></canvas>
         <canvas id="topo-minimap" width="120" height="80" style="position:absolute;bottom:8px;right:8px;border:1px solid #334155;border-radius:4px;background:#0a0e18;opacity:0.85"></canvas>
         <div id="topo-ctx-menu" style="display:none;position:fixed;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.25rem 0;min-width:160px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-size:0.82rem">
           <div id="topo-ctx-title" style="padding:0.35rem 0.75rem;color:#64748b;font-size:0.75rem;border-bottom:1px solid #334155"></div>
@@ -7753,23 +7750,37 @@ function topoLoad() {
 function topoSave() { lsSet('topo_nodes', _topoNodes); }
 function topoReset() { if(!confirm('รีเซ็ต Topology?')) return; _topoNodes=topoDefaultNodes(); topoSave(); topoDraw(); }
 
+let _topoInited = false;
 function topoInit() {
   topoLoad();
   _topoCanvas = document.getElementById('topology-canvas');
   if (!_topoCanvas) return;
   const rect = _topoCanvas.parentElement.getBoundingClientRect();
-  _topoW = Math.max(rect.width-2, 400); _topoH = Math.round(_topoW*0.55);
-  _topoCanvas.width=_topoW; _topoCanvas.height=_topoH;
-  _topoCanvas.addEventListener('mousedown',topoMouseDown);
-  _topoCanvas.addEventListener('mousemove',topoMouseMove);
-  _topoCanvas.addEventListener('mouseup',topoMouseUp);
-  _topoCanvas.addEventListener('click',topoClick);
-  _topoCanvas.addEventListener('contextmenu',topoContextMenu);
-  _topoCanvas.addEventListener('touchstart',topoTouchStart,{passive:false});
-  _topoCanvas.addEventListener('touchmove',topoTouchMove,{passive:false});
-  _topoCanvas.addEventListener('touchend',topoMouseUp);
-  document.addEventListener('click',()=>{document.getElementById('topo-ctx-menu').style.display='none';});
-  topoDraw(); topoAnimLoop();
+  const w = rect.width > 10 ? rect.width - 2 : _topoCanvas.offsetWidth || 800;
+  _topoW = Math.max(w, 400); _topoH = Math.round(_topoW * 0.55);
+  _topoCanvas.width = _topoW; _topoCanvas.height = _topoH;
+  if (!_topoInited) {
+    _topoCanvas.addEventListener('mousedown',topoMouseDown);
+    _topoCanvas.addEventListener('mousemove',topoMouseMove);
+    _topoCanvas.addEventListener('mouseup',topoMouseUp);
+    _topoCanvas.addEventListener('click',topoClick);
+    _topoCanvas.addEventListener('contextmenu',topoContextMenu);
+    _topoCanvas.addEventListener('touchstart',topoTouchStart,{passive:false});
+    _topoCanvas.addEventListener('touchmove',topoTouchMove,{passive:false});
+    _topoCanvas.addEventListener('touchend',topoMouseUp);
+    document.addEventListener('click',()=>{const m=document.getElementById('topo-ctx-menu');if(m)m.style.display='none';});
+    // Reinit on resize
+    window.addEventListener('resize', ()=>{ if(_topoCanvas) topoInit(); });
+    // IntersectionObserver: reinit when canvas becomes visible
+    if (window.IntersectionObserver) {
+      new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) topoInit();
+      }, {threshold:0.1}).observe(_topoCanvas);
+    }
+    _topoInited = true;
+  }
+  topoDraw();
+  if (!_topoAnimFrame) topoAnimLoop();
 }
 
 function topoNodePos(n){return{x:n.x*_topoW,y:n.y*_topoH};}
