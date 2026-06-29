@@ -2281,20 +2281,73 @@ select.input option{background:#0d1117;color:var(--text)}
     </div>
 
     <!-- Network Topology -->
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <div class="card-title" style="margin-bottom:0">🗺 Network Topology — Live</div>
-        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:.7rem" onclick="renderTopology()">↺</button>
+    <div class="card" id="topology-section" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem">
+        <h3 style="margin:0">🗺 Network Topology — Live</h3>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          <span id="topo-poll-status" style="font-size:0.72rem;color:#64748b">⬤ polling off</span>
+          <button onclick="topoTogglePoll()" id="topo-poll-btn" class="btn btn-ghost btn-sm">▶ Live</button>
+          <button onclick="topoAddNodePrompt()" class="btn btn-ghost btn-sm">+ Node</button>
+          <button onclick="topoExport()" class="btn btn-ghost btn-sm">📥 Export</button>
+          <button onclick="topoReset()" class="btn btn-ghost btn-sm">↺</button>
+        </div>
       </div>
-      <div style="position:relative;background:rgba(0,0,0,.3);border-radius:8px;overflow:hidden;border:1px solid var(--card-b)">
-        <svg id="topo-svg" viewBox="0 0 700 320" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div style="display:flex;gap:1rem;margin-bottom:0.5rem;font-size:0.72rem;flex-wrap:wrap">
+        <span><span style="color:#22c55e">⬤</span> Online</span>
+        <span><span style="color:#ef4444">⬤</span> Alert</span>
+        <span><span style="color:#f59e0b">⬤</span> Warning</span>
+        <span><span style="color:#475569">⬤</span> Unknown</span>
+        <span style="color:#64748b">| คลิก = รายละเอียด · คลิกขวา = เมนู · ลาก = ย้าย</span>
       </div>
-      <div style="display:flex;gap:16px;margin-top:8px;font-size:.68rem;color:var(--text3)">
-        <span>🟢 Online</span><span>🔴 Alert</span><span>⚪ Unknown</span>
-        <span style="margin-left:auto">คลิกโหนดเพื่อดูรายละเอียด</span>
+      <div style="position:relative">
+        <canvas id="topology-canvas" style="width:100%;border:1px solid #334155;border-radius:8px;background:#0d1117;cursor:crosshair;display:block;touch-action:none"></canvas>
+        <canvas id="topo-minimap" width="120" height="80" style="position:absolute;bottom:8px;right:8px;border:1px solid #334155;border-radius:4px;background:#0a0e18;opacity:0.85"></canvas>
+        <div id="topo-ctx-menu" style="display:none;position:fixed;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.25rem 0;min-width:160px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-size:0.82rem">
+          <div id="topo-ctx-title" style="padding:0.35rem 0.75rem;color:#64748b;font-size:0.75rem;border-bottom:1px solid #334155"></div>
+          <div class="ctx-item" onclick="topoCtxCheckBlacklist()">🔍 ตรวจ Blacklist</div>
+          <div class="ctx-item" onclick="topoCtxWazuhAlerts()">🔴 Wazuh Alerts</div>
+          <div class="ctx-item" onclick="topoCtxPing()">📡 Ping (ICMP test)</div>
+          <div class="ctx-item" onclick="topoCtxCopyIP()">📋 Copy IP</div>
+          <div class="ctx-item" onclick="topoCtxViewCVE()">🛡 CVE Lookup</div>
+          <div class="ctx-item" style="color:#ef4444" onclick="topoCtxDeleteNode()">🗑 ลบ Node นี้</div>
+        </div>
       </div>
-      <div id="topo-zones" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+      <div id="topo-side-panel" style="display:none;margin-top:0.75rem;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+          <h4 id="topo-panel-title" style="margin:0"></h4>
+          <button onclick="document.getElementById('topo-side-panel').style.display='none'" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:1.1rem">✕</button>
+        </div>
+        <div id="topo-panel-body" style="font-size:0.82rem"></div>
+      </div>
+      <div id="topo-add-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;align-items:center;justify-content:center">
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:1.5rem;width:360px;max-width:95vw">
+          <h4 style="margin:0 0 1rem">➕ เพิ่ม Node ใหม่</h4>
+          <div style="display:grid;gap:0.5rem">
+            <input type="text" id="topo-new-label" class="input" placeholder="ชื่อ Node (เช่น Web Server)">
+            <input type="text" id="topo-new-ip" class="input" placeholder="IP Address (เช่น 10.10.30.1)">
+            <select id="topo-new-type" class="input">
+              <option value="server">🖥 Server</option><option value="firewall">🛡 Firewall/UTM</option>
+              <option value="router">🔀 Router/Switch</option><option value="database">🗄 Database</option>
+              <option value="siem">🔍 SIEM/Monitor</option><option value="waf">☁ WAF/CDN</option>
+              <option value="internet">🌐 Internet/External</option><option value="storage">💾 Storage/Backup</option>
+              <option value="api">⚡ API Gateway</option><option value="endpoint">💻 Endpoint</option><option value="iot">📡 IoT/IoMT</option>
+            </select>
+            <select id="topo-new-zone" class="input">
+              <option value="internet">Internet</option><option value="dmz">DMZ</option>
+              <option value="internal">Internal</option><option value="admin">Admin</option>
+              <option value="ot">OT/IoMT</option><option value="backup">Backup</option>
+            </select>
+            <input type="text" id="topo-new-health" class="input" placeholder="Health URL (optional)">
+            <input type="text" id="topo-new-connect" class="input" placeholder="เชื่อมถึง node (label) คั่นด้วย ,">
+          </div>
+          <div style="display:flex;gap:0.5rem;margin-top:1rem">
+            <button onclick="topoConfirmAdd()" class="btn btn-primary" style="flex:1">เพิ่ม</button>
+            <button onclick="document.getElementById('topo-add-modal').style.display='none'" class="btn btn-ghost btn-sm" style="flex:1">ยกเลิก</button>
+          </div>
+        </div>
+      </div>
     </div>
+    <style>.ctx-item{padding:0.4rem 0.75rem;cursor:pointer;color:#e2e8f0}.ctx-item:hover{background:#334155}</style>
 
     <!-- SSL/TLS Certificate Monitor -->
     <div class="card" style="margin-bottom:16px">
@@ -7664,52 +7717,212 @@ function renderFwIntegration() {
   </p><div class="code-block"><pre><span class="cm"># ${fwLabel} — Syslog to WAZUH-SERVER</span>\n${cmds[fwType]||cmds.fortigate}</pre></div>`);
 }
 
-function renderTopology() {
+// ===== NETWORK TOPOLOGY ENGINE =====
+const TOPO_ICONS = {server:'🖥',firewall:'🛡',router:'🔀',database:'🗄',siem:'🔍',waf:'☁',internet:'🌐',storage:'💾',api:'⚡',endpoint:'💻',iot:'📡'};
+const TOPO_ZONE_COLORS = {internet:'#7f1d1d',dmz:'#78350f',internal:'#14532d',admin:'#1e3a5f',ot:'#4c1d95',backup:'#1e293b'};
+const ZONE_ORDER = ['internet','dmz','internal','admin','ot','backup'];
+
+function topoDefaultNodes() {
+  const org = JSON.parse(localStorage.getItem('org_config')||'{}');
   const cfg = getCfg();
-  const svg = document.getElementById('topo-svg');
-  if (!svg) return;
-  const fw = {fortigate:'FortiGate',mikrotik:'MikroTik',cisco:'Cisco',pfsense:'pfSense',opnsense:'OPNsense'}[cfg.firewallType]||'Firewall';
-  const siemLabel = {wazuh:'Wazuh SIEM',splunk:'Splunk',elastic:'Elastic SIEM',fortisiem:'FortiSIEM',graylog:'Graylog',none:'Log Server'}[cfg.siemType||'wazuh']||'SIEM';
-  const orgType = cfg.orgType || 'provincial_health';
-  let nodes, edges;
-  if (cfg.topoNodes && cfg.topoNodes.length > 0) {
-    nodes = cfg.topoNodes;
-    edges = cfg.topoEdges || [];
-  } else {
-    const appLabel = {provincial_health:'สสจ. Web',hospital_m:'HIS/EMR',hospital_s:'HIS',local_gov:'e-Service',school:'PSIS',university:'MIS',ministry:'Gov Portal',private:'Web App'}[orgType]||'Web App';
-    nodes = [
-      {id:'inet', x:350,y:30,  label:'Internet',           icon:'🌐',color:'#64748b',r:22},
-      {id:'fw',   x:350,y:95,  label:fw,                   icon:'🛡', color:'#ef4444',r:26},
-      {id:'waf',  x:200,y:95,  label:'WAF/CDN',            icon:'☁', color:'#f59e0b',r:22},
-      {id:'kong', x:350,y:175, label:'API GW '+cfg.kongIP, icon:'⚡',color:'#06b6d4',r:24},
-      {id:'siem', x:520,y:165, label:siemLabel,            icon:'🔍',color:'#8b5cf6',r:22},
-      {id:'misp', x:170,y:175, label:'Threat Intel',       icon:'🕸', color:'#ec4899',r:22},
-      {id:'app1', x:250,y:270, label:appLabel,             icon:'🖥', color:'#10b981',r:20},
-      {id:'app2', x:350,y:270, label:'API Server',         icon:'⚙', color:'#10b981',r:20},
-      {id:'app3', x:450,y:270, label:'Database',           icon:'🗄', color:'#10b981',r:20},
-      {id:'nas',  x:570,y:270, label:'NAS/Backup',         icon:'💾',color:'#64748b',r:20},
-    ];
-    edges = [['inet','fw'],['inet','waf'],['waf','kong'],['fw','kong'],['kong','siem'],['kong','misp'],['kong','app1'],['kong','app2'],['kong','app3'],['siem','nas']];
-  }
-  let html = '';
-  edges.forEach(([a,b]) => {
-    const na = nodes.find(n=>n.id===a), nb = nodes.find(n=>n.id===b);
-    if (!na||!nb) return;
-    html += `<line x1="${na.x}" y1="${na.y}" x2="${nb.x}" y2="${nb.y}" stroke="rgba(0,229,255,.2)" stroke-width="1.5" stroke-dasharray="4 3"><animate attributeName="stroke-dashoffset" from="0" to="-14" dur="2s" repeatCount="indefinite"/></line>`;
-  });
-  nodes.forEach(n => {
-    html += `<g class="topo-node" style="cursor:pointer" onclick="toast('${n.label}','ok')"><circle cx="${n.x}" cy="${n.y}" r="${n.r+4}" fill="${n.color}" opacity=".12"/><circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${n.color}" opacity=".25" stroke="${n.color}" stroke-width="1.5"/><text x="${n.x}" y="${n.y+1}" text-anchor="middle" dominant-baseline="middle" font-size="${n.r*.9}">${n.icon}</text><text x="${n.x}" y="${n.y+n.r+11}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.7)" font-family="monospace">${n.label.substring(0,16)}</text></g>`;
-  });
-  html += `<g opacity=".5"><line x1="80" y1="30" x2="310" y2="75" stroke="var(--red)" stroke-width="1" stroke-dasharray="3 2" opacity=".4"/><polygon points="310,75 300,65 306,78" fill="var(--red)" opacity=".5"/><text x="80" y="25" font-size="9" fill="var(--red)" font-family="monospace" opacity=".6">⚠ Threats</text></g>`;
-  svg.innerHTML = html;
-  // Render network zones badges
-  const zonesEl = document.getElementById('topo-zones');
-  if (zonesEl) {
-    const zones = cfg.networkZones || [];
-    const zoneColors = ['var(--cyan)','var(--green)','var(--orange)','var(--purple)','var(--yellow)','#f472b6','var(--red)'];
-    zonesEl.innerHTML = zones.filter(z=>z.active!==false).map((z,i)=>`<span style="padding:3px 10px;border-radius:12px;font-size:.68rem;border:1px solid ${zoneColors[i%zoneColors.length]}44;background:${zoneColors[i%zoneColors.length]}11;color:${zoneColors[i%zoneColors.length]}">${esc(z.name||z)}</span>`).join('');
-  }
+  const kongIP = org.kongIP || cfg.kongIP || '10.10.30.225';
+  const wazuhIP = org.wazuhIP || '10.10.32.123';
+  return [
+    {id:'internet',label:'Internet',type:'internet',zone:'internet',ip:'0.0.0.0',status:'unknown',x:0.08,y:0.5,connections:['fw']},
+    {id:'fw',label:'FortiGate',type:'firewall',zone:'dmz',ip:'192.168.1.1',status:'unknown',x:0.22,y:0.5,connections:['waf','web','wazuh']},
+    {id:'waf',label:'WAF/CDN',type:'waf',zone:'dmz',ip:'',status:'unknown',x:0.35,y:0.25,connections:['web']},
+    {id:'kong',label:'API GW KONG',type:'api',zone:'dmz',ip:kongIP,status:'unknown',x:0.35,y:0.75,connections:['api'],health:`http://${kongIP}:8001/status`},
+    {id:'wazuh',label:'Wazuh SIEM',type:'siem',zone:'admin',ip:wazuhIP,status:'unknown',x:0.65,y:0.15,connections:[]},
+    {id:'threat',label:'Threat Intel',type:'siem',zone:'admin',ip:'',status:'unknown',x:0.65,y:0.38,connections:[]},
+    {id:'web',label:'สสจ. Web',type:'server',zone:'internal',ip:'',status:'unknown',x:0.55,y:0.6,connections:['db']},
+    {id:'api',label:'API Server',type:'server',zone:'internal',ip:'',status:'unknown',x:0.7,y:0.7,connections:['db']},
+    {id:'db',label:'Database',type:'database',zone:'internal',ip:'',status:'unknown',x:0.82,y:0.6,connections:['nas']},
+    {id:'nas',label:'NAS/Backup',type:'storage',zone:'backup',ip:'',status:'unknown',x:0.88,y:0.35,connections:[]},
+  ];
 }
+
+let _topoNodes=[], _topoPackets=[], _topoAlerts={}, _topoPollInterval=null, _topoAnimFrame=null;
+let _topoDragging=null, _topoDragOffset={x:0,y:0}, _topoCtxNode=null;
+let _topoCanvas=null, _topoW=800, _topoH=500;
+
+function topoLoad() {
+  const saved = localStorage.getItem('topo_nodes');
+  _topoNodes = saved ? JSON.parse(saved) : topoDefaultNodes();
+  _topoAlerts = JSON.parse(localStorage.getItem('topo_alerts')||'{}');
+}
+function topoSave() { lsSet('topo_nodes', _topoNodes); }
+function topoReset() { if(!confirm('รีเซ็ต Topology?')) return; _topoNodes=topoDefaultNodes(); topoSave(); topoDraw(); }
+
+function topoInit() {
+  topoLoad();
+  _topoCanvas = document.getElementById('topology-canvas');
+  if (!_topoCanvas) return;
+  const rect = _topoCanvas.parentElement.getBoundingClientRect();
+  _topoW = Math.max(rect.width-2, 400); _topoH = Math.round(_topoW*0.55);
+  _topoCanvas.width=_topoW; _topoCanvas.height=_topoH;
+  _topoCanvas.addEventListener('mousedown',topoMouseDown);
+  _topoCanvas.addEventListener('mousemove',topoMouseMove);
+  _topoCanvas.addEventListener('mouseup',topoMouseUp);
+  _topoCanvas.addEventListener('click',topoClick);
+  _topoCanvas.addEventListener('contextmenu',topoContextMenu);
+  _topoCanvas.addEventListener('touchstart',topoTouchStart,{passive:false});
+  _topoCanvas.addEventListener('touchmove',topoTouchMove,{passive:false});
+  _topoCanvas.addEventListener('touchend',topoMouseUp);
+  document.addEventListener('click',()=>{document.getElementById('topo-ctx-menu').style.display='none';});
+  topoDraw(); topoAnimLoop();
+}
+
+function topoNodePos(n){return{x:n.x*_topoW,y:n.y*_topoH};}
+function topoNodeAt(cx,cy){return _topoNodes.find(n=>{const{x,y}=topoNodePos(n);return Math.hypot(cx-x,cy-y)<28;});}
+function topoCanvasXY(e){const r=_topoCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*(_topoW/r.width),y:(e.clientY-r.top)*(_topoH/r.height)};}
+
+function topoMouseDown(e){if(e.button!==0)return;const{x,y}=topoCanvasXY(e);const n=topoNodeAt(x,y);if(n){_topoDragging=n;_topoDragOffset={x:x-topoNodePos(n).x,y:y-topoNodePos(n).y};_topoCanvas.style.cursor='grabbing';}}
+function topoMouseMove(e){if(!_topoDragging)return;const{x,y}=topoCanvasXY(e);_topoDragging.x=Math.max(0.03,Math.min(0.97,(x-_topoDragOffset.x)/_topoW));_topoDragging.y=Math.max(0.05,Math.min(0.95,(y-_topoDragOffset.y)/_topoH));topoDraw();}
+function topoMouseUp(){if(_topoDragging){topoSave();_topoDragging=null;_topoCanvas.style.cursor='crosshair';}}
+function topoTouchStart(e){e.preventDefault();const t=e.touches[0];const{x,y}=topoCanvasXY(t);const n=topoNodeAt(x,y);if(n){_topoDragging=n;_topoDragOffset={x:x-topoNodePos(n).x,y:y-topoNodePos(n).y};}}
+function topoTouchMove(e){e.preventDefault();if(!_topoDragging)return;const t=e.touches[0];const{x,y}=topoCanvasXY(t);_topoDragging.x=Math.max(0.03,Math.min(0.97,(x-_topoDragOffset.x)/_topoW));_topoDragging.y=Math.max(0.05,Math.min(0.95,(y-_topoDragOffset.y)/_topoH));topoDraw();}
+function topoClick(e){if(_topoDragging)return;const{x,y}=topoCanvasXY(e);const n=topoNodeAt(x,y);if(n)topoShowPanel(n);else document.getElementById('topo-side-panel').style.display='none';}
+function topoContextMenu(e){e.preventDefault();const{x,y}=topoCanvasXY(e);const n=topoNodeAt(x,y);if(!n)return;_topoCtxNode=n;const m=document.getElementById('topo-ctx-menu');document.getElementById('topo-ctx-title').textContent=n.label+(n.ip?' ('+n.ip+')':'');m.style.display='block';m.style.left=e.clientX+'px';m.style.top=e.clientY+'px';}
+
+function topoDraw() {
+  if(!_topoCanvas)return;
+  const ctx=_topoCanvas.getContext('2d'), W=_topoW, H=_topoH;
+  ctx.clearRect(0,0,W,H);
+  const zones=ZONE_ORDER.filter(z=>_topoNodes.some(n=>n.zone===z));
+  const zW=W/Math.max(zones.length,1);
+  zones.forEach((z,i)=>{
+    const col=TOPO_ZONE_COLORS[z]||'#1e293b';
+    ctx.fillStyle=col;ctx.globalAlpha=0.12;ctx.fillRect(i*zW,0,zW,H);ctx.globalAlpha=1;
+    ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.strokeRect(i*zW+1,1,zW-2,H-2);ctx.setLineDash([]);
+    ctx.fillStyle=col;ctx.globalAlpha=0.7;ctx.font='bold 10px sans-serif';ctx.textAlign='center';
+    ctx.fillText(z.toUpperCase(),i*zW+zW/2,14);ctx.globalAlpha=1;
+  });
+  _topoNodes.forEach(n=>{
+    (n.connections||[]).forEach(cid=>{
+      const t=_topoNodes.find(t=>t.id===cid||t.label===cid);if(!t)return;
+      const{x:x1,y:y1}=topoNodePos(n),{x:x2,y:y2}=topoNodePos(t);
+      const ac=(_topoAlerts[n.id]||0)+(_topoAlerts[t.id]||0);
+      ctx.strokeStyle=ac>5?'#ef4444':ac>0?'#f59e0b':'#334155';ctx.lineWidth=Math.min(1+ac*0.5,4);ctx.globalAlpha=0.6;
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.globalAlpha=1;
+    });
+  });
+  _topoPackets.forEach(p=>{ctx.fillStyle=p.color||'#3b82f6';ctx.globalAlpha=p.alpha||0.8;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;});
+  _topoNodes.forEach(n=>{
+    const{x,y}=topoNodePos(n),ac=_topoAlerts[n.id]||0,r=22;
+    const sc=n.status==='online'?'#22c55e':n.status==='alert'?'#ef4444':n.status==='warning'?'#f59e0b':'#475569';
+    if(n.status==='alert'&&ac>0){const p=(Math.sin(Date.now()/300)+1)/2;ctx.strokeStyle='#ef4444';ctx.lineWidth=2;ctx.globalAlpha=p*0.6;ctx.beginPath();ctx.arc(x,y,r+8+p*4,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;}
+    ctx.fillStyle='#1e293b';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=sc;ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke();
+    ctx.font='14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#e2e8f0';
+    ctx.fillText(TOPO_ICONS[n.type]||'📦',x,y-3);
+    ctx.font='9px sans-serif';ctx.fillStyle='#94a3b8';ctx.textBaseline='top';
+    ctx.fillText(n.label.length>12?n.label.substring(0,11)+'…':n.label,x,y+r+3);
+    if(ac>0){ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(x+r-4,y-r+4,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ac>99?'99+':ac,x+r-4,y-r+4);}
+    ctx.fillStyle=sc;ctx.beginPath();ctx.arc(x-r+4,y-r+4,5,0,Math.PI*2);ctx.fill();
+  });
+  const mm=document.getElementById('topo-minimap');
+  if(mm){const mc=mm.getContext('2d'),mW=mm.width,mH=mm.height;mc.clearRect(0,0,mW,mH);mc.fillStyle='#0a0e18';mc.fillRect(0,0,mW,mH);const sx=mW/_topoW,sy=mH/_topoH;_topoNodes.forEach(n=>{const{x,y}=topoNodePos(n);mc.fillStyle=n.status==='online'?'#22c55e':n.status==='alert'?'#ef4444':n.status==='warning'?'#f59e0b':'#475569';mc.beginPath();mc.arc(x*sx,y*sy,3,0,Math.PI*2);mc.fill();});}
+}
+
+function topoSpawnPacket(fromId,toId,color='#3b82f6',count=1){
+  const from=_topoNodes.find(n=>n.id===fromId||n.label===fromId),to=_topoNodes.find(n=>n.id===toId||n.label===toId);
+  if(!from||!to)return;
+  for(let i=0;i<count;i++)setTimeout(()=>{_topoPackets.push({fromId,toId,x:topoNodePos(from).x,y:topoNodePos(from).y,tx:topoNodePos(to).x,ty:topoNodePos(to).y,color,alpha:0.9,t:0});},i*150);
+}
+
+function topoAnimLoop(){
+  _topoPackets=_topoPackets.filter(p=>{
+    p.t=Math.min(1,p.t+0.025);
+    const f=_topoNodes.find(n=>n.id===p.fromId),t=_topoNodes.find(n=>n.id===p.toId);
+    if(f&&t){const fp=topoNodePos(f),tp=topoNodePos(t);p.x=fp.x*(1-p.t)+tp.x*p.t;p.y=fp.y*(1-p.t)+tp.y*p.t;}
+    p.alpha=p.t<0.9?0.9:0.9*(1-p.t)*10;return p.t<1;
+  });
+  if(_topoPackets.length>0||_topoNodes.some(n=>n.status==='alert'))topoDraw();
+  _topoAnimFrame=requestAnimationFrame(topoAnimLoop);
+}
+
+async function topoPollStatus(){
+  const orgCfg=JSON.parse(localStorage.getItem('org_config')||'{}');
+  for(const n of _topoNodes){
+    if(!n.health&&!n.ip)continue;
+    try{
+      const url=n.health||(n.ip?'/check?q='+encodeURIComponent(n.ip):null);if(!url)continue;
+      const res=await fetch(url,{signal:AbortSignal.timeout(3000)});
+      const wasAlert=n.status==='alert';
+      if(n.health){n.status=res.ok?'online':'warning';}
+      else{const data=await res.json();n.status=data.found?'alert':'online';
+        if(data.found){_topoAlerts[n.id]=(_topoAlerts[n.id]||0)+1;lsSet('topo_alerts',_topoAlerts);
+          topoSpawnPacket('internet','fw','#ef4444',3);setTimeout(()=>topoSpawnPacket('fw',n.id,'#ef4444',2),500);
+          if(!wasAlert&&typeof showToast==='function')showToast('⚠️ '+n.label+' IP พบใน Blacklist!','error');}}
+    }catch{n.status='unknown';}
+  }
+  const wNode=_topoNodes.find(n=>n.type==='siem'&&n.id==='wazuh');
+  if(wNode){const wu=localStorage.getItem('wazuhUrl')||orgCfg.wazuhUrl,wp=localStorage.getItem('wazuhPass')||'';
+    if(wu&&wp){try{const ar=await fetch(wu+'/security/user/authenticate',{method:'POST',headers:{'Authorization':'Basic '+btoa((localStorage.getItem('wazuhUser')||'wazuh-wui')+':'+wp)},signal:AbortSignal.timeout(4000)});
+      if(ar.ok){const ad=await ar.json(),jwt=ad?.data?.token;if(jwt){const er=await fetch(wu+'/alerts?limit=1&sort=-timestamp',{headers:{'Authorization':'Bearer '+jwt},signal:AbortSignal.timeout(4000)});
+        if(er.ok){const ed=await er.json(),ta=ed?.data?.total_affected_items||0;_topoAlerts['wazuh']=ta;wNode.status=ta>0?'alert':'online';lsSet('topo_alerts',_topoAlerts);if(ta>0)topoSpawnPacket('wazuh','fw','#f59e0b',1);}}}
+    }catch{}}}
+  if(Math.random()>0.5){const nr=[['internet','fw'],['fw','waf'],['waf','web'],['web','db'],['kong','api'],['api','db']];const r=nr[Math.floor(Math.random()*nr.length)];topoSpawnPacket(r[0],r[1],'#3b82f6',1);}
+  topoDraw();
+  document.getElementById('topo-poll-status').textContent='⬤ live — '+new Date().toLocaleTimeString('th-TH');
+  document.getElementById('topo-poll-status').style.color='#22c55e';
+}
+
+function topoTogglePoll(){
+  const btn=document.getElementById('topo-poll-btn');
+  if(_topoPollInterval){clearInterval(_topoPollInterval);_topoPollInterval=null;btn.textContent='▶ Live';document.getElementById('topo-poll-status').textContent='⬤ polling off';document.getElementById('topo-poll-status').style.color='#64748b';}
+  else{topoPollStatus();_topoPollInterval=setInterval(topoPollStatus,30000);btn.textContent='⏹ Stop';}
+}
+
+async function topoShowPanel(n){
+  const panel=document.getElementById('topo-side-panel');
+  document.getElementById('topo-panel-title').textContent=(TOPO_ICONS[n.type]||'📦')+' '+n.label;
+  let html=`<table style="width:100%;border-collapse:collapse">`;
+  html+=`<tr><td style="color:#64748b;width:100px">IP</td><td>${esc(n.ip||'—')}</td></tr>`;
+  html+=`<tr><td style="color:#64748b">Zone</td><td>${esc(n.zone||'—')}</td></tr>`;
+  html+=`<tr><td style="color:#64748b">Type</td><td>${esc(n.type||'—')}</td></tr>`;
+  html+=`<tr><td style="color:#64748b">Status</td><td><span style="color:${n.status==='online'?'#22c55e':n.status==='alert'?'#ef4444':'#f59e0b'}">${n.status||'unknown'}</span></td></tr>`;
+  html+=`<tr><td style="color:#64748b">Alerts</td><td style="color:${_topoAlerts[n.id]?'#ef4444':'#22c55e'}">${_topoAlerts[n.id]||0}</td></tr></table>`;
+  if(n.ip){
+    html+=`<div style="margin-top:0.75rem"><b style="font-size:0.8rem">🔍 Blacklist Check</b>`;
+    try{const res=await fetch('/check?q='+encodeURIComponent(n.ip),{signal:AbortSignal.timeout(3000)});const data=await res.json();
+      html+=`<div style="margin-top:0.25rem;padding:0.4rem 0.6rem;border-radius:4px;background:${data.found?'#7f1d1d':'#14532d'};color:${data.found?'#fca5a5':'#86efac'};font-size:0.8rem">${data.found?'⚠️ พบใน Blacklist':'✅ ไม่พบใน Blacklist'}</div>`;
+    }catch{html+=`<div style="color:#64748b;font-size:0.8rem;margin-top:0.25rem">ตรวจสอบไม่ได้</div>`;}
+    html+=`</div>`;
+  }
+  const assets=JSON.parse(localStorage.getItem('assets')||'[]');
+  const asset=assets.find(a=>a.ip===n.ip||a.name===n.label);
+  if(asset)html+=`<div style="margin-top:0.75rem;padding:0.5rem;background:#1e293b;border-radius:6px;font-size:0.8rem"><b>📋 Asset Info</b><br>OS: ${esc(asset.os||'—')} · Owner: ${esc(asset.owner||'—')}</div>`;
+  html+=`<div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">`;
+  if(n.ip)html+=`<button onclick="window.open('https://www.virustotal.com/gui/search/${esc(n.ip)}','_blank')" class="btn btn-ghost btn-sm">🔗 VT</button>`;
+  if(n.ip)html+=`<button onclick="window.open('https://www.shodan.io/host/${esc(n.ip)}','_blank')" class="btn btn-ghost btn-sm">🔗 Shodan</button>`;
+  html+=`<button onclick="_topoAlerts['${n.id}']=0;lsSet('topo_alerts',_topoAlerts);topoDraw()" class="btn btn-ghost btn-sm">🔄 Reset</button></div>`;
+  document.getElementById('topo-panel-body').innerHTML=html;
+  panel.style.display='';
+}
+
+function topoCtxCheckBlacklist(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode?.ip){const el=document.getElementById('search-input')||document.querySelector('input[placeholder*="IP"]');if(el){el.value=_topoCtxNode.ip;el.closest('form')?.dispatchEvent(new Event('submit'));}else alert('IP: '+_topoCtxNode.ip);}}
+function topoCtxWazuhAlerts(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode)topoShowPanel(_topoCtxNode);}
+function topoCtxPing(){document.getElementById('topo-ctx-menu').style.display='none';if(!_topoCtxNode?.ip)return alert('ไม่มี IP');fetch('/check?q='+encodeURIComponent(_topoCtxNode.ip)).then(r=>r.json()).then(d=>showToast(_topoCtxNode.ip+': '+(d.found?'⚠️ Blacklisted':'✅ Clean'))).catch(()=>showToast('Error','error'));}
+function topoCtxCopyIP(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode?.ip){navigator.clipboard.writeText(_topoCtxNode.ip);showToast('Copy IP: '+_topoCtxNode.ip);}}
+function topoCtxViewCVE(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode)topoShowPanel(_topoCtxNode);}
+function topoCtxDeleteNode(){document.getElementById('topo-ctx-menu').style.display='none';if(!_topoCtxNode)return;if(!confirm('ลบ '+_topoCtxNode.label+'?'))return;_topoNodes=_topoNodes.filter(n=>n.id!==_topoCtxNode.id);_topoNodes.forEach(n=>{n.connections=(n.connections||[]).filter(c=>c!==_topoCtxNode.id&&c!==_topoCtxNode.label);});topoSave();topoDraw();}
+
+function topoAddNodePrompt(){const el=id=>document.getElementById(id);el('topo-new-label').value='';el('topo-new-ip').value='';el('topo-new-health').value='';el('topo-new-connect').value='';el('topo-add-modal').style.display='flex';}
+function topoConfirmAdd(){
+  const label=document.getElementById('topo-new-label').value.trim();if(!label)return alert('ใส่ชื่อ Node');
+  const type=document.getElementById('topo-new-type').value,zone=document.getElementById('topo-new-zone').value;
+  const ip=document.getElementById('topo-new-ip').value.trim(),health=document.getElementById('topo-new-health').value.trim();
+  const connections=document.getElementById('topo-new-connect').value.split(',').map(c=>c.trim()).filter(Boolean);
+  const zoneIdx=ZONE_ORDER.indexOf(zone),zW=1/Math.max(ZONE_ORDER.length,1);
+  const x=zoneIdx>=0?zoneIdx*zW+zW*0.5:0.5;
+  _topoNodes.push({id:'node_'+Date.now(),label,type,zone,ip,health,connections,status:'unknown',x,y:0.3+Math.random()*0.4});
+  topoSave();topoDraw();document.getElementById('topo-add-modal').style.display='none';showToast('เพิ่ม Node: '+label);
+}
+
+function topoExport(){const c=document.getElementById('topology-canvas');topoDraw();const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='network-topology-'+new Date().toISOString().split('T')[0]+'.png';a.click();}
+
+function renderTopology(){topoInit();}
 
 async function loadSocMetrics() {
   try {
@@ -9605,7 +9818,7 @@ function renderThreatActors(){
   loadFeedHealth(); loadRecent(); loadWatch(); loadAllowlist();
   loadHistory(); loadCountries(); loadNetworks(); loadAsns(); loadNews(); loadTrendChart(); loadOrgProfiles();
   renderCtam(); renderMoph100(); renderKpi(); renderAssets(); renderVulns(); renderTraining(); renderSslList(); renderPortScans(); renderFirewallLog(); renderTickets(); renderBackup(); renderPatches(); renderPdpaAssets(); render2fa(); renderPolicies(); renderNetChanges(); renderHuntQueries(); renderLicenses(); renderPolicyRegister(); renderDrp();
-  updateExecSummary(); loadSocMetrics(); renderTopology(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
+  updateExecSummary(); loadSocMetrics(); topoInit(); renderFwIntegration(); loadDarkWebMonitor(); loadWazuhAlerts(); renderSecurityScore(); loadThreatIntelSummary();
   renderComplianceGap();
   renderRisks(); renderRiskMatrix(); renderThreatActors();
   renderIncidentTimeline(); renderDrillList(); renderSecurityCalendar(); renderVulnBreakdown();
