@@ -7715,7 +7715,7 @@ function renderFwIntegration() {
 }
 
 // ===== NETWORK TOPOLOGY ENGINE =====
-const TOPO_ICONS = {server:'🖥',firewall:'🛡',router:'🔀',database:'🗄',siem:'🔍',waf:'☁',internet:'🌐',storage:'💾',api:'⚡',endpoint:'💻',iot:'📡'};
+const TOPO_CANVAS_ICONS = {server:'🖥',firewall:'🛡',router:'🔀',database:'🗄',siem:'🔍',waf:'☁',internet:'🌐',storage:'💾',api:'⚡',endpoint:'💻',iot:'📡'};
 const TOPO_ZONE_COLORS = {internet:'#7f1d1d',dmz:'#78350f',internal:'#14532d',admin:'#1e3a5f',ot:'#4c1d95',backup:'#1e293b'};
 const ZONE_ORDER = ['internet','dmz','internal','admin','ot','backup'];
 
@@ -7825,7 +7825,7 @@ function topoDraw() {
     ctx.fillStyle='#1e293b';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
     ctx.strokeStyle=sc;ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke();
     ctx.font='14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#e2e8f0';
-    ctx.fillText(TOPO_ICONS[n.type]||'📦',x,y-3);
+    ctx.fillText(TOPO_CANVAS_ICONS[n.type]||'📦',x,y-3);
     ctx.font='9px sans-serif';ctx.fillStyle='#94a3b8';ctx.textBaseline='top';
     ctx.fillText(n.label.length>12?n.label.substring(0,11)+'…':n.label,x,y+r+3);
     if(ac>0){ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(x+r-4,y-r+4,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ac>99?'99+':ac,x+r-4,y-r+4);}
@@ -7887,7 +7887,7 @@ function topoTogglePoll(){
 
 async function topoShowPanel(n){
   const panel=document.getElementById('topo-side-panel');
-  document.getElementById('topo-panel-title').textContent=(TOPO_ICONS[n.type]||'📦')+' '+n.label;
+  document.getElementById('topo-panel-title').textContent=(TOPO_CANVAS_ICONS[n.type]||'📦')+' '+n.label;
   let html=`<table style="width:100%;border-collapse:collapse">`;
   html+=`<tr><td style="color:#64748b;width:100px">IP</td><td>${esc(n.ip||'—')}</td></tr>`;
   html+=`<tr><td style="color:#64748b">Zone</td><td>${esc(n.zone||'—')}</td></tr>`;
