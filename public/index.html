@@ -877,6 +877,7 @@ select.input option{background:#0d1117;color:var(--text)}
       <button onclick="saveCurrentAsProfile()" title="บันทึก Profile" style="background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.2);color:var(--cyan);border-radius:6px;padding:5px 10px;font-size:.8rem;cursor:pointer">💾</button>
       <button onclick="addNewOrgProfile()" title="เพิ่ม Profile ใหม่" style="background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.2);color:var(--green);border-radius:6px;padding:5px 10px;font-size:.8rem;cursor:pointer">+</button>
     </div>
+    <div id="org-profiles-list" style="margin-top:6px"></div>
     <div class="setting-desc">บันทึก/สลับ config ระหว่างหลายหน่วยงาน</div>
   </div>
 </aside>
@@ -1069,7 +1070,7 @@ select.input option{background:#0d1117;color:var(--text)}
             <summary style="cursor:pointer;font-size:.78rem;color:var(--cyan);font-weight:600">🔒 FortiGate Auto-Block Watchlist IPs</summary>
             <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
               <input type="text" id="fg-host" class="input mono" placeholder="FortiGate IP/hostname">
-              <input type="password" id="fg-token" class="input mono" placeholder="API Token">
+              <input type="password" id="fg-token" class="input mono" placeholder="API Token (เคลียร์เมื่อปิด browser)">
               <input type="text" id="fg-vdom" class="input mono" placeholder="VDOM (root)" style="grid-column:1/-1">
             </div>
             <button onclick="fortigateBlockWatchlist()" class="btn btn-primary btn-sm" style="margin-top:8px;background:rgba(255,23,68,.15);border-color:rgba(255,23,68,.3);color:var(--red)">🚫 Block IPs บน FortiGate</button>
@@ -1167,6 +1168,7 @@ select.input option{background:#0d1117;color:var(--text)}
           </tr>
         </tbody>
       </table>
+      <div id="asset-pager"></div>
     </div>
     <div style="padding:10px 14px;border-top:1px solid var(--card-b);display:flex;gap:12px;font-size:.75rem;color:var(--text3)">
       <span>รวม: <strong id="asset-count" style="color:var(--text1)">0</strong> รายการ</span>
@@ -1207,6 +1209,7 @@ select.input option{background:#0d1117;color:var(--text)}
         </tr></thead>
         <tbody id="vuln-tbody"><tr id="vuln-empty"><td colspan="8" style="padding:24px;text-align:center;color:var(--text3);font-size:.82rem">ยังไม่มีช่องโหว่ — คลิก "+ เพิ่ม CVE"</td></tr></tbody>
       </table>
+      <div id="vuln-pager"></div>
     </div>
   </div>
   <div id="vuln-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
@@ -2288,6 +2291,7 @@ select.input option{background:#0d1117;color:var(--text)}
           </tr></thead>
           <tbody id="fw-log-tbody"><tr id="fw-log-empty"><td colspan="6" style="padding:20px;text-align:center;color:var(--text3);font-size:.8rem">ยังไม่มีรายการ</td></tr></tbody>
         </table>
+        <div id="fw-log-pager"></div>
       </div>
     </div>
     <div id="fw-log-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
@@ -2338,6 +2342,7 @@ select.input option{background:#0d1117;color:var(--text)}
           </tr></thead>
           <tbody id="ticket-tbody"><tr id="ticket-empty"><td colspan="8" style="padding:20px;text-align:center;color:var(--text3);font-size:.8rem">ยังไม่มี Incident — คลิก "+ เปิด Ticket"</td></tr></tbody>
         </table>
+        <div id="ticket-pager"></div>
       </div>
     </div>
     <div id="ticket-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center">
@@ -4569,7 +4574,14 @@ function getCfg() {
     return c;
   } catch { return { ...CFG_DEFAULT }; }
 }
-function saveCfg(c) { localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
+function lsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); return true; }
+  catch(e) { if(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED') toast('⚠️ localStorage เต็ม — Export ข้อมูลก่อนเพิ่มเติม','err'); return false; }
+}
+function saveCfg(c) {
+  try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
+  catch(e) { if(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED') toast('⚠️ พื้นที่ localStorage เต็ม — Export/Import เพื่อล้างข้อมูลเก่า','err'); }
+}
 function cfgVal(key) { return getCfg()[key] || CFG_DEFAULT[key]; }
 
 function toast(msg, type = 'ok') {
@@ -6120,6 +6132,18 @@ function deleteBackup(idx){const cfg=getCfg();(cfg.backups||[]).splice(idx,1);sa
 // ── Incident Ticket Logger ──
 const TK_TYPE_LABEL={malware:'🦠 Malware',phishing:'🎣 Phishing',unauthorized:'🚪 Unauthorized',ddos:'💥 DDoS',leak:'💧 Data Leak',vuln:'🔍 Vulnerability',other:'📋 อื่นๆ'};
 const TK_STATUS_LABEL={open:'🔴 Open',investigating:'🟡 Investigating',contained:'🟠 Contained',resolved:'🟢 Resolved',closed:'⚫ Closed'};
+const PAGE_SIZE=50;
+let _ticketPage=0,_fwPage=0,_vulnPage=0,_assetPage=0;
+function renderPager(total,page,setPage,renderFn){
+  if(total<=PAGE_SIZE)return'';
+  const pages=Math.ceil(total/PAGE_SIZE);
+  return`<div style="display:flex;gap:6px;margin-top:8px;align-items:center;font-size:.75rem">
+    <button class="btn btn-ghost btn-sm" onclick="${setPage}=Math.max(0,${setPage}-1);${renderFn}()" ${page===0?'disabled':''}>◀</button>
+    <span style="color:var(--text2)">หน้า ${page+1}/${pages}</span>
+    <button class="btn btn-ghost btn-sm" onclick="${setPage}=Math.min(${pages-1},${setPage}+1);${renderFn}()" ${page>=pages-1?'disabled':''}>▶</button>
+    <span style="color:var(--text3)">(${total} รายการ)</span>
+  </div>`;
+}
 function renderTickets(){
   const cfg=getCfg(),list=Array.isArray(cfg.tickets)?cfg.tickets:[];
   const tbody=document.getElementById('ticket-tbody');if(!tbody)return;
@@ -6128,12 +6152,14 @@ function renderTickets(){
     const badge=document.getElementById('ticket-open-badge');if(badge)badge.textContent='Open: 0';return;}
   empty&&(empty.style.display='none');tbody.querySelectorAll('tr:not(#ticket-empty)').forEach(r=>r.remove());
   let openCount=0;
-  list.slice().reverse().forEach((t,ri)=>{
-    const i=list.length-1-ri;
+  const reversed=list.slice().reverse();
+  const pageItems=reversed.slice(_ticketPage*PAGE_SIZE,(_ticketPage+1)*PAGE_SIZE);
+  pageItems.forEach((t,ri)=>{
+    const i=list.length-1-(_ticketPage*PAGE_SIZE+ri);
     if(t.status==='open'||t.status==='investigating'||t.status==='contained')openCount++;
     const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--card-b);font-size:.73rem';
     const sev=SEV_COLOR[t.severity]||'var(--text1)';
-    tr.innerHTML=`<td style="padding:6px 10px;color:var(--text3);font-family:monospace">#${list.length-ri}</td>
+    tr.innerHTML=`<td style="padding:6px 10px;color:var(--text3);font-family:monospace">#${list.length-(_ticketPage*PAGE_SIZE+ri)}</td>
       <td style="padding:6px 10px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.title||'')}">${esc(t.title||'—')}</td>
       <td style="padding:6px 10px">${TK_TYPE_LABEL[t.type]||t.type||'—'}</td>
       <td style="padding:6px 10px;color:${sev};font-weight:700">${SEV_LABEL[t.severity]||'—'}</td>
@@ -6146,7 +6172,9 @@ function renderTickets(){
       </td>`;
     tbody.appendChild(tr);
   });
+  list.forEach(t=>{if(t.status==='open'||t.status==='investigating'||t.status==='contained')openCount++;});
   const badge=document.getElementById('ticket-open-badge');if(badge)badge.textContent='Open: '+openCount;
+  const pg=document.getElementById('ticket-pager');if(pg)pg.innerHTML=renderPager(list.length,_ticketPage,'_ticketPage','renderTickets');
 }
 function showAddTicket(){
   document.getElementById('ticket-edit-idx').value='-1';
@@ -6188,8 +6216,9 @@ function renderFirewallLog(){
   const empty=document.getElementById('fw-log-empty');
   if(!list.length){empty&&(empty.style.display='');tbody.querySelectorAll('tr:not(#fw-log-empty)').forEach(r=>r.remove());return;}
   empty&&(empty.style.display='none');tbody.querySelectorAll('tr:not(#fw-log-empty)').forEach(r=>r.remove());
-  list.slice().reverse().forEach((f,ri)=>{
-    const i=list.length-1-ri;
+  const fwReversed=list.slice().reverse();
+  fwReversed.slice(_fwPage*PAGE_SIZE,(_fwPage+1)*PAGE_SIZE).forEach((f,ri)=>{
+    const i=list.length-1-(_fwPage*PAGE_SIZE+ri);
     const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--card-b);font-size:.73rem';
     const ncsa_color=f.ncsa==='yes'?'var(--red)':f.ncsa==='no'?'var(--green)':'var(--text3)';
     const ncsa_label=f.ncsa==='yes'?'🔴 ใช่':f.ncsa==='no'?'🟢 ไม่':f.ncsa==='check'?'⏳ ยังไม่ตรวจ':'—';
@@ -6204,6 +6233,7 @@ function renderFirewallLog(){
       </td>`;
     tbody.appendChild(tr);
   });
+  const pg=document.getElementById('fw-log-pager');if(pg)pg.innerHTML=renderPager(list.length,_fwPage,'_fwPage','renderFirewallLog');
 }
 function showAddFirewallLog(){
   document.getElementById('fw-edit-idx').value='-1';
@@ -6441,7 +6471,7 @@ function renderVulns(){
   const empty=document.getElementById('vuln-empty');
   if(!vulns.length){empty&&(empty.style.display='');tbody.querySelectorAll('tr:not(#vuln-empty)').forEach(r=>r.remove());return;}
   empty&&(empty.style.display='none');tbody.querySelectorAll('tr:not(#vuln-empty)').forEach(r=>r.remove());
-  vulns.forEach((v,i)=>{
+  vulns.slice(_vulnPage*PAGE_SIZE,(_vulnPage+1)*PAGE_SIZE).forEach((v,ri)=>{const i=_vulnPage*PAGE_SIZE+ri;
     const due=v.due?new Date(v.due):null,overdue=due&&v.status!=='patched'&&due<new Date();
     const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--card-b);font-size:.76rem';
     tr.innerHTML=`<td style="padding:8px 12px;font-family:monospace;font-weight:700;color:${SEV_COLOR[v.severity]||'var(--text1)'}"><a href="https://nvd.nist.gov/vuln/detail/${esc(v.cve)}" target="_blank" style="color:inherit;text-decoration:none">${esc(v.cve||'—')}</a></td>
@@ -6453,6 +6483,7 @@ function renderVulns(){
       <td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:2px 8px" onclick="editVuln(${i})">✏</button> <button class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:2px 8px;color:var(--red)" onclick="deleteVuln(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
+  const pg2=document.getElementById('vuln-pager');if(pg2)pg2.innerHTML=renderPager(vulns.length,_vulnPage,'_vulnPage','renderVulns');
   const cnt={critical:0,high:0,medium:0,low:0,patched:0};
   vulns.forEach(v=>{if(cnt[v.severity]!==undefined)cnt[v.severity]++;if(v.status==='patched')cnt.patched++;});
   const s=id=>document.getElementById(id);
@@ -6556,7 +6587,7 @@ function renderAssets() {
   } else {
     empty && (empty.style.display = 'none');
     tbody.querySelectorAll('tr:not(#asset-empty-row)').forEach(r => r.remove());
-    assets.forEach((a, i) => {
+    assets.slice(_assetPage*PAGE_SIZE, (_assetPage+1)*PAGE_SIZE).forEach((a, ri) => { const i = _assetPage*PAGE_SIZE+ri;
       const tr = document.createElement('tr');
       tr.style.cssText = 'border-bottom:1px solid var(--card-b);font-size:.78rem;transition:background .15s';
       tr.onmouseover = () => tr.style.background = 'rgba(255,255,255,.03)';
@@ -6576,6 +6607,7 @@ function renderAssets() {
         </td>`;
       tbody.appendChild(tr);
     });
+    const pg3=document.getElementById('asset-pager');if(pg3)pg3.innerHTML=renderPager(assets.length,_assetPage,'_assetPage','renderAssets');
   }
   const cnt = document.getElementById('asset-count');
   if (cnt) cnt.textContent = assets.length;
@@ -9446,12 +9478,15 @@ function renderThreatActors(){
   loadSocAlerts();
   loadTicker();
   // Auto-refresh
-  const refreshSecs = parseInt(localStorage.getItem('auto_refresh') || '0');
-  if (refreshSecs > 0) {
-    setInterval(() => {
+  let _refreshInterval = null;
+  function startAutoRefresh(secs) {
+    if (_refreshInterval) clearInterval(_refreshInterval);
+    if (!secs || secs < 10) return;
+    _refreshInterval = setInterval(() => {
       loadStats(); loadFreshnessBar(); loadFeedHealth(); loadRecent(); loadSocAlerts();
-    }, refreshSecs * 1000);
+    }, secs * 1000);
   }
+  startAutoRefresh(parseInt(localStorage.getItem('auto_refresh') || '0'));
   let rt;
   window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => drawChart(_historyType), 150); });
   // Keyboard shortcuts
@@ -9566,9 +9601,9 @@ function renderIomtList() {
   const statusLabel = {isolated:'✅ Isolated',monitored:'👁 Monitored',exposed:'⚠️ Exposed',offline:'⭕ Offline'};
   el.innerHTML = devs.map((d,i) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--card-b);font-size:.78rem">
     <div style="flex:1">
-      <div style="font-weight:700;color:var(--text)">${d.name}</div>
-      <div style="color:var(--text3);font-size:.7rem">${d.type||'IoT'} · ${d.ip||'—'} · ${d.vlan||'No VLAN'} · OS: ${d.os||'Unknown'}</div>
-      ${d.note?`<div style="color:var(--orange);font-size:.68rem;margin-top:2px">${d.note}</div>`:''}
+      <div style="font-weight:700;color:var(--text)">${esc(d.name||'')}</div>
+      <div style="color:var(--text3);font-size:.7rem">${esc(d.type||'IoT')} · ${esc(d.ip||'—')} · ${esc(d.vlan||'No VLAN')} · OS: ${esc(d.os||'Unknown')}</div>
+      ${d.note?`<div style="color:var(--orange);font-size:.68rem;margin-top:2px">${esc(d.note)}</div>`:''}
     </div>
     <span style="color:${statusColor[d.status]||'var(--text3)'};font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:8px;background:rgba(255,255,255,.04)">${statusLabel[d.status]||d.status}</span>
     <button class="btn btn-ghost btn-sm" style="font-size:.68rem;padding:3px 8px" onclick="editIomt(${i})">✏️</button>
@@ -9717,14 +9752,31 @@ function handleLogFile(file) {
 async function runLogBulkCheck() {
   if (!_logExtractedIPs.length) return;
   const out = document.getElementById('log-bulk-output');
-  out.innerHTML = '<div class="empty">กำลังตรวจสอบ...</div>';
+  out.innerHTML = `<div style="margin:1rem 0">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:.8rem">
+      <span>กำลังส่ง ${_logExtractedIPs.length} IPs ...</span><span id="log-pct">0%</span>
+    </div>
+    <div style="background:rgba(255,255,255,.06);border-radius:4px;height:8px;overflow:hidden">
+      <div id="log-progress-bar" style="height:100%;background:var(--cyan);width:0%;transition:width 0.3s"></div>
+    </div>
+  </div>`;
+  let pct = 0;
+  const pTimer = setInterval(() => {
+    pct = Math.min(pct + Math.random()*15, 90);
+    const bar = document.getElementById('log-progress-bar');
+    const lbl = document.getElementById('log-pct');
+    if (bar) bar.style.width = pct.toFixed(0) + '%';
+    if (lbl) lbl.textContent = pct.toFixed(0) + '%';
+  }, 400);
   try {
     const res = await fetch('/bulk', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({items: _logExtractedIPs.slice(0,10000)})});
+    clearInterval(pTimer);
+    const bar2 = document.getElementById('log-progress-bar'); if(bar2) bar2.style.width='100%';
     const data = await res.json();
     const hits = data.results ? data.results.filter(r => r.found) : [];
     out.innerHTML = `<div style="margin-top:1rem"><b style="color:var(--red)">${hits.length} รายการพบใน Blacklist</b> จาก ${_logExtractedIPs.length} IP<br><br>` +
       (hits.length ? hits.map(r => `<span style="background:rgba(255,23,68,.12);padding:2px 8px;border-radius:4px;margin:2px;display:inline-block;color:var(--red)">${esc(r.item||r.value||r.ip||'')}</span>`).join('') : '<span style="color:var(--green)">✅ ไม่พบ IP ใน Blacklist</span>') + '</div>';
-  } catch(e) { out.innerHTML = `<div class="empty">ตรวจสอบไม่ได้: ${esc(e.message)}</div>`; }
+  } catch(e) { clearInterval(pTimer); out.innerHTML = `<div class="empty">ตรวจสอบไม่ได้: ${esc(e.message)}</div>`; }
 }
 function exportLogIPs() {
   const blob = new Blob([_logExtractedIPs.join('\n')], {type:'text/plain'});
@@ -9820,7 +9872,7 @@ async function fortigateBlockWatchlist() {
   const token = document.getElementById('fg-token')?.value.trim();
   const vdom = document.getElementById('fg-vdom')?.value.trim() || 'root';
   if (!host || !token) return toast('ใส่ FortiGate host และ API Token ก่อน','warn');
-  localStorage.setItem('fgHost', host); localStorage.setItem('fgToken', token); localStorage.setItem('fgVdom', vdom);
+  sessionStorage.setItem('fgHost', host); sessionStorage.setItem('fgToken', token); sessionStorage.setItem('fgVdom', vdom);
   const wl = JSON.parse(localStorage.getItem('watchlist') || '[]');
   const ips = wl.filter(w => /^\d+\.\d+\.\d+\.\d+/.test(w.value||w)).map(w => w.value||w);
   if (!ips.length) return toast('ไม่มี IP ใน Watch List','warn');
@@ -9866,6 +9918,19 @@ function loadOrgProfiles() {
   const sel = document.getElementById('org-profile-select'); if (!sel) return;
   const opts = (current ? [{name: current.orgName || 'หน่วยงานปัจจุบัน', id:'current'}] : []).concat(profiles);
   sel.innerHTML = opts.map(p => `<option value="${esc(p.id||'current')}">${esc(p.name||p.orgName||'?')}</option>`).join('');
+  const listEl = document.getElementById('org-profiles-list');
+  if (listEl) {
+    listEl.innerHTML = profiles.length ? profiles.map(p =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:.78rem">
+        <span style="color:var(--text2)">${esc(p.name||'?')}</span>
+        <button onclick="deleteOrgProfile('${esc(p.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:0 4px">🗑</button>
+      </div>`).join('') : '<small style="color:var(--text3)">ไม่มี saved profiles</small>';
+  }
+}
+function deleteOrgProfile(id) {
+  const profiles = JSON.parse(localStorage.getItem('org_profiles') || '[]');
+  localStorage.setItem('org_profiles', JSON.stringify(profiles.filter(p => p.id !== id)));
+  loadOrgProfiles(); toast('ลบ Profile แล้ว','ok');
 }
 function switchOrgProfile(id) {
   if (id === 'current') return;
