@@ -253,6 +253,15 @@ function recordTrendEntry() {
   } catch (e) { console.error('trend record error:', e.message); }
 }
 
+// Seed today's trend entry on startup if missing
+(async () => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const trend = readTrend();
+    if (!trend.find(e => e.date === today)) recordTrendEntry();
+  } catch {}
+})();
+
 function expiresAt(generatedAt, validDays) {
   if (!generatedAt || !validDays) return null;
   const d = new Date(generatedAt);
@@ -731,6 +740,8 @@ app.get('/metrics', (req, res, next) => {
     if (lines.length) syncTs = Math.floor(new Date(JSON.parse(lines[lines.length - 1]).date).getTime() / 1000);
   } catch {}
   const lines = [
+    '# NCSA Blacklist Metrics',
+    '# Protect this endpoint with ADMIN_TOKEN in production',
     '# HELP ncsa_store_size Number of entries in each feed',
     '# TYPE ncsa_store_size gauge',
     ...Object.entries(store).map(([t, d]) => `ncsa_store_size{type="${t}"} ${d ? d.set.size : 0}`),
@@ -885,7 +896,8 @@ app.post('/admin/fortigate-block', requireAdmin, express.json(), async (req, res
     return res.status(400).json({ error: 'host, token, ips[] required' });
   }
   const members = ips.map(ip => ({ name: ip }));
-  const url = `https://${host}/api/v2/cmdb/firewall/addrgrp/NCSA-Blacklist?vdom=${vdom}`;
+  const fgBase = host.startsWith('https://') ? host : `https://${host}`;
+  const url = `${fgBase}/api/v2/cmdb/firewall/addrgrp/NCSA-Blacklist?vdom=${vdom}`;
   try {
     // Try PUT (update existing group) first, fallback to POST (create)
     let r = await fetch(url, {
@@ -895,7 +907,7 @@ app.post('/admin/fortigate-block', requireAdmin, express.json(), async (req, res
       signal: AbortSignal.timeout(10000),
     });
     if (r.status === 404) {
-      r = await fetch(`https://${host}/api/v2/cmdb/firewall/addrgrp?vdom=${vdom}`, {
+      r = await fetch(`${fgBase}/api/v2/cmdb/firewall/addrgrp?vdom=${vdom}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'NCSA-Blacklist', member: members }),
@@ -914,6 +926,9 @@ app.post('/admin/misp-push', requireAdmin, express.json(), async (req, res) => {
   const { url: misp_url, apikey, iocs, tlp = 'TLP:GREEN' } = req.body || {};
   if (!misp_url || !apikey || !Array.isArray(iocs) || !iocs.length) {
     return res.status(400).json({ error: 'url, apikey, iocs[] required' });
+  }
+  if (!misp_url.startsWith('https://')) {
+    return res.status(400).json({ error: 'MISP URL ต้องเป็น HTTPS เท่านั้น เพื่อป้องกัน API Key รั่วไหล' });
   }
   const distribution = tlp === 'TLP:RED' ? 4 : tlp === 'TLP:AMBER' ? 3 : tlp === 'TLP:GREEN' ? 2 : 0;
   const event = {
@@ -973,6 +988,401 @@ app.post('/admin/report-email', requireAdmin, express.json({ limit: '2mb' }), as
   }
 });
 
+// ============================================================
+// FEATURE 1: USER AUTHENTICATION
+// ============================================================
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const _sessions = new Map(); // token → {userId, username, role, expires}
+
+function parseCookieStr(str = '') {
+  const out = {};
+  for (const part of str.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    try { out[decodeURIComponent(part.slice(0, idx).trim())] = decodeURIComponent(part.slice(idx + 1).trim()); } catch {}
+  }
+  return out;
+}
+
+function hashPassword(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+}
+
+function readUsers() {
+  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch { return []; }
+}
+function writeUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+// Bootstrap default admin user on startup
+(function bootstrapAuth() {
+  if (fs.existsSync(USERS_FILE)) return;
+  const salt = crypto.randomBytes(16).toString('hex');
+  const password = process.env.ADMIN_TOKEN || 'admin1234';
+  const passwordHash = hashPassword(password, salt);
+  writeUsers([{ id: 1, username: 'admin', passwordHash, salt, role: 'admin', createdAt: new Date().toISOString() }]);
+  console.log('[auth] created default admin user (username: admin, password: ADMIN_TOKEN or admin1234)');
+})();
+
+function requireAuth(role = null) {
+  return (req, res, next) => {
+    const cookies = parseCookieStr(req.headers.cookie || '');
+    const token = cookies.ncsa_session || req.headers['x-session-token'] || '';
+    const session = _sessions.get(token);
+    if (!session || session.expires < Date.now()) {
+      // Fallback: accept existing ADMIN_TOKEN Bearer for API clients
+      const bearer = (req.headers.authorization || '').replace('Bearer ', '').trim();
+      if (bearer && adminTokens[bearer]) {
+        req.user = { userId: 0, username: 'api', role: 'admin' };
+        return next();
+      }
+      return res.status(401).json({ error: 'Unauthorized — please login at /auth/login' });
+    }
+    if (role && role !== 'admin' && session.role !== role && session.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden — insufficient role' });
+    }
+    req.user = session;
+    next();
+  };
+}
+
+function setCookieHeader(res, token) {
+  res.setHeader('Set-Cookie', `ncsa_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
+}
+
+// POST /auth/login
+app.post('/auth/login', express.json(), (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  const users = readUsers();
+  const user = users.find(u => u.username === username);
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  const hash = hashPassword(password, user.salt);
+  if (hash !== user.passwordHash) return res.status(401).json({ error: 'Invalid credentials' });
+  const token = crypto.randomBytes(32).toString('hex');
+  _sessions.set(token, { userId: user.id, username: user.username, role: user.role, expires: Date.now() + 8 * 3600_000 });
+  setCookieHeader(res, token);
+  auditLogRaw({ ip: req.ip }, 'login', username);
+  res.json({ ok: true, username: user.username, role: user.role });
+});
+
+// POST /auth/logout
+app.post('/auth/logout', (req, res) => {
+  const cookies = parseCookieStr(req.headers.cookie || '');
+  const token = cookies.ncsa_session || req.headers['x-session-token'] || '';
+  if (token) _sessions.delete(token);
+  res.setHeader('Set-Cookie', 'ncsa_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+  auditLogRaw({ ip: req.ip, user: { username: 'unknown' } }, 'logout', '');
+  res.json({ ok: true });
+});
+
+// GET /auth/me
+app.get('/auth/me', requireAuth(), (req, res) => {
+  res.json({ username: req.user.username, role: req.user.role });
+});
+
+// GET /auth/users — admin only
+app.get('/auth/users', requireAuth('admin'), (req, res) => {
+  const users = readUsers().map(({ passwordHash, salt, ...u }) => u);
+  res.json(users);
+});
+
+// POST /auth/users — admin only: create user
+app.post('/auth/users', requireAuth('admin'), express.json(), (req, res) => {
+  const { username, password, role = 'analyst' } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  if (!['admin', 'analyst', 'viewer'].includes(role)) return res.status(400).json({ error: 'role must be admin|analyst|viewer' });
+  const users = readUsers();
+  if (users.find(u => u.username === username)) return res.status(409).json({ error: 'username already exists' });
+  const salt = crypto.randomBytes(16).toString('hex');
+  const newUser = { id: Date.now(), username, passwordHash: hashPassword(password, salt), salt, role, createdAt: new Date().toISOString() };
+  users.push(newUser);
+  writeUsers(users);
+  auditLogRaw(req, 'user_create', username);
+  res.json({ ok: true, id: newUser.id, username, role });
+});
+
+// DELETE /auth/users/:id — admin only
+app.delete('/auth/users/:id', requireAuth('admin'), (req, res) => {
+  const id = parseInt(req.params.id);
+  const users = readUsers();
+  const idx = users.findIndex(u => u.id === id);
+  if (idx < 0) return res.status(404).json({ error: 'user not found' });
+  const [removed] = users.splice(idx, 1);
+  writeUsers(users);
+  auditLogRaw(req, 'user_delete', removed.username);
+  res.json({ ok: true });
+});
+
+// PUT /auth/users/:id/password — admin only
+app.put('/auth/users/:id/password', requireAuth('admin'), express.json(), (req, res) => {
+  const id = parseInt(req.params.id);
+  const { password } = req.body || {};
+  if (!password) return res.status(400).json({ error: 'password required' });
+  const users = readUsers();
+  const user = users.find(u => u.id === id);
+  if (!user) return res.status(404).json({ error: 'user not found' });
+  user.salt = crypto.randomBytes(16).toString('hex');
+  user.passwordHash = hashPassword(password, user.salt);
+  writeUsers(users);
+  auditLogRaw(req, 'password_reset', user.username);
+  res.json({ ok: true });
+});
+
+// Clean expired sessions every hour
+setInterval(() => { const now = Date.now(); for (const [t, s] of _sessions) if (s.expires < now) _sessions.delete(t); }, 3600_000).unref();
+
+// ============================================================
+// FEATURE 2: AUDIT LOG
+// ============================================================
+const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
+
+function auditLogRaw(req, action, detail = '') {
+  const entry = {
+    id: Date.now(),
+    ts: new Date().toISOString(),
+    user: req.user?.username || 'anonymous',
+    action,
+    detail: String(detail).substring(0, 500),
+    ip: req.ip || req.connection?.remoteAddress || 'unknown',
+  };
+  let log = [];
+  try { log = JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')); } catch {}
+  log.push(entry);
+  if (log.length > 10000) log = log.slice(-10000);
+  try { fs.writeFileSync(AUDIT_FILE, JSON.stringify(log)); } catch {}
+}
+
+// GET /admin/audit
+app.get('/admin/audit', requireAuth('admin'), (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+  const offset = parseInt(req.query.offset) || 0;
+  let log = [];
+  try { log = JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')); } catch {}
+  const total = log.length;
+  const slice = log.slice().reverse().slice(offset, offset + limit);
+  res.json({ total, offset, limit, entries: slice });
+});
+
+// ============================================================
+// FEATURE 3: SERVER-SIDE DATA API
+// ============================================================
+const VALID_DATA_TYPES = new Set(['assets','vulns','tickets','incidents','bcpdrills','pdpa','policies','training','licensed','phishing','pentest','vendors','risks','zerotrust','ctam','moph100','kpi','nist','iomtdevices','cloudassets']);
+
+function dataFile(type) { return path.join(DATA_DIR, `data_${type}.json`); }
+async function readData(type) { try { return JSON.parse(await fs.promises.readFile(dataFile(type), 'utf8')); } catch { return []; } }
+async function writeData(type, data) { await fs.promises.writeFile(dataFile(type), JSON.stringify(data)); }
+
+// GET /data/:type
+app.get('/data/:type', requireAuth(), async (req, res) => {
+  const { type } = req.params;
+  if (!VALID_DATA_TYPES.has(type)) return res.status(400).json({ error: `unknown type: ${type}` });
+  res.json(await readData(type));
+});
+
+// POST /data/:type — append
+app.post('/data/:type', requireAuth(), express.json({ limit: '1mb' }), async (req, res) => {
+  const { type } = req.params;
+  if (!VALID_DATA_TYPES.has(type)) return res.status(400).json({ error: `unknown type: ${type}` });
+  const item = { ...req.body, id: Date.now() + Math.floor(Math.random() * 1000), _createdBy: req.user.username, _createdAt: new Date().toISOString() };
+  const data = await readData(type);
+  data.push(item);
+  await writeData(type, data);
+  auditLogRaw(req, 'data_write', `POST /data/${type}`);
+  res.json(item);
+});
+
+// PUT /data/:type/:id — update
+app.put('/data/:type/:id', requireAuth(), express.json({ limit: '1mb' }), async (req, res) => {
+  const { type, id } = req.params;
+  if (!VALID_DATA_TYPES.has(type)) return res.status(400).json({ error: `unknown type: ${type}` });
+  const data = await readData(type);
+  const idx = data.findIndex(d => String(d.id) === id);
+  if (idx < 0) return res.status(404).json({ error: 'not found' });
+  data[idx] = { ...data[idx], ...req.body, id: data[idx].id, _updatedBy: req.user.username, _updatedAt: new Date().toISOString() };
+  await writeData(type, data);
+  auditLogRaw(req, 'data_write', `PUT /data/${type}/${id}`);
+  res.json(data[idx]);
+});
+
+// DELETE /data/:type/:id
+app.delete('/data/:type/:id', requireAuth(), async (req, res) => {
+  const { type, id } = req.params;
+  if (!VALID_DATA_TYPES.has(type)) return res.status(400).json({ error: `unknown type: ${type}` });
+  const data = await readData(type);
+  const idx = data.findIndex(d => String(d.id) === id);
+  if (idx < 0) return res.status(404).json({ error: 'not found' });
+  data.splice(idx, 1);
+  await writeData(type, data);
+  auditLogRaw(req, 'data_write', `DELETE /data/${type}/${id}`);
+  res.json({ ok: true });
+});
+
+// GET /data/:type/export — download JSON
+app.get('/data/:type/export', requireAuth(), async (req, res) => {
+  const { type } = req.params;
+  if (!VALID_DATA_TYPES.has(type)) return res.status(400).json({ error: `unknown type: ${type}` });
+  const data = await readData(type);
+  res.setHeader('Content-Disposition', `attachment; filename="ncsa-${type}-${new Date().toISOString().slice(0,10)}.json"`);
+  res.json(data);
+});
+
+// POST /data/:type/import — bulk replace
+app.post('/data/:type/import', requireAuth('admin'), express.json({ limit: '10mb' }), async (req, res) => {
+  const { type } = req.params;
+  if (!VALID_DATA_TYPES.has(type)) return res.status(400).json({ error: `unknown type: ${type}` });
+  if (!Array.isArray(req.body)) return res.status(400).json({ error: 'body must be a JSON array' });
+  await writeData(type, req.body);
+  auditLogRaw(req, 'data_import', `${type} count=${req.body.length}`);
+  res.json({ ok: true, imported: req.body.length });
+});
+
+// ============================================================
+// FEATURE 4: LINE OA BOT (2-WAY)
+// ============================================================
+function verifyLineSignature(rawBody, signature, secret) {
+  const hash = crypto.createHmac('sha256', secret).update(rawBody).digest('base64');
+  return hash === signature;
+}
+
+async function lineReply(replyToken, messages, channelAccessToken) {
+  await fetch('https://api.line.me/v2/bot/message/reply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + channelAccessToken },
+    body: JSON.stringify({ replyToken, messages: messages.map(text => ({ type: 'text', text })) }),
+    signal: AbortSignal.timeout(8000),
+  });
+}
+
+app.post('/webhook/line', express.raw({ type: 'application/json' }), async (req, res) => {
+  const secret = process.env.LINE_OA_SECRET;
+  const token = process.env.LINE_OA_TOKEN;
+  if (!secret || !token) return res.sendStatus(200); // graceful no-op
+
+  const sig = req.headers['x-line-signature'] || '';
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body);
+  if (!verifyLineSignature(rawBody, sig, secret)) return res.status(401).send('bad signature');
+
+  let payload;
+  try { payload = JSON.parse(rawBody.toString('utf8')); } catch { return res.sendStatus(400); }
+
+  res.sendStatus(200); // respond immediately; process async
+
+  for (const event of (payload.events || [])) {
+    if (event.type !== 'message' || event.message?.type !== 'text') continue;
+    const text = (event.message.text || '').trim();
+    const replyToken = event.replyToken;
+    try {
+      if (/^(ตรวจ|check)\s+(.+)/i.test(text)) {
+        const value = text.replace(/^(ตรวจ|check)\s+/i, '').trim();
+        const type = autoDetectType(value);
+        const d = store[type];
+        if (!d) { await lineReply(replyToken, [`ไม่สามารถตรวจสอบได้: ข้อมูล ${type} ไม่พร้อม`], token); continue; }
+        const bl = type === 'domain' ? domainCheck(d.set, value).blacklisted : d.set.has(value);
+        const geo = type === 'ip' ? geoLookup(value) : null;
+        const msg = bl
+          ? `🚨 พบใน Blacklist!\nค่า: ${value}\nประเภท: ${type}${geo ? `\nประเทศ: ${geo.country || '?'}` : ''}`
+          : `✅ ไม่พบใน Blacklist\nค่า: ${value}\nประเภท: ${type}`;
+        await lineReply(replyToken, [msg], token);
+      } else if (/^(สถานะ|status)$/i.test(text)) {
+        const ip = store.ip ? store.ip.set.size.toLocaleString() : '?';
+        const domain = store.domain ? store.domain.set.size.toLocaleString() : '?';
+        const hash = store.hash ? store.hash.set.size.toLocaleString() : '?';
+        await lineReply(replyToken, [`📊 NCSA Blacklist Status\nIP: ${ip} รายการ\nDomain: ${domain} รายการ\nHash: ${hash} รายการ`], token);
+      } else if (/^(ช่วย|help)$/i.test(text)) {
+        await lineReply(replyToken, ['📋 คำสั่งที่รองรับ:\n• ตรวจ <IP/domain/hash> — ตรวจสอบ\n• สถานะ — ดูสถิติ feed\n• ช่วย — แสดงคำสั่ง'], token);
+      } else {
+        await lineReply(replyToken, ["ไม่เข้าใจคำสั่ง พิมพ์ 'ช่วย' เพื่อดูคำสั่งที่รองรับ"], token);
+      }
+    } catch (e) { console.error('[line-bot] reply error:', e.message); }
+  }
+});
+
+// ============================================================
+// FEATURE 5: AUTOMATED SCHEDULED REPORTS (weekly Monday 08:00)
+// ============================================================
+try {
+  const cron = require('node-cron');
+  const nodemailerAuto = require('nodemailer');
+  cron.schedule('0 8 * * 1', async () => {
+    const to = process.env.REPORT_EMAIL_TO || process.env.SMTP_TO;
+    if (!to || !process.env.SMTP_HOST) return;
+    try {
+      const assets = await readData('assets');
+      const vulns = await readData('vulns');
+      const tickets = await readData('tickets');
+      const openVulns = vulns.filter(v => v.status === 'Open' || !v.status);
+      const openTickets = tickets.filter(t => t.status !== 'Closed');
+      const html = `<h2 style="color:#1e40af">รายงาน Cybersecurity ประจำสัปดาห์</h2>
+        <p>วันที่: ${new Date().toLocaleDateString('th-TH', {year:'numeric',month:'long',day:'numeric'})}</p>
+        <table style="border-collapse:collapse;width:100%">
+          <tr style="background:#f1f5f9"><td style="padding:8px;border:1px solid #e2e8f0"><b>Assets ทั้งหมด</b></td><td style="padding:8px;border:1px solid #e2e8f0">${assets.length}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e2e8f0"><b>ช่องโหว่ที่ยังเปิด</b></td><td style="padding:8px;border:1px solid #e2e8f0;color:${openVulns.length>0?'#dc2626':'#16a34a'}">${openVulns.length}</td></tr>
+          <tr style="background:#f1f5f9"><td style="padding:8px;border:1px solid #e2e8f0"><b>Incident ที่ค้างอยู่</b></td><td style="padding:8px;border:1px solid #e2e8f0;color:${openTickets.length>0?'#d97706':'#16a34a'}">${openTickets.length}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e2e8f0"><b>IP Blacklist</b></td><td style="padding:8px;border:1px solid #e2e8f0">${store.ip?.set.size?.toLocaleString() || 0}</td></tr>
+        </table>
+        <p style="color:#64748b;font-size:0.8em">สร้างอัตโนมัติโดย NCSA Blacklist SOC Dashboard</p>`;
+      const transport = nodemailerAuto.createTransport({
+        host: process.env.SMTP_HOST, port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+      });
+      await transport.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to, subject: `[NCSA Dashboard] รายงานประจำสัปดาห์ ${new Date().toLocaleDateString('th-TH')}`, html });
+      console.log('[weekly-report] sent to', to);
+    } catch (e) { console.error('[weekly-report] failed:', e.message); }
+  }, { timezone: 'Asia/Bangkok' });
+} catch (e) { console.warn('[weekly-report] cron setup failed:', e.message); }
+
+// ============================================================
+// FEATURE 6: VULNERABILITY SCANNER WEBHOOK
+// ============================================================
+app.post('/webhook/vuln-scanner', requireAuth(), express.json({ limit: '10mb' }), async (req, res) => {
+  const body = req.body;
+  if (!body) return res.status(400).json({ error: 'body required' });
+
+  const normalize = (items) => items.map(item => ({
+    id: Date.now() + Math.floor(Math.random() * 100000),
+    cveId: item.cveId || item.cve || item.CVE || '',
+    host: item.host || item.ip || item.target || '',
+    severity: (item.severity || item.risk || item.level || 'Medium').toUpperCase(),
+    title: item.title || item.name || item.description?.substring(0, 100) || '',
+    description: item.description || item.summary || '',
+    status: 'Open',
+    source: item._source || 'webhook',
+    importedAt: new Date().toISOString(),
+  }));
+
+  let items = [];
+  // OpenVAS/Greenbone
+  if (body.report?.results?.result) {
+    const results = Array.isArray(body.report.results.result) ? body.report.results.result : [body.report.results.result];
+    items = results.map(r => ({ cveId: r.nvt?.cve || '', host: r.host?.text || r.host || '', severity: r.severity?.value || r.threat || 'Medium', title: r.name || r.nvt?.name || '', description: r.description || r.nvt?.tags?.summary || '', _source: 'openvas' }));
+  } else if (body.results) {
+    items = (Array.isArray(body.results) ? body.results : [body.results]).map(r => ({ ...r, _source: 'openvas' }));
+  }
+  // Generic array
+  else if (Array.isArray(body)) {
+    items = body;
+  }
+  // Nessus-ish
+  else if (body.policy || body.nessusClientData_v2) {
+    items = [{ cveId: '', host: 'nessus-import', severity: 'Medium', title: 'Nessus import — parse manually', description: JSON.stringify(body).substring(0, 200) }];
+  }
+
+  if (!items.length) return res.status(400).json({ error: 'no vulnerability items found in payload' });
+
+  const normalized = normalize(items);
+  const existing = await readData('vulns');
+  const existingKeys = new Set(existing.map(v => `${v.cveId}|${v.host}`));
+  const toAdd = normalized.filter(v => !existingKeys.has(`${v.cveId}|${v.host}`));
+  const skipped = normalized.length - toAdd.length;
+  await writeData('vulns', [...existing, ...toAdd]);
+  auditLogRaw(req, 'vuln_import', `imported=${toAdd.length} skipped=${skipped}`);
+  res.json({ ok: true, imported: toAdd.length, skipped, total: existing.length + toAdd.length });
+});
+
+// ============================================================
 const PORT = process.env.PORT || 3939;
 if (require.main === module) {
   const server = app.listen(PORT, () => console.log(`ncsa-blacklist API on :${PORT}`));
