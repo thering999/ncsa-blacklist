@@ -4770,6 +4770,19 @@ function lsSet(key, val) {
 function saveCfg(c) {
   try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
   catch(e) { if(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED') toast('⚠️ พื้นที่ localStorage เต็ม — Export/Import เพื่อล้างข้อมูลเก่า','err'); }
+  apiFetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(c) }).catch(()=>{});
+}
+async function loadServerCfg() {
+  try {
+    const r = await apiFetch('/config');
+    if (!r.ok) return;
+    const srv = await r.json();
+    if (srv && Object.keys(srv).length > 0) {
+      const local = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
+      const merged = { ...local, ...srv };
+      localStorage.setItem(CFG_KEY, JSON.stringify(merged));
+    }
+  } catch {}
 }
 function cfgVal(key) { return getCfg()[key] || CFG_DEFAULT[key]; }
 
@@ -9821,6 +9834,7 @@ function renderThreatActors(){
 
 // Init
 (async function init() {
+  await loadServerCfg();
   applyOrgConfig();
   if (!localStorage.getItem(CFG_KEY)) setTimeout(wizardShow, 800);
   await loadStats();

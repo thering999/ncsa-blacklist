@@ -497,6 +497,22 @@ app.get('/recent', (req, res) => {
   res.json({ count: entries.length, entries });
 });
 
+const ORG_CONFIG_FILE = path.join(DATA_DIR, 'org_config.json');
+
+app.get('/config', requireAdminIfConfigured, (req, res) => {
+  try {
+    const cfg = fs.existsSync(ORG_CONFIG_FILE) ? JSON.parse(fs.readFileSync(ORG_CONFIG_FILE, 'utf8')) : {};
+    res.json(cfg);
+  } catch { res.json({}); }
+});
+
+app.post('/config', requireAdminIfConfigured, express.json({ limit: '256kb' }), (req, res) => {
+  try {
+    fs.writeFileSync(ORG_CONFIG_FILE, JSON.stringify(req.body || {}));
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/news', async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 25, 200);
   const { items, source, fetchedAt } = await fetchLatestNews();
