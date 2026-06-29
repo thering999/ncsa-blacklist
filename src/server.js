@@ -10,9 +10,23 @@ const allowlist = require('./allowlist');
 const { DATA_DIR } = require('./paths');
 const { FEEDS, RECENT_FILE } = require('./fetch');
 
+// Merge extra_feeds.json into FEEDS at startup
+const EXTRA_FEEDS_FILE = path.join(DATA_DIR, 'extra_feeds.json');
+(function mergeExtraFeeds() {
+  try {
+    const extra = JSON.parse(fs.readFileSync(EXTRA_FEEDS_FILE, 'utf8'));
+    if (Array.isArray(extra)) {
+      for (const { name, url } of extra) {
+        if (name && url && !FEEDS[name]) FEEDS[name] = url;
+      }
+    }
+  } catch {}
+})();
+
 const VALID_TYPES = new Set(Object.keys(FEEDS));
 
 const HISTORY_FILE = path.join(DATA_DIR, 'history.jsonl');
+const TREND_FILE = path.join(DATA_DIR, 'trend.json');
 
 const helmet = require('helmet');
 const app = express();
@@ -217,6 +231,28 @@ function requireAdminIp(req, res, next) {
 })();
 const requireAdmin = makeRequireAdmin(adminTokens);
 
+// Optional auth — only enforces token if adminTokens are configured
+function requireAdminIfConfigured(req, res, next) {
+  if (Object.keys(adminTokens).length === 0) return next();
+  return requireAdmin(req, res, next);
+}
+
+// Trend helpers
+function readTrend() {
+  try { return JSON.parse(fs.readFileSync(TREND_FILE, 'utf8')); } catch { return []; }
+}
+function recordTrendEntry() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const entries = readTrend().filter(e => e.date !== today);
+    const ipCount = store.ip ? store.ip.set.size : 0;
+    const domainCount = store.domain ? store.domain.set.size : 0;
+    const hashCount = store.hash ? store.hash.set.size : 0;
+    entries.push({ date: today, ip: ipCount, domain: domainCount, hash: hashCount, total: ipCount + domainCount + hashCount });
+    fs.writeFileSync(TREND_FILE, JSON.stringify(entries.slice(-90)));
+  } catch (e) { console.error('trend record error:', e.message); }
+}
+
 function expiresAt(generatedAt, validDays) {
   if (!generatedAt || !validDays) return null;
   const d = new Date(generatedAt);
@@ -380,7 +416,7 @@ app.get('/analyze/networks', (req, res) => {
   res.json({ total_ips: d.set.size, total_networks: counts.size, top, filter_country: country || null });
 });
 
-app.get('/analyze/countries', (req, res) => {
+app.get('/analyze/countries', requireAdminIfConfigured, (req, res) => {
   const d = store.ip;
   if (!d) return res.status(503).json({ error: 'ip data not loaded' });
   const counts = new Map();
@@ -675,14 +711,18 @@ app.delete('/allowlist', requireAdmin, express.json(), (req, res) => {
 });
 
 // --- Prometheus metrics ---
-app.get('/metrics', (req, res) => {
+app.get('/metrics', (req, res, next) => {
   const metricsToken = process.env.METRICS_TOKEN;
   if (metricsToken) {
     const auth = req.get('Authorization');
     if (!auth || auth !== `Bearer ${metricsToken}`) {
       return res.status(401).set('WWW-Authenticate', 'Bearer realm="metrics"').end();
     }
+    return next();
   }
+  // No METRICS_TOKEN — fall back to admin token if configured
+  requireAdminIfConfigured(req, res, next);
+}, (req, res) => {
   const mem = process.memoryUsage();
   const uptime = process.uptime();
   let syncTs = 0;
@@ -798,10 +838,138 @@ app.get('/admin/feed-health', requireAdmin, (req, res) => {
 app.post('/admin/sync', requireAdmin, async (req, res) => {
   try {
     const { fetchAll } = require('./fetch');
-    fetchAll().then(() => {}).catch(err => console.error('Manual sync error:', err));
+    fetchAll()
+      .then(() => { store = loadAll(); recordTrendEntry(); })
+      .catch(err => console.error('Manual sync error:', err));
     res.json({ ok: true, message: 'Sync triggered in background — check /admin/feed-health in 30-60s' });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- Trend (90-day IOC count history) ---
+app.get('/trend', (req, res) => {
+  res.json(readTrend());
+});
+
+// --- Feed management ---
+app.get('/admin/feeds', requireAdmin, (req, res) => {
+  const envFeeds = (process.env.EXTRA_FEEDS || '').split(',').filter(Boolean).map(s => {
+    const [name, ...rest] = s.split(':');
+    return { name: name.trim(), url: rest.join(':').trim(), source: 'env' };
+  });
+  let fileFeeds = [];
+  try {
+    fileFeeds = JSON.parse(fs.readFileSync(EXTRA_FEEDS_FILE, 'utf8')).map(f => ({ ...f, source: 'file' }));
+  } catch {}
+  res.json({ env: envFeeds, file: fileFeeds });
+});
+
+app.post('/admin/feeds', requireAdmin, express.json(), (req, res) => {
+  const { feeds } = req.body || {};
+  if (!Array.isArray(feeds)) return res.status(400).json({ error: 'feeds[] required' });
+  for (const f of feeds) {
+    if (!f.name || !f.url) return res.status(400).json({ error: 'each feed needs name and url' });
+    if (!FEEDS[f.name]) FEEDS[f.name] = f.url;
+  }
+  fs.writeFileSync(EXTRA_FEEDS_FILE, JSON.stringify(feeds));
+  const { fetchAll } = require('./fetch');
+  fetchAll().then(() => { store = loadAll(); recordTrendEntry(); }).catch(err => console.error('Feed sync error:', err));
+  res.json({ ok: true, saved: feeds.length, message: 'Feeds saved and sync triggered' });
+});
+
+// --- FortiGate block proxy ---
+app.post('/admin/fortigate-block', requireAdmin, express.json(), async (req, res) => {
+  const { host, token, vdom = 'root', ips } = req.body || {};
+  if (!host || !token || !Array.isArray(ips) || !ips.length) {
+    return res.status(400).json({ error: 'host, token, ips[] required' });
+  }
+  const members = ips.map(ip => ({ name: ip }));
+  const url = `https://${host}/api/v2/cmdb/firewall/addrgrp/NCSA-Blacklist?vdom=${vdom}`;
+  try {
+    // Try PUT (update existing group) first, fallback to POST (create)
+    let r = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'NCSA-Blacklist', member: members }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (r.status === 404) {
+      r = await fetch(`https://${host}/api/v2/cmdb/firewall/addrgrp?vdom=${vdom}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'NCSA-Blacklist', member: members }),
+        signal: AbortSignal.timeout(10000),
+      });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: r.ok, status: r.status, fortigate: data, ips_blocked: ips.length });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// --- MISP push IOC ---
+app.post('/admin/misp-push', requireAdmin, express.json(), async (req, res) => {
+  const { url: misp_url, apikey, iocs, tlp = 'TLP:GREEN' } = req.body || {};
+  if (!misp_url || !apikey || !Array.isArray(iocs) || !iocs.length) {
+    return res.status(400).json({ error: 'url, apikey, iocs[] required' });
+  }
+  const distribution = tlp === 'TLP:RED' ? 4 : tlp === 'TLP:AMBER' ? 3 : tlp === 'TLP:GREEN' ? 2 : 0;
+  const event = {
+    Event: {
+      info: `NCSA Blacklist IOC Report — ${new Date().toISOString().slice(0, 10)}`,
+      distribution,
+      threat_level_id: 2,
+      analysis: 2,
+      Attribute: iocs.map(({ type, value, comment = '' }) => ({
+        type: type === 'ip' ? 'ip-src' : type === 'domain' ? 'domain' : 'md5',
+        value,
+        comment,
+        distribution,
+        to_ids: true,
+      })),
+    },
+  };
+  try {
+    const r = await fetch(`${misp_url}/events`, {
+      method: 'POST',
+      headers: { 'Authorization': apikey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(event),
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: r.ok, status: r.status, misp: data, iocs_pushed: iocs.length });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// --- Executive report email ---
+app.post('/admin/report-email', requireAdmin, express.json({ limit: '2mb' }), async (req, res) => {
+  const { html, subject = `[NCSA SOC] Executive Report ${new Date().toISOString().slice(0, 10)}` } = req.body || {};
+  if (!html) return res.status(400).json({ error: 'html required' });
+  if (!process.env.SMTP_HOST || !process.env.SMTP_TO) {
+    return res.status(503).json({ error: 'SMTP_HOST and SMTP_TO must be set in .env' });
+  }
+  let nodemailer;
+  try { nodemailer = require('nodemailer'); } catch { return res.status(500).json({ error: 'nodemailer not installed' }); }
+  const transport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+  });
+  try {
+    await transport.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: process.env.SMTP_TO,
+      subject,
+      html,
+    });
+    res.json({ ok: true, to: process.env.SMTP_TO, subject });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
   }
 });
 
