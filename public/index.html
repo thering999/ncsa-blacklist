@@ -617,6 +617,31 @@ select.input option{background:#0d1117;color:var(--text)}
   .card { padding:16px; }
   .section-h { flex-direction:column; align-items:flex-start; gap:8px; }
 }
+/* Mobile responsive improvements */
+@media (max-width:768px) {
+  .nav-links a { font-size:.75rem; padding:5px 10px; }
+  .grid-2 { grid-template-columns:1fr !important; }
+  .stat-cards { grid-template-columns:1fr 1fr !important; }
+  h2 { font-size:1.15rem; }
+  h3 { font-size:0.95rem; }
+  #search-input { font-size:1rem; }
+  .modal-content, [style*="max-width:500px"], [style*="max-width:440px"] { width:95vw !important; }
+  .hide-mobile { display:none !important; }
+  header, .header-bar { flex-wrap:wrap; gap:6px; }
+  #settings-drawer { width:100% !important; }
+}
+@media (max-width:480px) {
+  .stat-cards { grid-template-columns:1fr !important; }
+  .btn-primary, .btn-secondary, .btn-danger { width:100%; text-align:center; display:block; }
+  .nav { padding:0 12px; gap:8px; }
+}
+@media (hover:none) {
+  button:hover { opacity:1; }
+}
+/* PDPA Wizard styles */
+.pdpa-step { padding:4px 12px;border-radius:4px;cursor:pointer;font-size:.8rem;background:rgba(255,255,255,.05);color:var(--text2);border:1px solid rgba(255,255,255,.08);transition:var(--tr) }
+.pdpa-step.active { background:rgba(29,78,216,.3);color:var(--cyan);border-color:rgba(0,229,255,.3) }
+.pdpa-step:hover { border-color:rgba(0,229,255,.2);color:var(--text) }
 </style>
 </head>
 <body>
@@ -879,6 +904,29 @@ select.input option{background:#0d1117;color:var(--text)}
     </div>
     <div id="org-profiles-list" style="margin-top:6px"></div>
     <div class="setting-desc">บันทึก/สลับ config ระหว่างหลายหน่วยงาน</div>
+
+    <div style="height:1px;background:rgba(0,229,255,.1);margin:10px 0"></div>
+    <div style="font-size:.68rem;font-weight:800;color:var(--purple);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">👤 จัดการผู้ใช้งาน</div>
+    <div id="users-list" style="margin-bottom:8px;font-size:.8rem"></div>
+    <details style="margin-bottom:6px">
+      <summary style="cursor:pointer;color:var(--cyan);font-size:.8rem;padding:4px 0">+ เพิ่มผู้ใช้ใหม่</summary>
+      <div style="display:grid;gap:6px;margin-top:8px">
+        <input type="text" id="new-username" class="input" placeholder="Username">
+        <input type="password" id="new-password" class="input" placeholder="Password">
+        <select id="new-role" class="input">
+          <option value="analyst">Analyst</option>
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button onclick="createUser()" class="btn btn-primary btn-sm">สร้างผู้ใช้</button>
+      </div>
+    </details>
+    <div id="user-mgmt-status" style="font-size:.75rem;margin-bottom:6px"></div>
+
+    <div style="height:1px;background:rgba(0,229,255,.1);margin:10px 0"></div>
+    <div style="font-size:.68rem;font-weight:800;color:var(--orange);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">📋 Audit Log</div>
+    <button onclick="loadAuditLog()" class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:6px">🔄 โหลด Audit Log</button>
+    <div id="audit-log-list" style="max-height:220px;overflow-y:auto;font-size:.7rem;font-family:monospace"></div>
   </div>
 </aside>
 
@@ -2005,6 +2053,82 @@ select.input option{background:#0d1117;color:var(--text)}
     </div>
   </div>
 
+  <!-- PDPA Breach Notification Wizard -->
+  <div class="card" id="pdpa-wizard-card" style="margin-top:16px">
+    <h3 style="margin-bottom:8px">📋 PDPA Breach Notification Wizard</h3>
+    <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:12px">พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล มาตรา 37(4) — ต้องแจ้ง สคส. ภายใน <b style="color:#ef4444">72 ชั่วโมง</b> หลังพบเหตุ</p>
+    <div id="pdpa-steps" style="display:flex;gap:0.5rem;margin:1rem 0;flex-wrap:wrap">
+      <span id="pdpa-step-1" class="pdpa-step active" onclick="pdpaGoto(1)">1. ตรวจพบเหตุ</span>
+      <span style="color:#475569">→</span>
+      <span id="pdpa-step-2" class="pdpa-step" onclick="pdpaGoto(2)">2. ประเมินความเสี่ยง</span>
+      <span style="color:#475569">→</span>
+      <span id="pdpa-step-3" class="pdpa-step" onclick="pdpaGoto(3)">3. รวบรวมข้อมูล</span>
+      <span style="color:#475569">→</span>
+      <span id="pdpa-step-4" class="pdpa-step" onclick="pdpaGoto(4)">4. ส่งแจ้ง สคส.</span>
+    </div>
+    <div id="pdpa-timer-wrap" style="display:none;background:#7f1d1d;border-radius:8px;padding:1rem;margin-bottom:1rem;text-align:center">
+      <div style="font-size:0.8rem;color:#fca5a5">เวลาที่เหลือก่อนครบ 72 ชั่วโมง</div>
+      <div id="pdpa-timer" style="font-size:2rem;font-weight:bold;color:#fff;font-family:monospace">72:00:00</div>
+      <div id="pdpa-timer-warn" style="font-size:0.75rem;color:#fca5a5"></div>
+    </div>
+    <div id="pdpa-panel-1">
+      <h4 style="margin-bottom:8px">ขั้นตอนที่ 1: บันทึกวันเวลาที่ตรวจพบเหตุ</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin:0.5rem 0">
+        <div><label style="font-size:0.8rem">วันที่ตรวจพบ</label><br><input type="date" id="pdpa-detect-date" class="input" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:0.8rem">เวลา</label><br><input type="time" id="pdpa-detect-time" class="input" style="width:100%;margin-top:4px"></div>
+      </div>
+      <label style="font-size:0.8rem">ผู้ตรวจพบ / แจ้งเหตุ</label><br>
+      <input type="text" id="pdpa-detector" class="input" placeholder="ชื่อ-นามสกุล / ตำแหน่ง" style="width:100%;margin:0.25rem 0 0.5rem">
+      <label style="font-size:0.8rem">ลักษณะเหตุการณ์เบื้องต้น</label><br>
+      <textarea id="pdpa-initial-desc" class="input" rows="3" placeholder="อธิบายสั้นๆ ว่าพบอะไร เช่น พบ unauthorized access ไปยัง server ที่เก็บข้อมูลผู้ป่วย" style="width:100%;margin:0.25rem 0 0.5rem;resize:vertical"></textarea>
+      <button onclick="pdpaStartTimer()" class="btn btn-danger btn-sm">⏱ เริ่มนับเวลา 72 ชั่วโมง</button>
+      <button onclick="pdpaGoto(2)" class="btn btn-primary btn-sm" style="margin-left:0.5rem">ถัดไป →</button>
+    </div>
+    <div id="pdpa-panel-2" style="display:none">
+      <h4 style="margin-bottom:8px">ขั้นตอนที่ 2: ประเมินความเสี่ยงต่อเจ้าของข้อมูล</h4>
+      <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:8px;margin:0.5rem 0;border:1px solid rgba(255,255,255,0.07)">
+        <p style="font-size:0.85rem;margin:0 0 0.5rem"><b>คำถามประเมิน:</b></p>
+        <label style="display:block;margin:0.5rem 0;font-size:0.85rem"><input type="checkbox" id="pdpa-q1"> มีข้อมูลส่วนบุคคลรั่วไหลหรือถูกเข้าถึงโดยไม่ได้รับอนุญาต</label>
+        <label style="display:block;margin:0.5rem 0;font-size:0.85rem"><input type="checkbox" id="pdpa-q2"> ข้อมูลเป็นประเภทอ่อนไหว (สุขภาพ, พันธุกรรม, ชีวมิติ, ศาสนา, เชื้อชาติ)</label>
+        <label style="display:block;margin:0.5rem 0;font-size:0.85rem"><input type="checkbox" id="pdpa-q3"> จำนวนผู้ได้รับผลกระทบเกิน 1,000 ราย</label>
+        <label style="display:block;margin:0.5rem 0;font-size:0.85rem"><input type="checkbox" id="pdpa-q4"> อาจก่อให้เกิดความเสียหายต่อเจ้าของข้อมูล (การเงิน, ชื่อเสียง, ร่างกาย)</label>
+        <label style="display:block;margin:0.5rem 0;font-size:0.85rem"><input type="checkbox" id="pdpa-q5"> ไม่สามารถระบุขอบเขตข้อมูลที่รั่วไหลได้ชัดเจน</label>
+      </div>
+      <div id="pdpa-risk-result" style="margin:0.5rem 0"></div>
+      <button onclick="pdpaAssessRisk()" class="btn btn-ghost btn-sm">ประเมินผล</button>
+      <button onclick="pdpaGoto(3)" class="btn btn-primary btn-sm" style="margin-left:0.5rem">ถัดไป →</button>
+    </div>
+    <div id="pdpa-panel-3" style="display:none">
+      <h4 style="margin-bottom:8px">ขั้นตอนที่ 3: รวบรวมข้อมูลสำหรับแจ้ง สคส.</h4>
+      <div style="display:grid;gap:0.5rem;margin:0.5rem 0">
+        <div><label style="font-size:0.8rem">ประเภทข้อมูลที่รั่วไหล</label><input type="text" id="pdpa-data-type" class="input" placeholder="เช่น ชื่อ-นามสกุล, เลขบัตรประชาชน, ประวัติสุขภาพ" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:0.8rem">จำนวนผู้ได้รับผลกระทบ (โดยประมาณ)</label><input type="number" id="pdpa-affected-count" class="input" placeholder="0" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:0.8rem">ระบบ/แหล่งที่มาของข้อมูลที่ถูกละเมิด</label><input type="text" id="pdpa-source-system" class="input" placeholder="เช่น ฐานข้อมูล HIS, Server ชื่อ..." style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:0.8rem">มาตรการที่ดำเนินการแล้ว</label><textarea id="pdpa-measures" class="input" rows="3" placeholder="เช่น ปิดระบบ, เปลี่ยนรหัสผ่าน, แจ้งทีม IT" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+        <div><label style="font-size:0.8rem">แผนการแก้ไขและป้องกันในอนาคต</label><textarea id="pdpa-plan" class="input" rows="3" placeholder="เช่น audit log review, patch ระบบ, อบรมพนักงาน" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+      </div>
+      <button onclick="pdpaGoto(4)" class="btn btn-primary btn-sm">ถัดไป →</button>
+    </div>
+    <div id="pdpa-panel-4" style="display:none">
+      <h4 style="margin-bottom:8px">ขั้นตอนที่ 4: ส่งแจ้ง สคส.</h4>
+      <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:8px;margin:0.5rem 0;font-size:0.85rem;border:1px solid rgba(255,255,255,0.07)">
+        <p style="margin-bottom:0.5rem"><b>ช่องทางแจ้ง สคส. (PDPC):</b></p>
+        <ul style="margin:0 0 0 1rem;line-height:2">
+          <li>🌐 <a href="https://www.pdpc.or.th" target="_blank" style="color:#3b82f6">www.pdpc.or.th</a></li>
+          <li>📧 pdpc@pdpc.or.th</li>
+          <li>📞 02-142-1033</li>
+        </ul>
+      </div>
+      <div id="pdpa-report-preview" style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:1rem;margin:0.5rem 0;font-size:0.75rem;white-space:pre-wrap;font-family:monospace;max-height:200px;overflow-y:auto"></div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
+        <button onclick="pdpaGenerateReport()" class="btn btn-primary btn-sm">📝 สร้างรายงาน</button>
+        <button onclick="pdpaCopyReport()" class="btn btn-ghost btn-sm">📋 Copy</button>
+        <button onclick="pdpaSaveToIncident()" class="btn btn-ghost btn-sm">💾 บันทึกเป็น Incident</button>
+      </div>
+      <div id="pdpa-done-status" style="margin-top:0.5rem"></div>
+    </div>
+  </div>
+
   </section>
 
   <!-- SOC -->
@@ -2842,6 +2966,21 @@ select.input option{background:#0d1117;color:var(--text)}
       </div>
       <div style="font-size:.72rem;color:var(--text3);margin-bottom:12px">ตรวจสอบความมั่นคงปลอดภัยบน Cloud — อ้างอิง CIS Cloud Benchmarks v2.0</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="cspm-grid"></div>
+    </div>
+
+    <!-- ISO 27001:2022 Assessment -->
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">🏆 ISO 27001:2022 Controls Assessment</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="iso-score-display" style="font-size:1.4rem;font-weight:900;color:var(--cyan)">0%</span>
+          <span style="color:var(--text3);font-size:0.75rem">/ 93 controls</span>
+          <button class="btn btn-ghost btn-sm" onclick="exportIso27001()">📥 Export</button>
+        </div>
+      </div>
+      <p style="color:var(--text2);font-size:0.75rem;margin-bottom:12px">ISO/IEC 27001:2022 Annex A — 4 themes, 93 controls. เลือกสถานะแต่ละ control เพื่อคำนวณ compliance score</p>
+      <div id="iso-controls-list"></div>
+      <button onclick="renderIso27001()" class="btn btn-ghost btn-sm" style="margin-top:8px">↺ โหลด Controls</button>
     </div>
   </section>
 
@@ -10005,6 +10144,309 @@ async function sendReportEmail() {
     if (st) st.innerHTML = res.ok ? '<span style="color:var(--green)">✅ ส่งสำเร็จแล้ว</span>' : '<span style="color:var(--red)">ส่งไม่ได้ — ตรวจสอบ SMTP config ใน .env</span>';
     toast(res.ok ? 'ส่ง Email สำเร็จ' : 'ส่ง Email ไม่ได้', res.ok ? 'ok' : 'err');
   } catch(e) { if (st) st.innerHTML = `<span style="color:var(--red)">Error: ${esc(e.message)}</span>`; }
+}
+
+// ── PDPA Breach Notification Wizard ──
+let _pdpaStartTime = null;
+let _pdpaTimerInterval = null;
+function pdpaGoto(step) {
+  [1,2,3,4].forEach(i => {
+    const p = document.getElementById('pdpa-panel-'+i);
+    if (p) p.style.display = i===step ? '' : 'none';
+    const s = document.getElementById('pdpa-step-'+i);
+    if (s) s.classList.toggle('active', i===step);
+  });
+}
+function pdpaStartTimer() {
+  const d = document.getElementById('pdpa-detect-date')?.value;
+  const t = document.getElementById('pdpa-detect-time')?.value;
+  if (!d || !t) { alert('กรุณาระบุวันเวลาที่ตรวจพบเหตุ'); return; }
+  _pdpaStartTime = new Date(d + 'T' + t);
+  localStorage.setItem('pdpaBreachStart', _pdpaStartTime.toISOString());
+  const tw = document.getElementById('pdpa-timer-wrap');
+  if (tw) tw.style.display = '';
+  if (_pdpaTimerInterval) clearInterval(_pdpaTimerInterval);
+  _pdpaTimerInterval = setInterval(updatePdpaTimer, 1000);
+  updatePdpaTimer();
+  toast('เริ่มนับเวลา 72 ชั่วโมงแล้ว', 'ok');
+}
+function updatePdpaTimer() {
+  if (!_pdpaStartTime) return;
+  const deadline = new Date(_pdpaStartTime.getTime() + 72*3600000);
+  const remaining = deadline - Date.now();
+  const el = document.getElementById('pdpa-timer');
+  const warn = document.getElementById('pdpa-timer-warn');
+  if (!el) return;
+  if (remaining <= 0) {
+    el.textContent = 'เกินกำหนด!';
+    el.style.color = '#ef4444';
+    if (warn) warn.textContent = '⚠️ เกินกำหนด 72 ชั่วโมงแล้ว — ต้องแจ้ง สคส. ทันที';
+    return;
+  }
+  const h = Math.floor(remaining/3600000);
+  const m = Math.floor((remaining%3600000)/60000);
+  const s = Math.floor((remaining%60000)/1000);
+  el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  el.style.color = h < 12 ? '#ef4444' : h < 24 ? '#f97316' : '#fff';
+  if (warn) warn.textContent = h < 12 ? '⚠️ เหลือเวลาน้อย — เร่งดำเนินการ' : '';
+}
+function pdpaAssessRisk() {
+  const count = [1,2,3,4,5].filter(i => document.getElementById('pdpa-q'+i)?.checked).length;
+  const el = document.getElementById('pdpa-risk-result');
+  if (!el) return;
+  if (count >= 3) el.innerHTML = '<div style="background:#7f1d1d;padding:.75rem;border-radius:6px;color:#fca5a5"><b>⚠️ ความเสี่ยงสูง</b> — ต้องแจ้ง สคส. ภายใน 72 ชั่วโมง และแจ้งเจ้าของข้อมูลโดยไม่ชักช้า</div>';
+  else if (count >= 1) el.innerHTML = '<div style="background:#78350f;padding:.75rem;border-radius:6px;color:#fde68a"><b>⚠️ ความเสี่ยงปานกลาง</b> — ต้องแจ้ง สคส. และประเมินความจำเป็นในการแจ้งเจ้าของข้อมูล</div>';
+  else el.innerHTML = '<div style="background:#14532d;padding:.75rem;border-radius:6px;color:#86efac"><b>✅ ความเสี่ยงต่ำ</b> — บันทึกเหตุการณ์ไว้ และประเมินซ้ำหากข้อมูลเพิ่มเติม</div>';
+}
+function pdpaGenerateReport() {
+  const org = JSON.parse(localStorage.getItem('org_config')||'{}');
+  const cfg = JSON.parse(localStorage.getItem('ncsa_cfg')||'{}');
+  const orgName = cfg.orgName || org.orgName || '-';
+  const report = `แบบแจ้งเหตุการณ์ละเมิดข้อมูลส่วนบุคคล
+(ตามมาตรา 37(4) พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ.2562)
+
+หน่วยงาน: ${orgName}
+วันที่แจ้ง: ${new Date().toLocaleDateString('th-TH')}
+
+1. วันเวลาที่ตรวจพบ: ${document.getElementById('pdpa-detect-date')?.value||'-'} เวลา ${document.getElementById('pdpa-detect-time')?.value||'-'} น.
+2. ผู้ตรวจพบ: ${document.getElementById('pdpa-detector')?.value||'-'}
+3. ลักษณะเหตุการณ์: ${document.getElementById('pdpa-initial-desc')?.value||'-'}
+4. ประเภทข้อมูลที่รั่วไหล: ${document.getElementById('pdpa-data-type')?.value||'-'}
+5. จำนวนผู้ได้รับผลกระทบ: ${document.getElementById('pdpa-affected-count')?.value||'-'} ราย
+6. ระบบ/แหล่งที่มา: ${document.getElementById('pdpa-source-system')?.value||'-'}
+7. มาตรการที่ดำเนินการแล้ว:
+${document.getElementById('pdpa-measures')?.value||'-'}
+8. แผนการแก้ไขและป้องกัน:
+${document.getElementById('pdpa-plan')?.value||'-'}
+
+จัดทำโดย NCSA SOC Dashboard`;
+  const el = document.getElementById('pdpa-report-preview');
+  if (el) el.textContent = report;
+}
+function pdpaCopyReport() {
+  pdpaGenerateReport();
+  const el = document.getElementById('pdpa-report-preview');
+  if (el) { navigator.clipboard.writeText(el.textContent); toast('Copy แล้ว', 'ok'); }
+}
+function pdpaSaveToIncident() {
+  const key = 'irTickets';
+  const tickets = JSON.parse(localStorage.getItem(key)||'[]');
+  tickets.push({id:Date.now(),title:'PDPA Breach — '+(document.getElementById('pdpa-data-type')?.value||'ข้อมูลส่วนบุคคล'),type:'PDPA Breach',severity:'critical',status:'Open',date:new Date().toISOString(),description:document.getElementById('pdpa-initial-desc')?.value||''});
+  lsSet(key, tickets);
+  const st = document.getElementById('pdpa-done-status');
+  if (st) st.innerHTML = '<span style="color:var(--green)">✅ บันทึกเป็น Incident แล้ว</span>';
+}
+// Resume PDPA timer on page load
+(function(){
+  const saved = localStorage.getItem('pdpaBreachStart');
+  if (saved) {
+    _pdpaStartTime = new Date(saved);
+    const tw = document.getElementById('pdpa-timer-wrap');
+    if (tw) tw.style.display = '';
+    _pdpaTimerInterval = setInterval(updatePdpaTimer, 1000);
+    updatePdpaTimer();
+  }
+})();
+
+// ── ISO 27001:2022 Assessment ──
+const ISO27001_CONTROLS = [
+  {id:'A.5.1',theme:'org',title:'Policies for information security'},
+  {id:'A.5.2',theme:'org',title:'Information security roles and responsibilities'},
+  {id:'A.5.3',theme:'org',title:'Segregation of duties'},
+  {id:'A.5.4',theme:'org',title:'Management responsibilities'},
+  {id:'A.5.5',theme:'org',title:'Contact with authorities'},
+  {id:'A.5.6',theme:'org',title:'Contact with special interest groups'},
+  {id:'A.5.7',theme:'org',title:'Threat intelligence'},
+  {id:'A.5.8',theme:'org',title:'Information security in project management'},
+  {id:'A.5.9',theme:'org',title:'Inventory of information and other assets'},
+  {id:'A.5.10',theme:'org',title:'Acceptable use of information and assets'},
+  {id:'A.5.11',theme:'org',title:'Return of assets'},
+  {id:'A.5.12',theme:'org',title:'Classification of information'},
+  {id:'A.5.13',theme:'org',title:'Labelling of information'},
+  {id:'A.5.14',theme:'org',title:'Information transfer'},
+  {id:'A.5.15',theme:'org',title:'Access control'},
+  {id:'A.5.16',theme:'org',title:'Identity management'},
+  {id:'A.5.17',theme:'org',title:'Authentication information'},
+  {id:'A.5.18',theme:'org',title:'Access rights'},
+  {id:'A.5.19',theme:'org',title:'Information security in supplier relationships'},
+  {id:'A.5.20',theme:'org',title:'Addressing security within supplier agreements'},
+  {id:'A.5.21',theme:'org',title:'Managing security in the ICT supply chain'},
+  {id:'A.5.22',theme:'org',title:'Monitoring, review and change management of supplier services'},
+  {id:'A.5.23',theme:'org',title:'Information security for use of cloud services'},
+  {id:'A.5.24',theme:'org',title:'Information security incident management planning and preparation'},
+  {id:'A.5.25',theme:'org',title:'Assessment and decision on information security events'},
+  {id:'A.5.26',theme:'org',title:'Response to information security incidents'},
+  {id:'A.5.27',theme:'org',title:'Learning from information security incidents'},
+  {id:'A.5.28',theme:'org',title:'Collection of evidence'},
+  {id:'A.5.29',theme:'org',title:'Information security during disruption'},
+  {id:'A.5.30',theme:'org',title:'ICT readiness for business continuity'},
+  {id:'A.5.31',theme:'org',title:'Legal, statutory, regulatory and contractual requirements'},
+  {id:'A.5.32',theme:'org',title:'Intellectual property rights'},
+  {id:'A.5.33',theme:'org',title:'Protection of records'},
+  {id:'A.5.34',theme:'org',title:'Privacy and protection of PII'},
+  {id:'A.5.35',theme:'org',title:'Independent review of information security'},
+  {id:'A.5.36',theme:'org',title:'Compliance with policies, rules and standards'},
+  {id:'A.5.37',theme:'org',title:'Documented operating procedures'},
+  {id:'A.6.1',theme:'people',title:'Screening'},
+  {id:'A.6.2',theme:'people',title:'Terms and conditions of employment'},
+  {id:'A.6.3',theme:'people',title:'Information security awareness, education and training'},
+  {id:'A.6.4',theme:'people',title:'Disciplinary process'},
+  {id:'A.6.5',theme:'people',title:'Responsibilities after termination or change'},
+  {id:'A.6.6',theme:'people',title:'Confidentiality or non-disclosure agreements'},
+  {id:'A.6.7',theme:'people',title:'Remote working'},
+  {id:'A.6.8',theme:'people',title:'Information security event reporting'},
+  {id:'A.7.1',theme:'physical',title:'Physical security perimeters'},
+  {id:'A.7.2',theme:'physical',title:'Physical entry'},
+  {id:'A.7.3',theme:'physical',title:'Securing offices, rooms and facilities'},
+  {id:'A.7.4',theme:'physical',title:'Physical security monitoring'},
+  {id:'A.7.5',theme:'physical',title:'Protecting against physical and environmental threats'},
+  {id:'A.7.6',theme:'physical',title:'Working in secure areas'},
+  {id:'A.7.7',theme:'physical',title:'Clear desk and clear screen'},
+  {id:'A.7.8',theme:'physical',title:'Equipment siting and protection'},
+  {id:'A.7.9',theme:'physical',title:'Security of assets off-premises'},
+  {id:'A.7.10',theme:'physical',title:'Storage media'},
+  {id:'A.7.11',theme:'physical',title:'Supporting utilities'},
+  {id:'A.7.12',theme:'physical',title:'Cabling security'},
+  {id:'A.7.13',theme:'physical',title:'Equipment maintenance'},
+  {id:'A.7.14',theme:'physical',title:'Secure disposal or re-use of equipment'},
+  {id:'A.8.1',theme:'tech',title:'User endpoint devices'},
+  {id:'A.8.2',theme:'tech',title:'Privileged access rights'},
+  {id:'A.8.3',theme:'tech',title:'Information access restriction'},
+  {id:'A.8.4',theme:'tech',title:'Access to source code'},
+  {id:'A.8.5',theme:'tech',title:'Secure authentication'},
+  {id:'A.8.6',theme:'tech',title:'Capacity management'},
+  {id:'A.8.7',theme:'tech',title:'Protection against malware'},
+  {id:'A.8.8',theme:'tech',title:'Management of technical vulnerabilities'},
+  {id:'A.8.9',theme:'tech',title:'Configuration management'},
+  {id:'A.8.10',theme:'tech',title:'Information deletion'},
+  {id:'A.8.11',theme:'tech',title:'Data masking'},
+  {id:'A.8.12',theme:'tech',title:'Data leakage prevention'},
+  {id:'A.8.13',theme:'tech',title:'Information backup'},
+  {id:'A.8.14',theme:'tech',title:'Redundancy of information processing facilities'},
+  {id:'A.8.15',theme:'tech',title:'Logging'},
+  {id:'A.8.16',theme:'tech',title:'Monitoring activities'},
+  {id:'A.8.17',theme:'tech',title:'Clock synchronization'},
+  {id:'A.8.18',theme:'tech',title:'Use of privileged utility programs'},
+  {id:'A.8.19',theme:'tech',title:'Installation of software on operational systems'},
+  {id:'A.8.20',theme:'tech',title:'Networks security'},
+  {id:'A.8.21',theme:'tech',title:'Security of network services'},
+  {id:'A.8.22',theme:'tech',title:'Segregation of networks'},
+  {id:'A.8.23',theme:'tech',title:'Web filtering'},
+  {id:'A.8.24',theme:'tech',title:'Use of cryptography'},
+  {id:'A.8.25',theme:'tech',title:'Secure development life cycle'},
+  {id:'A.8.26',theme:'tech',title:'Application security requirements'},
+  {id:'A.8.27',theme:'tech',title:'Secure system architecture and engineering principles'},
+  {id:'A.8.28',theme:'tech',title:'Secure coding'},
+  {id:'A.8.29',theme:'tech',title:'Security testing in development and acceptance'},
+  {id:'A.8.30',theme:'tech',title:'Outsourced development'},
+  {id:'A.8.31',theme:'tech',title:'Separation of dev, test and production environments'},
+  {id:'A.8.32',theme:'tech',title:'Change management'},
+  {id:'A.8.33',theme:'tech',title:'Test information'},
+  {id:'A.8.34',theme:'tech',title:'Protection of information systems during audit testing'},
+];
+const ISO_THEMES = {org:'🏢 Organizational (A.5)',people:'👥 People (A.6)',physical:'🏗 Physical (A.7)',tech:'💻 Technological (A.8)'};
+const ISO_STATUS_LABELS = ['N/A','ยังไม่ดำเนินการ','กำลังดำเนินการ','ดำเนินการแล้ว'];
+function renderIso27001() {
+  const saved = JSON.parse(localStorage.getItem('iso27001')||'{}');
+  const themes = ['org','people','physical','tech'];
+  let passed = 0;
+  let html = '';
+  themes.forEach(theme => {
+    const controls = ISO27001_CONTROLS.filter(c=>c.theme===theme);
+    html += `<details style="margin:6px 0"><summary style="cursor:pointer;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:6px;font-weight:600;font-size:.85rem;border:1px solid rgba(255,255,255,.07)">${ISO_THEMES[theme]} — ${controls.filter(c=>(saved[c.id]||0)===3).length}/${controls.length}</summary><div style="padding:6px 0">`;
+    controls.forEach(c => {
+      const s = saved[c.id]||0;
+      if(s===3) passed++;
+      const col = s===3?'var(--green)':s===2?'var(--orange)':s===1?'var(--red)':'var(--text3)';
+      html += `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+        <span style="min-width:56px;font-size:.7rem;color:var(--text3);font-family:monospace">${c.id}</span>
+        <span style="flex:1;font-size:.78rem;color:${col}">${c.title}</span>
+        <select onchange="isoSetStatus('${c.id}',+this.value)" style="font-size:.7rem;background:var(--card-bg);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:2px 4px">
+          ${ISO_STATUS_LABELS.map((l,i)=>`<option value="${i}" ${s===i?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>`;
+    });
+    html += '</div></details>';
+  });
+  const el = document.getElementById('iso-controls-list');
+  if (el) el.innerHTML = html;
+  const pct = Math.round(passed/ISO27001_CONTROLS.length*100);
+  const sc = document.getElementById('iso-score-display');
+  if (sc) sc.textContent = pct + '%';
+}
+function isoSetStatus(id, val) {
+  const saved = JSON.parse(localStorage.getItem('iso27001')||'{}');
+  saved[id] = val;
+  lsSet('iso27001', saved);
+  let passed = 0;
+  ISO27001_CONTROLS.forEach(c => { if((saved[c.id]||0)===3) passed++; });
+  const sc = document.getElementById('iso-score-display');
+  if (sc) sc.textContent = Math.round(passed/ISO27001_CONTROLS.length*100) + '%';
+}
+function exportIso27001() {
+  const saved = JSON.parse(localStorage.getItem('iso27001')||'{}');
+  const rows = [['Control ID','Title','Theme','Status']];
+  ISO27001_CONTROLS.forEach(c => rows.push([c.id, c.title, c.theme, ISO_STATUS_LABELS[saved[c.id]||0]]));
+  const csv = rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='iso27001-assessment.csv'; a.click();
+}
+
+// ── User Management ──
+async function loadUsers() {
+  const tok = localStorage.getItem('adminToken')||'';
+  const el = document.getElementById('users-list');
+  if (!el) return;
+  try {
+    const res = await fetch('/auth/users', {headers:{'x-session-token':localStorage.getItem('sessionToken')||'','Authorization':'Bearer '+tok}});
+    if (!res.ok) { el.innerHTML='<small style="color:var(--text3)">ต้องการ Admin session</small>'; return; }
+    const data = await res.json();
+    el.innerHTML = (data.users||[]).map(u =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+        <span style="font-size:.8rem">${esc(u.username)}</span>
+        <span style="color:var(--text3);font-size:.75rem">${u.role}</span>
+        ${u.username!=='admin'?`<button onclick="deleteUser('${u.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 4px">🗑</button>`:''}
+      </div>`).join('') || '<small style="color:var(--text3)">ไม่มีผู้ใช้</small>';
+  } catch { el.innerHTML='<small style="color:var(--text2)">ไม่ได้เชื่อมต่อ auth endpoint</small>'; }
+}
+async function createUser() {
+  const username = document.getElementById('new-username')?.value.trim();
+  const password = document.getElementById('new-password')?.value;
+  const role = document.getElementById('new-role')?.value;
+  if (!username||!password) { alert('ใส่ username และ password'); return; }
+  const tok = localStorage.getItem('adminToken')||'';
+  const st = document.getElementById('user-mgmt-status');
+  try {
+    const res = await fetch('/auth/users',{method:'POST',headers:{'Content-Type':'application/json','x-session-token':localStorage.getItem('sessionToken')||'','Authorization':'Bearer '+tok},body:JSON.stringify({username,password,role})});
+    const d = await res.json();
+    if (st) st.innerHTML = res.ok ? '<span style="color:var(--green)">สร้างผู้ใช้แล้ว</span>' : `<span style="color:var(--red)">${esc(d.error||'Error')}</span>`;
+    if (res.ok) { loadUsers(); document.getElementById('new-username').value=''; document.getElementById('new-password').value=''; }
+  } catch(e) { if (st) st.innerHTML=`<span style="color:var(--red)">${esc(e.message)}</span>`; }
+}
+async function deleteUser(id) {
+  if (!confirm('ลบผู้ใช้นี้?')) return;
+  const tok = localStorage.getItem('adminToken')||'';
+  await fetch('/auth/users/'+id,{method:'DELETE',headers:{'x-session-token':localStorage.getItem('sessionToken')||'','Authorization':'Bearer '+tok}});
+  loadUsers();
+}
+
+// ── Audit Log Viewer ──
+async function loadAuditLog() {
+  const tok = localStorage.getItem('adminToken')||'';
+  const el = document.getElementById('audit-log-list');
+  if (!el) return;
+  try {
+    const res = await fetch('/admin/audit?limit=50',{headers:{'Authorization':'Bearer '+tok,'x-session-token':localStorage.getItem('sessionToken')||''}});
+    if (!res.ok) { el.innerHTML='<span style="color:var(--text3)">ต้องการ Admin</span>'; return; }
+    const data = await res.json();
+    el.innerHTML = (data.entries||[]).map(e =>
+      `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+        <span style="color:var(--text3)">${(e.ts||'').substring(0,19)}</span>
+        <span style="color:var(--cyan);margin:0 6px">${esc(e.user||'')}</span>
+        <span>${esc(e.action||'')}</span>
+        ${e.detail?`<span style="color:var(--text2)"> — ${esc(e.detail)}</span>`:''}
+      </div>`).join('') || '<span style="color:var(--text3)">ไม่มี log</span>';
+  } catch(e) { el.innerHTML=`<span style="color:var(--red)">${esc(e.message)}</span>`; }
 }
 </script>
 
