@@ -1858,21 +1858,25 @@ select.input option{background:#0d1117;color:var(--text)}
         <strong>บันทึกเหตุการณ์ Incident</strong>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('incident-modal').style.display='none'">✕</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div><label style="font-size:.72rem;color:var(--text3)">ประเภทเหตุการณ์</label>
-          <select class="input" id="inc-type" style="width:100%;margin-top:4px">
-            <option value="ransomware">🔐 Ransomware</option>
-            <option value="web">🌐 Web Attack</option>
-            <option value="breach">🕵 Data Breach</option>
-            <option value="ddos">⚡ DDoS</option>
-            <option value="malware">🦠 Malware</option>
-            <option value="phishing">📧 Phishing</option>
-            <option value="other">📋 อื่น ๆ</option>
-          </select>
+      <div style="display:flex;flex-direction:column;gap:10px;max-height:65vh;overflow-y:auto;padding-right:4px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:.72rem;color:var(--text3)">ประเภทเหตุการณ์</label>
+            <select class="input" id="inc-type" style="width:100%;margin-top:4px">
+              <option value="ransomware">🔐 Ransomware</option>
+              <option value="web">🌐 Web Attack</option>
+              <option value="breach">🕵 Data Breach</option>
+              <option value="ddos">⚡ DDoS</option>
+              <option value="malware">🦠 Malware</option>
+              <option value="phishing">📧 Phishing</option>
+              <option value="other">📋 อื่น ๆ</option>
+            </select>
+          </div>
+          <div><label style="font-size:.72rem;color:var(--text3)">วันที่/เวลาเกิดเหตุ (T0)</label><input class="input" id="inc-date" type="datetime-local" style="width:100%;margin-top:4px"></div>
         </div>
-        <div><label style="font-size:.72rem;color:var(--text3)">วันที่/เวลาเกิดเหตุ (T0)</label><input class="input" id="inc-date" type="datetime-local" style="width:100%;margin-top:4px"></div>
-        <div><label style="font-size:.72rem;color:var(--text3)">ระบบที่กระทบ</label><input class="input" id="inc-system" placeholder="เช่น HIS Server, เว็บไซต์ สสจ." style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ชื่อเหตุการณ์ *</label><input class="input" id="inc-title" placeholder="เช่น Ransomware โจมตีระบบ HIS ห้องฉุกเฉิน" style="width:100%;margin-top:4px"></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">ระบบ / Assets ที่กระทบ (หนึ่งบรรทัดต่อ 1 รายการ)</label><textarea class="input" id="inc-system" rows="2" placeholder="HIS Server&#10;เว็บไซต์ example.go.th" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
         <div><label style="font-size:.72rem;color:var(--text3)">รายละเอียด</label><textarea class="input" id="inc-detail" rows="2" placeholder="สรุปเหตุการณ์" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
+        <div><label style="font-size:.72rem;color:var(--text3)">Evidence Links (หนึ่งบรรทัดต่อ 1 URL)</label><textarea class="input" id="inc-evidence" rows="2" placeholder="https://wazuh.example/alerts/123&#10;https://misp.example/events/45" style="width:100%;margin-top:4px;resize:vertical"></textarea></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div><label style="font-size:.72rem;color:var(--text3)">ความรุนแรง</label>
             <select class="input" id="inc-sev" style="width:100%;margin-top:4px">
@@ -1889,6 +1893,24 @@ select.input option{background:#0d1117;color:var(--text)}
               <option value="contained">Contained</option>
               <option value="resolved">Resolved</option>
             </select>
+          </div>
+        </div>
+        <div style="padding:10px;border:1px solid rgba(139,92,246,.3);border-radius:8px;background:rgba(139,92,246,.04)">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.78rem;font-weight:600;color:var(--purple)">
+            <input type="checkbox" id="inc-pdpa" onchange="toggleIncPdpa(this.checked)"> 🔒 เกี่ยวข้องกับ PDPA / ข้อมูลส่วนบุคคล
+          </label>
+          <div id="inc-pdpa-fields" style="display:none;flex-direction:column;gap:8px;margin-top:10px">
+            <div><label style="font-size:.72rem;color:var(--text3)">ประเภทข้อมูลที่รั่วไหล</label><input class="input" id="inc-data-type" placeholder="เช่น ชื่อ-นามสกุล, ข้อมูลสุขภาพ, เลขบัตรประชาชน" style="width:100%;margin-top:4px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div><label style="font-size:.72rem;color:var(--text3)">แจ้ง PDPC แล้ว?</label>
+                <select class="input" id="inc-notified" style="width:100%;margin-top:4px">
+                  <option value="no">ยังไม่แจ้ง (ต้องแจ้งภายใน 72h)</option>
+                  <option value="yes">แจ้งแล้ว</option>
+                  <option value="na">ไม่จำเป็น</option>
+                </select>
+              </div>
+              <div><label style="font-size:.72rem;color:var(--text3)">วันที่แจ้ง PDPC</label><input class="input" id="inc-notify-date" type="date" style="width:100%;margin-top:4px"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -9667,25 +9689,43 @@ const INC_STATUS_LABEL={open:'Open',investigating:'Investigating',contained:'Con
 function getIncidents(){try{return JSON.parse(localStorage.getItem(INC_KEY)||'[]');}catch{return[];}}
 function saveIncidents(arr){localStorage.setItem(INC_KEY,JSON.stringify(arr));}
 
+function toggleIncPdpa(on){
+  const f=document.getElementById('inc-pdpa-fields');
+  f.style.display=on?'flex':'none';
+}
 function showAddIncident(){
   document.getElementById('inc-date').value=new Date().toISOString().slice(0,16);
-  ['inc-system','inc-detail'].forEach(id=>document.getElementById(id).value='');
+  ['inc-title','inc-system','inc-detail','inc-evidence','inc-data-type','inc-notify-date'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('inc-type').value='ransomware';
   document.getElementById('inc-sev').value='high';
   document.getElementById('inc-status').value='open';
+  document.getElementById('inc-pdpa').checked=false;
+  document.getElementById('inc-notified').value='no';
+  toggleIncPdpa(false);
   document.getElementById('incident-modal').style.display='flex';
 }
 
 function saveIncident(){
   const type=document.getElementById('inc-type').value;
   const date=document.getElementById('inc-date').value;
+  const title=document.getElementById('inc-title').value.trim();
   const system=document.getElementById('inc-system').value.trim();
   const detail=document.getElementById('inc-detail').value.trim();
+  const evidence=document.getElementById('inc-evidence').value.trim();
   const sev=document.getElementById('inc-sev').value;
   const status=document.getElementById('inc-status').value;
-  if(!system&&!detail){toast('กรุณากรอกข้อมูล','warn');return;}
+  const pdpa=document.getElementById('inc-pdpa').checked;
+  if(!title&&!system&&!detail){toast('กรุณากรอกชื่อเหตุการณ์','warn');return;}
+  const inc={id:Date.now(),type,date,title,system,detail,sev,status,created:new Date().toISOString()};
+  if(evidence)inc.evidence=evidence.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(pdpa){
+    inc.pdpa=true;
+    inc.dataType=document.getElementById('inc-data-type').value.trim();
+    inc.pdpaNotified=document.getElementById('inc-notified').value;
+    inc.pdpaNotifyDate=document.getElementById('inc-notify-date').value;
+  }
   const arr=getIncidents();
-  arr.unshift({id:Date.now(),type,date,system,detail,sev,status,created:new Date().toISOString()});
+  arr.unshift(inc);
   saveIncidents(arr);
   document.getElementById('incident-modal').style.display='none';
   renderIncidentTimeline();
@@ -9711,17 +9751,26 @@ function renderIncidentTimeline(){
   el.innerHTML=arr.map(inc=>{
     const sc=INC_SEV_COLOR[inc.sev]||'var(--text3)';
     const dt=inc.date?new Date(inc.date).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}):'';
+    const evLinks=inc.evidence?.length?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${inc.evidence.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener" style="font-size:.65rem;color:var(--cyan);text-decoration:underline;word-break:break-all">${esc(u)}</a>`).join('<br>')}</div>`:'';
+    const pdpaBadge=inc.pdpa?`<span style="font-size:.65rem;background:rgba(139,92,246,.2);color:var(--purple);padding:1px 7px;border-radius:8px">🔒 PDPA</span>`:'';
+    const pdpaDetail=inc.pdpa?`<div style="margin-top:6px;padding:6px 8px;background:rgba(139,92,246,.06);border-radius:6px;font-size:.7rem;color:var(--text2)">
+      ${inc.dataType?`<div>ข้อมูลที่รั่วไหล: <strong>${esc(inc.dataType)}</strong></div>`:''}
+      <div>แจ้ง PDPC: <strong style="color:${inc.pdpaNotified==='yes'?'var(--green)':inc.pdpaNotified==='na'?'var(--text3)':'var(--red)'}">${inc.pdpaNotified==='yes'?'แจ้งแล้ว':inc.pdpaNotified==='na'?'ไม่จำเป็น':'⚠ ยังไม่แจ้ง'}</strong>${inc.pdpaNotifyDate?` (${inc.pdpaNotifyDate})`:''}
+      ${inc.pdpaNotified==='no'?`<span style="color:var(--red);font-size:.65rem"> — ต้องแจ้งภายใน 72h นับจากเวลาเกิดเหตุ</span>`:''}
+      </div></div>`:'';
     return `<div style="position:relative;margin-bottom:18px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid ${sc}33;border-radius:8px">
       <div style="position:absolute;left:-29px;top:12px;width:12px;height:12px;border-radius:50%;background:${sc};box-shadow:0 0 8px ${sc}"></div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
         <span style="font-size:1rem">${INC_TYPE_ICON[inc.type]||'📋'}</span>
-        <strong style="color:${sc};font-size:.85rem">${inc.type?.toUpperCase()}</strong>
+        <strong style="color:${sc};font-size:.85rem">${esc(inc.title||inc.type?.toUpperCase()||'')}</strong>
         <span style="font-size:.7rem;background:${sc}22;color:${sc};padding:1px 7px;border-radius:8px;font-weight:700">${inc.sev?.toUpperCase()}</span>
+        ${pdpaBadge}
         <span style="margin-left:auto;font-size:.65rem;color:var(--text3)">${dt}</span>
       </div>
-      ${inc.system?`<div style="font-size:.75rem;font-weight:600;color:var(--text2);margin-bottom:3px">📍 ${esc(inc.system)}</div>`:''}
-      ${inc.detail?`<div style="font-size:.73rem;color:var(--text3);margin-bottom:6px">${esc(inc.detail)}</div>`:''}
-      <div style="display:flex;align-items:center;gap:6px">
+      ${inc.system?`<div style="font-size:.72rem;color:var(--text2);margin-bottom:3px;white-space:pre-line">📍 ${esc(inc.system)}</div>`:''}
+      ${inc.detail?`<div style="font-size:.73rem;color:var(--text3);margin-bottom:4px">${esc(inc.detail)}</div>`:''}
+      ${evLinks}${pdpaDetail}
+      <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
         <span style="font-size:.68rem;color:var(--text3)">สถานะ:</span>
         <select style="font-size:.65rem;background:var(--bg);border:1px solid var(--card-b);color:var(--text1);border-radius:4px;padding:1px 4px" onchange="updateIncidentStatus(${inc.id},this.value)">
           ${['open','investigating','contained','resolved'].map(s=>`<option value="${s}"${inc.status===s?' selected':''}>${INC_STATUS_LABEL[s]}</option>`).join('')}
@@ -9730,6 +9779,35 @@ function renderIncidentTimeline(){
       </div>
     </div>`;
   }).join('');
+}
+
+function exportIncidentsJSON(){
+  const arr=getIncidents();
+  if(!arr.length){toast('ไม่มีเหตุการณ์','warn');return;}
+  const blob=new Blob([JSON.stringify(arr,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`incidents_${new Date().toISOString().slice(0,10)}.json`;a.click();
+}
+
+function exportIncidentsPrint(){
+  const arr=getIncidents();
+  if(!arr.length){toast('ไม่มีเหตุการณ์','warn');return;}
+  const cfg=getCfg();
+  const rows=arr.map(inc=>{
+    const sc={low:'#16a34a',medium:'#ca8a04',high:'#ea580c',critical:'#dc2626'}[inc.sev]||'#374151';
+    const dt=inc.date?new Date(inc.date).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
+    const evLinks=inc.evidence?.map(u=>`<a href="${esc(u)}">${esc(u)}</a>`).join('<br>')||'';
+    const pdpaSec=inc.pdpa?`<tr><td colspan="2" style="background:#faf5ff;padding:6px 10px;font-size:12px"><strong style="color:#7c3aed">🔒 PDPA:</strong> ${esc(inc.dataType||'')} | แจ้ง PDPC: ${inc.pdpaNotified==='yes'?'แจ้งแล้ว '+esc(inc.pdpaNotifyDate||''):'ยังไม่แจ้ง'}</td></tr>`:'';
+    return `<tr><td style="padding:10px;vertical-align:top;border-bottom:1px solid #e5e7eb;width:140px;font-size:12px;color:#6b7280">${dt}<br><span style="background:${sc};color:#fff;padding:1px 6px;border-radius:4px;font-size:11px">${inc.sev?.toUpperCase()}</span>${inc.pdpa?'<br><span style="background:#7c3aed;color:#fff;padding:1px 6px;border-radius:4px;font-size:10px">PDPA</span>':''}</td>
+    <td style="padding:10px;border-bottom:1px solid #e5e7eb"><strong>${esc(inc.title||inc.type||'')}</strong><br><span style="font-size:12px;color:#374151">${esc(inc.detail||'')}</span>${inc.system?`<br><small style="color:#6b7280">Assets: ${esc(inc.system)}</small>`:''}${evLinks?`<br><small>Evidence: ${evLinks}</small>`:''}<br><small style="color:#9ca3af">Status: ${inc.status}</small></td></tr>${pdpaSec}`;
+  }).join('');
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Incident Report — ${esc(cfg.orgName||'')}</title><style>body{font-family:sans-serif;padding:24px;color:#111}table{width:100%;border-collapse:collapse}@media print{.no-print{display:none}}</style></head><body>
+  <div class="no-print" style="margin-bottom:16px"><button onclick="window.print()">🖨 Print</button></div>
+  <h2 style="margin:0 0 4px">📋 Incident Report</h2>
+  <div style="font-size:13px;color:#6b7280;margin-bottom:16px">${esc(cfg.orgName||'')} — สร้างเมื่อ ${new Date().toLocaleString('th-TH')}</div>
+  <table>${rows}</table></body></html>`);
+  w.document.close();
 }
 
 // ── Security Health Score ──
