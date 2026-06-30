@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const dns = require('dns').promises;
+const dns = require('dns');
 const express = require('express');
 const { loadAll } = require('./store');
 const { scanLog, scanLogWithContext } = require('./scan');
@@ -71,14 +71,16 @@ function rateLimit(maxReq, windowMs) {
 }
 
 // --- Reverse DNS (2s timeout) ---
-async function reverseDns(ip) {
-  try {
-    const names = await Promise.race([
-      dns.reverse(ip),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000)),
-    ]);
-    return Array.isArray(names) && names.length ? names[0] : null;
-  } catch { return null; }
+function reverseDns(ip) {
+  return new Promise((resolve) => {
+    const resolver = new dns.Resolver();
+    const tid = setTimeout(() => { resolver.cancel(); resolve(null); }, 2000);
+    if (tid.unref) tid.unref();
+    resolver.reverse(ip, (err, names) => {
+      clearTimeout(tid);
+      resolve(Array.isArray(names) && names.length ? names[0] : null);
+    });
+  });
 }
 
 // --- Risk score 0-100 ---
