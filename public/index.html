@@ -4739,7 +4739,7 @@ const CFG_DEFAULT = {
   subnet4: '10.x.32.x',
   publicIP: 'PUBLIC-IP',
   ctamDone: new Array(17).fill(false),
-  orgType: 'provincial_health',
+  orgType: '',
   siemType: 'wazuh',
   edrType: 'crowdstrike',
   topoNodes: [],
@@ -5074,7 +5074,7 @@ function applyOrgConfig() {
   document.querySelectorAll('.code-block pre').forEach(pre => {
     if (pre.dataset.patched) return;
     let html = pre.innerHTML;
-    const changed = html.includes('WAZUH-SERVER') || html.includes('MISP-SERVER') || html.includes('FIREWALL-IP') || html.includes('KONG-IP') || html.includes('WAZUH-AGENT') || html.includes('10.10.32.123') || html.includes('203.157.172');
+    const changed = html.includes('WAZUH-SERVER') || html.includes('MISP-SERVER') || html.includes('FIREWALL-IP') || html.includes('KONG-IP') || html.includes('WAZUH-AGENT') || html.includes(CFG_DEFAULT.wazuhIP) || html.includes(CFG_DEFAULT.mispUrl.replace('https://',''));
     if (!changed) return;
     // Replace example IPs with configured values (if set)
     const eWazuhIP = esc(cfg.wazuhIP), eMispUrl = esc(cfg.mispUrl.replace('https://','')), eKongIP = esc(cfg.kongIP), eWazuhAgent = esc(cfg.wazuhAgent), eFirewallIP = esc(cfg.firewallIP);
@@ -7734,18 +7734,19 @@ const TOPO_ZONE_COLORS = {internet:'#7f1d1d',dmz:'#78350f',internal:'#14532d',ad
 const ZONE_ORDER = ['internet','dmz','internal','admin','ot','backup'];
 
 function topoDefaultNodes() {
-  const org = JSON.parse(localStorage.getItem('org_config')||'{}');
   const cfg = getCfg();
-  const kongIP = org.kongIP || cfg.kongIP || '10.10.30.225';
-  const wazuhIP = org.wazuhIP || '10.10.32.123';
+  const kongIP = (cfg.kongIP !== CFG_DEFAULT.kongIP ? cfg.kongIP : '') || '';
+  const wazuhIP = (cfg.wazuhIP !== CFG_DEFAULT.wazuhIP ? cfg.wazuhIP : '') || '';
+  const firewallIP = (cfg.firewallIP !== CFG_DEFAULT.firewallIP ? cfg.firewallIP : '') || '';
+  const orgName = cfg.orgName || '';
   return [
     {id:'internet',label:'Internet',type:'internet',zone:'internet',ip:'0.0.0.0',status:'unknown',x:0.08,y:0.5,connections:['fw']},
-    {id:'fw',label:'FortiGate',type:'firewall',zone:'dmz',ip:'192.168.1.1',status:'unknown',x:0.22,y:0.5,connections:['waf','web','wazuh']},
+    {id:'fw',label:'Firewall',type:'firewall',zone:'dmz',ip:firewallIP,status:'unknown',x:0.22,y:0.5,connections:['waf','web','wazuh']},
     {id:'waf',label:'WAF/CDN',type:'waf',zone:'dmz',ip:'',status:'unknown',x:0.35,y:0.25,connections:['web']},
-    {id:'kong',label:'API GW KONG',type:'api',zone:'dmz',ip:kongIP,status:'unknown',x:0.35,y:0.75,connections:['api'],health:`http://${kongIP}:8001/status`},
+    {id:'kong',label:'API Gateway',type:'api',zone:'dmz',ip:kongIP,status:'unknown',x:0.35,y:0.75,connections:['api'],health:kongIP?`http://${kongIP}:8001/status`:''},
     {id:'wazuh',label:'Wazuh SIEM',type:'siem',zone:'admin',ip:wazuhIP,status:'unknown',x:0.65,y:0.15,connections:[]},
     {id:'threat',label:'Threat Intel',type:'siem',zone:'admin',ip:'',status:'unknown',x:0.65,y:0.38,connections:[]},
-    {id:'web',label:'สสจ. Web',type:'server',zone:'internal',ip:'',status:'unknown',x:0.55,y:0.6,connections:['db']},
+    {id:'web',label:(orgName?orgName+' ':'')+'Web',type:'server',zone:'internal',ip:'',status:'unknown',x:0.55,y:0.6,connections:['db']},
     {id:'api',label:'API Server',type:'server',zone:'internal',ip:'',status:'unknown',x:0.7,y:0.7,connections:['db']},
     {id:'db',label:'Database',type:'database',zone:'internal',ip:'',status:'unknown',x:0.82,y:0.6,connections:['nas']},
     {id:'nas',label:'NAS/Backup',type:'storage',zone:'backup',ip:'',status:'unknown',x:0.88,y:0.35,connections:[]},
