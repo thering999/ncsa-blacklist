@@ -610,15 +610,10 @@ app.get('/admin/summary', requireAdmin, async (req, res) => {
   ].join('\n');
 
   const send = req.query.send === 'true';
-  if (send && process.env.SMTP_HOST && process.env.SMTP_TO) {
-    const { notify } = require('./notify');
-    // send via email directly
-    let nodemailer; try { nodemailer = require('nodemailer'); } catch {}
-    if (nodemailer) {
-      const t = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: parseInt(process.env.SMTP_PORT || '587'), secure: process.env.SMTP_SECURE === 'true', auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined });
-      try { await t.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to: process.env.SMTP_TO, subject: `[NCSA] Weekly Blacklist Summary`, text }); }
-      catch (e) { return res.status(502).json({ error: `email failed: ${e.message}`, summary }); }
-    }
+  if (send) {
+    const { notifyEmail } = require('./notify');
+    try { await notifyEmail('[NCSA] Weekly Blacklist Summary', text); }
+    catch (e) { return res.status(502).json({ error: `email failed: ${e.message}`, summary }); }
   }
   res.json({ days, since, summary, store_sizes, text, email_sent: send });
 });
@@ -710,7 +705,7 @@ app.delete('/watch', requireAdmin, express.json(), (req, res) => {
   res.json(watchlist.remove(type, value));
 });
 
-app.get('/allowlist', (req, res) => {
+app.get('/allowlist', requireAdminIfConfigured, (req, res) => {
   res.json(allowlist.load());
 });
 

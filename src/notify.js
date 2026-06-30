@@ -132,4 +132,4 @@ async function notifySummary(totals) {
   if (process.env.SMTP_HOST && process.env.SMTP_TO) await notifyEmail('[NCSA] Weekly summary', text);
 }
 
-module.exports = { notify, notifyStale, notifySummary };
+module.exports = { notify, notifyStale, notifySummary, notifyEmail };

@@ -103,9 +103,11 @@ async function fetchFeed(type, url) {
   let prevValues = [];
   let prevSha256 = null;
   if (fs.existsSync(filePath)) {
-    const prev = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    prevValues = prev.data;
-    prevSha256 = prev.file?.sha256 ?? null;
+    try {
+      const prev = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      prevValues = prev.data;
+      prevSha256 = prev.file?.sha256 ?? null;
+    } catch (e) { console.warn(`${type}: corrupt prev data file, treating as fresh: ${e.message}`); }
   }
 
   // Skip write + history when upstream data is identical (same file SHA256)
