@@ -12,7 +12,7 @@
 [![Thai](https://img.shields.io/badge/ภาษา-ไทย-red)](README.md)
 
 ---
-
+gvk
 ## 📋 สารบัญ
 
 1. [ภาพรวมระบบ](#ภาพรวมระบบ)
@@ -57,7 +57,13 @@ NCSA Blacklist SOC Dashboard คือเครื่องมือ Cybersecuri
   - OSINT links: VirusTotal, Shodan, AbuseIPDB, Greynoise, URLScan เปิดได้ทันที
 - **Bulk Check** ตรวจสอบหลายรายการพร้อมกัน สูงสุด 10,000 รายการ
   - วาง IP/domain ทีละบรรทัด หรืออัปโหลดไฟล์ `.txt`
+  - **CSV Upload** — drag-drop หรือ browse ไฟล์ `.csv` (คอลัมน์ `type,value`) สูงสุด 500 rows
+  - Progress bar แบบ real-time พร้อมผล HIT / ALLOW / clean ต่อแถว
   - ผลลัพธ์ Export เป็น CSV ได้ทันที
+- **AbuseIPDB Cross-check** — แสดง Confidence Score จาก AbuseIPDB ควบคู่กับ NCSA result
+  - Badge สี: 🔴 ≥80% · 🟠 ≥25% · 🟢 clean
+  - ต้องตั้ง `ABUSEIPDB_KEY` ใน `.env` — ถ้าไม่มี key จะซ่อน badge โดยอัตโนมัติ
+  - Cache ผล 1 ชั่วโมง (ไม่ใช้ quota เกิน)
 - **CIDR Scan** ตรวจทั้ง Subnet สูงสุด /16 (65,536 IP)
 - **Watch List** — ติดตาม IP/Domain เฉพาะที่ต้องการ
   - แจ้งเตือนอัตโนมัติผ่าน LINE / Email / Webhook เมื่อพบในฐาน
@@ -101,7 +107,10 @@ NCSA Blacklist SOC Dashboard คือเครื่องมือ Cybersecuri
   - Malware / APT Infection
 - **Incident Log & Timeline** — บันทึก Incident แบบ CRUD
   - สถานะ Workflow: Open → In-Progress → Contained → Eradicated → Closed
-  - Timeline แสดงเหตุการณ์ตามลำดับเวลา
+  - Timeline แสดงเหตุการณ์ตามลำดับเวลา พร้อม Evidence links ที่คลิกได้
+  - **PDPA Mode** — เพิ่มฟิลด์: ประเภทข้อมูลที่ได้รับผลกระทบ, สถานะแจ้ง PDPC, วันที่แจ้ง
+  - แจ้งเตือน ⚠️ อัตโนมัติเมื่อเกิน 72 ชั่วโมงยังไม่แจ้ง PDPC (ตาม PDPA มาตรา 37)
+  - Export JSON (archive) และ Print-ready HTML สำหรับเอกสารราชการ
 - **BCP Tracker** (Business Continuity Plan) — ติดตาม drill/test แผน BCP
 - **DRP Tracker** (Disaster Recovery Plan) — RTO/RPO tracking ต่อระบบ
 - **CSIRT Contact Directory** — รายชื่อติดต่อฉุกเฉิน ThaiCERT/NCSA/MOPH พร้อมใช้
@@ -151,6 +160,10 @@ NCSA Blacklist SOC Dashboard คือเครื่องมือ Cybersecuri
 - **Threat Hunt IOC Pivot** — สร้าง query พร้อมใช้สำหรับ Elastic / Splunk / Windows Event Log
 - **Dashboard Export/Import** — JSON backup/restore ครอบคลุมทุก module
 - **Prometheus Metrics** (`/metrics`) — ส่งตัวชี้วัดสู่ Monitoring Stack
+- **Alert Rules** — กำหนดเงื่อนไขแจ้งเตือนเองได้ สูงสุด 20 rules
+  - เงื่อนไข: type (ip/domain/hash), added_count, removed_count พร้อม operator (eq/gt/lt/contains)
+  - เมื่อ sync ตรงเงื่อนไข → แจ้งเตือนผ่าน LINE / Email / Webhook ทันที
+  - จัดการผ่าน Settings → Alert Rules (ต้องใช้ Admin token)
 - **Webhook** — แจ้งเตือน custom ไปยัง endpoint ใดก็ได้
 - **Email Notifications** — ผ่าน SMTP (รองรับ Gmail App Password)
 
