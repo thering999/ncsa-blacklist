@@ -4706,6 +4706,7 @@ const fmt = n => typeof n === 'number' ? n.toLocaleString() : String(n);
 
 // ── Org Config ──
 const CFG_KEY = 'org_config';
+const KET10_WAZUH_IP = KET10_WAZUH_IP; // สาธารณสุขเขต 10 shared Wazuh — config once here
 const CFG_DEFAULT = {
   orgName: 'หน่วยงานของท่าน',
   department: '',
@@ -4916,7 +4917,7 @@ function saveAllSettings() {
   cfg.wazuhAgent  = document.getElementById('s-wazuh-agent').value.trim() || cfg.wazuhAgent;
   cfg.wazuhType   = document.getElementById('s-wazuh-type').value;
   cfg.wazuhPass   = document.getElementById('s-wazuh-pass').value;
-  if (cfg.wazuhType === 'ket10') cfg.wazuhIP = '203.157.132.146';
+  if (cfg.wazuhType === 'ket10') cfg.wazuhIP = KET10_WAZUH_IP;
   cfg.mispUrl     = document.getElementById('s-misp-url').value.trim()    || cfg.mispUrl;
   cfg.firewallType= document.getElementById('s-fw-type').value;
   cfg.firewallIP  = document.getElementById('s-fw-ip').value.trim()       || cfg.firewallIP;
@@ -5871,7 +5872,7 @@ function wizardNext(n) { wizardGoTo(n); }
 function wizardWazuhTypeChange(v) {
   const row = document.getElementById('wz-wazuh-ip-row');
   const ip  = document.getElementById('wz-wazuh-ip');
-  if (v === 'ket10')      { ip.value = '203.157.132.146'; row.style.opacity = '.5'; ip.readOnly = true; }
+  if (v === 'ket10')      { ip.value = KET10_WAZUH_IP; row.style.opacity = '.5'; ip.readOnly = true; }
   else if (v === 'none')  { ip.value = ''; row.style.display = 'none'; }
   else                    { ip.value = ''; row.style.display = ''; row.style.opacity = '1'; ip.readOnly = false; }
 }
@@ -5884,7 +5885,7 @@ function wizardFinish() {
   cfg.fiscal      = document.getElementById('wz-fiscal').value.trim() || '2569';
   const wType     = document.getElementById('wz-wazuh-type').value;
   cfg.wazuhType   = wType;
-  if (wType === 'ket10') cfg.wazuhIP = '203.157.132.146';
+  if (wType === 'ket10') cfg.wazuhIP = KET10_WAZUH_IP;
   else { const ip = document.getElementById('wz-wazuh-ip').value.trim(); if (ip) cfg.wazuhIP = ip; }
   cfg.firewallType = document.getElementById('wz-fw-type').value;
   const misp = document.getElementById('wz-misp').value.trim();
