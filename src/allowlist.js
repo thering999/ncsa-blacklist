@@ -4,14 +4,19 @@ const { DATA_DIR } = require('./paths');
 
 const FILE = path.join(DATA_DIR, 'allowlist.json');
 
+let _cache = null;
+
 function load() {
-  if (!fs.existsSync(FILE)) return [];
-  return JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  if (_cache) return _cache;
+  if (!fs.existsSync(FILE)) return (_cache = []);
+  try { _cache = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { _cache = []; }
+  return _cache;
 }
 
 function save(list) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(list));
+  _cache = list;
 }
 
 function add(type, value) {

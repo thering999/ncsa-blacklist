@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 function parseTokens(env) {
   const tokens = {};
   if (env.ADMIN_TOKENS) {
@@ -10,13 +12,22 @@ function parseTokens(env) {
   return tokens;
 }
 
+function timingSafeEqual(a, b) {
+  const ba = Buffer.from(a), bb = Buffer.from(b);
+  if (ba.length !== bb.length) {
+    crypto.timingSafeEqual(ba, ba); // consume time regardless
+    return false;
+  }
+  return crypto.timingSafeEqual(ba, bb);
+}
+
 function makeRequireAdmin(tokens) {
   const hasTokens = Object.keys(tokens).length > 0;
   return function requireAdmin(req, res, next) {
     if (!hasTokens) return next();
     const m = /^Bearer (.+)$/.exec(req.get('Authorization') || '');
     if (!m) return res.status(401).json({ error: 'unauthorized' });
-    const name = Object.keys(tokens).find((k) => tokens[k] === m[1]);
+    const name = Object.keys(tokens).find((k) => timingSafeEqual(tokens[k], m[1]));
     if (!name) return res.status(401).json({ error: 'unauthorized' });
     req.adminName = name;
     next();

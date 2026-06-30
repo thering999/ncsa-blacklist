@@ -627,7 +627,7 @@ app.get('/history', (req, res) => {
   const { type } = req.query;
   if (!fs.existsSync(HISTORY_FILE)) return res.json([]);
   const lines = fs.readFileSync(HISTORY_FILE, 'utf8').trim().split('\n').filter(Boolean);
-  const entries = lines.map((l) => JSON.parse(l)).filter((e) => !type || e.type === type);
+  const entries = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter((e) => e && (!type || e.type === type));
   res.json(entries.slice(-30));
 });
 
