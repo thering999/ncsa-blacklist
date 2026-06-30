@@ -4796,7 +4796,7 @@ function toast(msg, type = 'ok') {
 }
 
 async function apiFetch(path, opts = {}) {
-  const token = localStorage.getItem('metrics_token');
+  const token = sessionStorage.getItem('metrics_token');
   if (token) { if (!opts.headers) opts.headers = {}; opts.headers['Authorization'] = 'Bearer ' + token; }
   return fetch(API() + path, opts);
 }
@@ -4896,14 +4896,14 @@ function clearTopoNodes() {
 }
 function saveSettings() {
   localStorage.setItem('api_url', document.getElementById('s-api-url').value.trim());
-  localStorage.setItem('metrics_token', document.getElementById('s-metrics-token').value.trim());
+  sessionStorage.setItem('metrics_token', document.getElementById('s-metrics-token').value.trim());
   closeSettings();
 }
 
 function saveAllSettings() {
   // API settings
   localStorage.setItem('api_url', document.getElementById('s-api-url').value.trim());
-  localStorage.setItem('metrics_token', document.getElementById('s-metrics-token').value.trim());
+  sessionStorage.setItem('metrics_token', document.getElementById('s-metrics-token').value.trim());
   const rv = document.getElementById('s-refresh').value;
   if (rv) localStorage.setItem('auto_refresh', rv);
 
@@ -4963,7 +4963,7 @@ function saveAllSettings() {
 function populateSettingsForm() {
   const cfg = getCfg();
   document.getElementById('s-api-url').value     = localStorage.getItem('api_url') || '';
-  document.getElementById('s-metrics-token').value = localStorage.getItem('metrics_token') || '';
+  document.getElementById('s-metrics-token').value = sessionStorage.getItem('metrics_token') || '';
   const rv = localStorage.getItem('auto_refresh') || '0';
   const sel = document.getElementById('s-refresh');
   if (sel) sel.value = rv;
@@ -5077,18 +5077,19 @@ function applyOrgConfig() {
     const changed = html.includes('WAZUH-SERVER') || html.includes('MISP-SERVER') || html.includes('FIREWALL-IP') || html.includes('KONG-IP') || html.includes('WAZUH-AGENT') || html.includes('10.10.32.123') || html.includes('203.157.172');
     if (!changed) return;
     // Replace example IPs with configured values (if set)
-    if (cfg.wazuhIP !== CFG_DEFAULT.wazuhIP) html = html.replace(/10\.10\.32\.123/g, cfg.wazuhIP);
-    if (cfg.mispUrl !== CFG_DEFAULT.mispUrl) html = html.replace(/203\.157\.172\.9/g, cfg.mispUrl.replace('https://',''));
-    if (cfg.kongIP !== CFG_DEFAULT.kongIP) html = html.replace(/10\.10\.30\.225/g, cfg.kongIP);
-    if (cfg.wazuhAgent !== CFG_DEFAULT.wazuhAgent) html = html.replace(/kong-gateway-225/g, cfg.wazuhAgent);
-    if (cfg.wazuhPass) html = html.replace(/WAZUH-REG-PASS/g, cfg.wazuhPass);
+    const eWazuhIP = esc(cfg.wazuhIP), eMispUrl = esc(cfg.mispUrl.replace('https://','')), eKongIP = esc(cfg.kongIP), eWazuhAgent = esc(cfg.wazuhAgent), eFirewallIP = esc(cfg.firewallIP);
+    if (cfg.wazuhIP !== CFG_DEFAULT.wazuhIP) html = html.replace(/10\.10\.32\.123/g, eWazuhIP);
+    if (cfg.mispUrl !== CFG_DEFAULT.mispUrl) html = html.replace(/203\.157\.172\.9/g, eMispUrl);
+    if (cfg.kongIP !== CFG_DEFAULT.kongIP) html = html.replace(/10\.10\.30\.225/g, eKongIP);
+    if (cfg.wazuhAgent !== CFG_DEFAULT.wazuhAgent) html = html.replace(/kong-gateway-225/g, eWazuhAgent);
+    if (cfg.wazuhPass) html = html.replace(/WAZUH-REG-PASS/g, esc(cfg.wazuhPass));
     // Replace generic placeholders
     html = html
-      .replace(/WAZUH-SERVER/g, cfg.wazuhIP)
-      .replace(/MISP-SERVER/g, cfg.mispUrl.replace('https://',''))
-      .replace(/FIREWALL-IP/g, cfg.firewallIP)
-      .replace(/KONG-IP/g, cfg.kongIP)
-      .replace(/WAZUH-AGENT/g, cfg.wazuhAgent);
+      .replace(/WAZUH-SERVER/g, eWazuhIP)
+      .replace(/MISP-SERVER/g, eMispUrl)
+      .replace(/FIREWALL-IP/g, eFirewallIP)
+      .replace(/KONG-IP/g, eKongIP)
+      .replace(/WAZUH-AGENT/g, eWazuhAgent);
     pre.innerHTML = html;
     pre.dataset.patched = '1';
   });
@@ -5364,7 +5365,7 @@ async function enrichGeo(value) {
     const flag = d.country&&d.country.length===2
       ? String.fromCodePoint(...[...d.country.toUpperCase()].map(c=>0x1F1E6-65+c.charCodeAt(0)))
       : '🌐';
-    box.innerHTML=`<div style="display:flex;gap:16px;flex-wrap:wrap"><span>${flag} <strong>${d.country||'—'}</strong> ${d.region||''} / ${d.city||'—'}</span><span>📡 ${d.org||'—'}</span>${d.hostname?`<span>🔤 ${esc(d.hostname)}</span>`:''}<span>🌐 ${value}</span></div>`;
+    box.innerHTML=`<div style="display:flex;gap:16px;flex-wrap:wrap"><span>${flag} <strong>${esc(d.country||'—')}</strong> ${esc(d.region||'')} / ${esc(d.city||'—')}</span><span>📡 ${esc(d.org||'—')}</span>${d.hostname?`<span>🔤 ${esc(d.hostname)}</span>`:''}<span>🌐 ${esc(value)}</span></div>`;
   } catch { box.style.display='none'; }
 }
 
@@ -5908,7 +5909,7 @@ async function loadWazuhAlerts(){
     // Try Wazuh indexer API (port 9200) — CORS likely blocked; show helpful message
     const r=await fetch(`https://${cfg.wazuhIP}:9200/wazuh-alerts-*/_search`,{
       method:'POST',signal:AbortSignal.timeout(5000),
-      headers:{'Content-Type':'application/json','Authorization':'Basic '+btoa('admin:SecretPassword')},
+      headers:{'Content-Type':'application/json','Authorization':'Basic '+btoa('admin:'+(cfg.wazuhPass||''))},
       body:JSON.stringify({size:10,sort:[{'timestamp':{order:'desc'}}],query:{range:{timestamp:{gte:'now-24h'}}}})
     });
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -5928,8 +5929,8 @@ async function loadWazuhAlerts(){
     const cfg=getCfg();
     el.innerHTML=`<div style="padding:10px 12px;border-radius:8px;background:rgba(255,171,0,.06);border:1px solid rgba(255,171,0,.2);font-size:.76rem">
       <div style="color:var(--orange);font-weight:700">⚠ ไม่สามารถเชื่อมต่อ Wazuh โดยตรงได้ (CORS/Auth)</div>
-      <div style="color:var(--text2);margin-top:4px">Wazuh Dashboard: <a href="https://${cfg.wazuhIP}" target="_blank" style="color:var(--cyan)">https://${cfg.wazuhIP}</a></div>
-      <div style="color:var(--text3);font-size:.68rem;margin-top:4px">เปิด Wazuh → Discover → filter agent.name: <strong>${cfg.wazuhAgent||'agent'}</strong></div>
+      <div style="color:var(--text2);margin-top:4px">Wazuh Dashboard: <a href="https://${encodeURIComponent(cfg.wazuhIP)}" target="_blank" style="color:var(--cyan)">https://${esc(cfg.wazuhIP)}</a></div>
+      <div style="color:var(--text3);font-size:.68rem;margin-top:4px">เปิด Wazuh → Discover → filter agent.name: <strong>${esc(cfg.wazuhAgent||'agent')}</strong></div>
     </div>`;
   }
 }
@@ -6949,7 +6950,7 @@ async function testWebhook() {
   try {
     const r = await fetch(apiBase() + '/admin/webhook-test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('metrics_token')||'') },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (sessionStorage.getItem('metrics_token')||'') },
       body: JSON.stringify({ webhook: url })
     });
     const data = await r.json();
@@ -6979,7 +6980,7 @@ async function testLineNotify() {
 async function triggerSync() {
   try {
     const headers = {};
-    const tok = localStorage.getItem('metrics_token');
+    const tok = sessionStorage.getItem('metrics_token');
     if (tok) headers['Authorization'] = 'Bearer '+tok;
     const r = await fetch(apiBase()+'/admin/sync', {method:'POST', headers});
     if (r.status === 404) { toast('Sync endpoint ไม่พบ','err'); return; }

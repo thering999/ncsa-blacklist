@@ -7,6 +7,9 @@ RUN npm ci --omit=dev
 COPY src ./src
 COPY public ./public
 
+RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
+USER app
+
 ENV DATA_DIR=/data
 VOLUME ["/data"]
 

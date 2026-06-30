@@ -3,7 +3,7 @@ services:
     build: .
     platform: linux/amd64
     ports:
-      - "3939:3939"
+      - "127.0.0.1:3939:3939"
     volumes:
       - ncsa-data:/data
       - ./public:/app/public:ro
