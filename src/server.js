@@ -81,7 +81,7 @@ async function reverseDns(ip) {
 }
 
 // --- Risk score 0-100 ---
-const HIGH_RISK_CC = new Set(['CN','RU','KP','IR','BY','CU','SY','VE','NI','MM']);
+const HIGH_RISK_CC = new Set(['CN','RU','KP','IR','BY','CU','SY','VE','NI']);
 function riskScore(ip, blacklisted, geo) {
   let score = 0;
   if (blacklisted) score += 50;
