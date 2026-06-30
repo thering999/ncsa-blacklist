@@ -31,7 +31,18 @@ const TREND_FILE = path.join(DATA_DIR, 'trend.json');
 const helmet = require('helmet');
 const app = express();
 
-app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled — API-only, no HTML served by Express
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+    },
+  },
+}));
 
 // Request ID — must be first so all routes including /healthz get it
 app.use((req, res, next) => {
@@ -96,7 +107,7 @@ app.get('/healthz', (req, res) => {
     if (lines.length) {
       const last = JSON.parse(lines[lines.length - 1]);
       sync_last_run = last.date || null;
-      if (sync_last_run) sync_next_run = new Date(new Date(sync_last_run).getTime() + 6 * 3600_000).toISOString();
+      if (sync_last_run) sync_next_run = new Date(new Date(sync_last_run).getTime() + 24 * 3600_000).toISOString();
     }
   } catch {}
   res.json({ ok: true, sync_last_run, sync_next_run });
@@ -128,27 +139,7 @@ if (CORS_ORIGIN) {
 }
 
 const RATE_LIMIT = Number(process.env.RATE_LIMIT) || 60; // requests per minute per IP
-const hits = new Map();
-app.use((req, res, next) => {
-  const ip = req.ip;
-  const now = Date.now();
-  const entry = hits.get(ip) || { count: 0, reset: now + 60_000 };
-  if (now > entry.reset) {
-    entry.count = 0;
-    entry.reset = now + 60_000;
-  }
-  entry.count += 1;
-  hits.set(ip, entry);
-  if (entry.count > RATE_LIMIT) return res.status(429).json({ error: 'rate limit exceeded' });
-  next();
-});
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of hits) {
-    if (now > entry.reset) hits.delete(ip);
-  }
-}, 5 * 60_000).unref();
+app.use(rateLimit(RATE_LIMIT, 60_000));
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -215,8 +206,9 @@ const _adminAllowedRanges = (process.env.ADMIN_ALLOWED_IPS || '').split(',').map
 function requireAdminIp(req, res, next) {
   if (!_adminAllowedRanges.length) return next();
   const clientIp = req.ip || '';
+  if (clientIp.includes(':')) return res.status(403).json({ error: 'forbidden: IPv6 not supported in ADMIN_ALLOWED_IPS' });
   const n = ipToInt(clientIp);
-  if (_adminAllowedRanges.some(r => n >= r.start && n <= r.end)) return next();
+  if (_adminAllowedRanges.some(r => !r.isV6 && n >= r.start && n <= r.end)) return next();
   return res.status(403).json({ error: 'forbidden: IP not in ADMIN_ALLOWED_IPS' });
 }
 
@@ -507,8 +499,10 @@ app.get('/config', requireAdminIfConfigured, (req, res) => {
 });
 
 app.post('/config', requireAdminIfConfigured, express.json({ limit: '256kb' }), (req, res) => {
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return res.status(400).json({ error: 'body must be a JSON object' });
   try {
-    fs.writeFileSync(ORG_CONFIG_FILE, JSON.stringify(req.body || {}));
+    fs.writeFileSync(ORG_CONFIG_FILE, JSON.stringify(body));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
