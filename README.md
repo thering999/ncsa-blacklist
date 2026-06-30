@@ -194,7 +194,7 @@ NCSA Blacklist SOC Dashboard คือเครื่องมือ Cybersecuri
 | Network | LAN | LAN + VPN |
 | Browser | Chrome 90+ / Firefox 90+ / Edge 90+ | Chrome ล่าสุด |
 
-> ไม่ต้องการ database ภายนอก — feed data เก็บใน JSON บน Docker volume · config เก็บใน browser localStorage
+> ไม่ต้องการ database ภายนอก — feed data เก็บใน JSON บน Docker volume · org config เก็บใน `/data/org_config.json` · CTAM+/Risk/Incident เก็บใน browser localStorage
 
 ---
 
@@ -664,7 +664,7 @@ docker compose ps
 curl http://localhost:3939/healthz
 ```
 
-> Feed data เก็บใน Docker volume `ncsa-data` · Config/CTAM/Risk เก็บใน browser localStorage — ไม่หายเมื่อ rebuild
+> Feed data + org config เก็บใน Docker volume `ncsa-data` · CTAM+/Risk/Incident เก็บใน browser localStorage — ไม่หายเมื่อ rebuild
 
 ### Force sync feed ทันที
 
@@ -778,21 +778,31 @@ location / {
 
 | Endpoint | Method | คำอธิบาย | Auth |
 |----------|--------|-----------|------|
-| `/check?q=X` | GET | ตรวจสอบ IP/domain/hash | ไม่ต้อง |
-| `/bulk` | POST | ตรวจสอบหลายรายการ (JSON array, max 10,000) | ไม่ต้อง |
+| `/check/auto/:value` | GET | ตรวจสอบ IP/domain/hash (auto-detect type) | ไม่ต้อง |
+| `/check/:type/:value` | GET | ตรวจสอบระบุ type: `ip`, `domain`, `hash` | ไม่ต้อง |
+| `/check/bulk` | POST | ตรวจสอบหลายรายการ (JSON array, max 10,000) | ไม่ต้อง |
+| `/check/cidr` | POST | ตรวจสอบทั้ง subnet | ไม่ต้อง |
 | `/recent` | GET | IOC ที่เพิ่มล่าสุด | ไม่ต้อง |
 | `/stats` | GET | สถิติ feed (count, last update) | ไม่ต้อง |
-| `/search?q=X` | GET | ค้นหาแบบ partial match | ไม่ต้อง |
-| `/healthz` | GET | health check | ไม่ต้อง |
-| `/metrics` | GET | Prometheus metrics | ไม่ต้อง |
+| `/search?type=ip&q=X` | GET | ค้นหาแบบ partial match | ไม่ต้อง |
+| `/healthz` | GET | health check + sync schedule | ไม่ต้อง |
+| `/history` | GET | ประวัติ sync | ไม่ต้อง |
+| `/metrics` | GET | Prometheus metrics | METRICS_TOKEN หรือ Admin Token |
+| `/watch` | GET/POST/DELETE | Watch list CRUD | POST/DELETE ต้อง Admin Token |
+| `/allowlist` | GET/POST/DELETE | Allow list CRUD | POST/DELETE ต้อง Admin Token |
+| `/export/iptables` | GET | Export iptables/ipset script | ไม่ต้อง |
+| `/export/dnsmasq` | GET | Export dnsmasq config | ไม่ต้อง |
+| `/export/wazuh` | GET | Export Wazuh CDB file | ไม่ต้อง |
+| `/export/csv/:type` | GET | Export CSV | ไม่ต้อง |
 | `/admin/sync` | POST | sync feed ทันที | Admin Token |
-| `/reload` | POST | reload config | Admin Token |
+| `/reload` | POST | reload feed data จาก disk | Admin Token |
+| `/config` | GET/POST | org config (server-side) | Admin Token (ถ้าตั้งค่า) |
 
 ตัวอย่าง bulk check:
 ```bash
-curl -X POST http://localhost:3939/bulk \
+curl -X POST http://localhost:3939/check/bulk \
   -H "Content-Type: application/json" \
-  -d '{"items": ["1.2.3.4", "evil.example.com", "5.6.7.8"]}'
+  -d '{"type": "auto", "values": ["1.2.3.4", "evil.example.com", "abc123...sha256hash"]}'
 ```
 
 ---
@@ -804,10 +814,24 @@ curl -X POST http://localhost:3939/bulk \
 ```
 ncsa-blacklist/
 ├── public/
-│   └── index.html          # Dashboard หลัก (single-file app)
+│   ├── index.html          # Dashboard หลัก (single-file app)
+│   ├── login.html          # หน้า login
+│   ├── sw.js               # Service Worker (PWA cache)
+│   └── manifest.json       # PWA manifest
 ├── src/
 │   ├── server.js           # Express API server
-│   └── scheduler.js        # Feed sync scheduler (ทุกวัน 01:00)
+│   ├── scheduler.js        # Feed sync scheduler (ทุกวัน 01:00)
+│   ├── fetch.js            # ดึง feed + ETag caching + anomaly detection
+│   ├── store.js            # โหลด feed data เข้า memory Set
+│   ├── auth.js             # Admin token auth (timing-safe)
+│   ├── scan.js             # Log scanner (ค้นหา IP ใน log text)
+│   ├── diff.js             # เปรียบเทียบ feed เวอร์ชันก่อนหลัง
+│   ├── watchlist.js        # Watch list (in-memory cache + JSON)
+│   ├── allowlist.js        # Allow list (in-memory cache + JSON)
+│   ├── notify.js           # แจ้งเตือน Webhook/LINE/Email
+│   ├── geoip.js            # GeoIP lookup
+│   ├── news.js             # ThaiCERT news feed
+│   └── paths.js            # DATA_DIR path config
 ├── Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.prod.yml # Production overrides
@@ -825,12 +849,12 @@ ncsa-blacklist/
 EXTRA_FEEDS=mylist:https://your-feed.go.th/blacklist.json,another:https://...
 ```
 
-รูปแบบ JSON feed:
+รูปแบบ JSON feed (ต้องตรงกับ NCSA format):
 ```json
 {
-  "type": "ip",
-  "entries": ["1.2.3.4", "5.6.7.8"],
-  "updated": "2025-01-01T00:00:00Z"
+  "total": 2,
+  "generated_at": "2025-01-01T00:00:00Z",
+  "data": ["1.2.3.4", "5.6.7.8"]
 }
 ```
 
@@ -854,11 +878,14 @@ EXTRA_FEEDS=mylist:https://your-feed.go.th/blacklist.json,another:https://...
 
 ## 🔒 Security Notes
 
-- **อย่า expose port 3939** บน public internet โดยตรง — ใช้ nginx reverse proxy + SSL เสมอ
+- **อย่า expose port 3939** บน public internet โดยตรง — `docker-compose.yml` bind `127.0.0.1:3939` โดย default ใช้ nginx reverse proxy + SSL เสมอ
 - ตั้งค่า `ADMIN_TOKEN` เสมอก่อนใช้งานจริง (`openssl rand -hex 32`)
-- ตั้งค่า `ADMIN_ALLOWED_IPS` จำกัด IP ที่เข้า `/admin/*` ได้
+- ตั้งค่า `ADMIN_ALLOWED_IPS` จำกัด IP ที่เข้า `/admin/*` ได้ (รองรับเฉพาะ IPv4 CIDR)
+- ตั้งค่า `METRICS_TOKEN` แยกต่างหากสำหรับ `/metrics` endpoint
+- Admin token (metrics_token) เก็บใน **sessionStorage** — ล้างอัตโนมัติเมื่อปิด tab
 - Wazuh/MISP credentials ไม่ถูกเก็บใน server — เก็บเฉพาะใน browser localStorage
 - ข้อมูล CTAM+/Risk/Incident เก็บใน browser localStorage ไม่ส่งออกไปที่ใด
+- org config (ชื่อหน่วยงาน, IP ระบบ) เก็บใน `/data/org_config.json` บน server
 
 ---
 
