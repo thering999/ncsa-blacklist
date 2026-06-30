@@ -5419,6 +5419,24 @@ async function enrichGeo(value) {
   } catch { box.style.display='none'; }
 }
 
+async function enrichReputation(ip) {
+  try {
+    const d = await apiFetch(`/reputation/ip/${encodeURIComponent(ip)}`).then(r=>r.json());
+    if (!d || d.available === false || d.error) return;
+    const score = d.score ?? 0;
+    const color = score >= 80 ? '#dc2626' : score >= 25 ? '#d97706' : '#16a34a';
+    const label = score >= 80 ? `AbuseIPDB: ${score}%+` : score >= 25 ? `AbuseIPDB: ${score}%` : 'AbuseIPDB: clean';
+    const badge = `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:${color}20;color:${color};font-size:.7rem;font-weight:600;border:1px solid ${color}40" title="Reports: ${esc(String(d.totalReports))} | ISP: ${esc(d.isp||'')} | Usage: ${esc(d.usageType||'')}">🛡 ${esc(label)}</span>`;
+    const header = document.querySelector('#single-result .result-header');
+    if (header && !header.querySelector('.abuse-badge')) {
+      const span = document.createElement('span');
+      span.className = 'abuse-badge';
+      span.innerHTML = badge;
+      header.insertBefore(span, header.querySelector('.copy-btn'));
+    }
+  } catch {}
+}
+
 async function checkOne() {
   const val = document.getElementById('single-val').value.trim();
   const type = document.getElementById('single-type').value;
@@ -5431,6 +5449,7 @@ async function checkOne() {
     document.getElementById('single-result').innerHTML = renderResult(val, data);
     showOsintLinks(val);
     enrichGeo(val);
+    if ((type === 'ip' || type === 'auto') && /^\d{1,3}(\.\d{1,3}){3}$/.test(val)) enrichReputation(val);
   } catch (e) { toast('Lookup failed: ' + e.message, 'err'); }
   btn.disabled = false; btn.textContent = 'Check';
 }

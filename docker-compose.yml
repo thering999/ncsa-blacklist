@@ -29,6 +29,7 @@ services:
       - ADMIN_ALLOWED_IPS=${ADMIN_ALLOWED_IPS:-}
       - LOG_FORMAT=${LOG_FORMAT:-}
       - RATE_LIMIT=${RATE_LIMIT:-60}
+      - ABUSEIPDB_KEY=${ABUSEIPDB_KEY:-}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3939/healthz', r => process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s

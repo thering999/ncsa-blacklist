@@ -7,6 +7,7 @@ const { loadAll } = require('./store');
 const { scanLog, scanLogWithContext } = require('./scan');
 const watchlist = require('./watchlist');
 const allowlist = require('./allowlist');
+const alertRules = require('./alert_rules');
 const { DATA_DIR } = require('./paths');
 const { FEEDS, RECENT_FILE } = require('./fetch');
 
@@ -513,6 +514,29 @@ app.get('/news', async (req, res) => {
   res.json({ source, fetchedAt: fetchedAt ? new Date(fetchedAt).toISOString() : null, count: items.length, items: items.slice(0, limit) });
 });
 
+const _reputationCache = new Map();
+const REPUTATION_TTL = 3600_000;
+app.get('/reputation/ip/:value', async (req, res) => {
+  const key = process.env.ABUSEIPDB_KEY;
+  if (!key) return res.json({ source: 'abuseipdb', available: false });
+  const ip = req.params.value;
+  if (!IPV4_RE.test(ip) && !IPV6_RE.test(ip)) return res.status(400).json({ error: 'invalid IP' });
+  const cached = _reputationCache.get(ip);
+  if (cached && Date.now() - cached.ts < REPUTATION_TTL) return res.json(cached.data);
+  try {
+    const r = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${encodeURIComponent(ip)}&maxAgeInDays=90`, {
+      headers: { Key: key, Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const d = j.data || {};
+    const out = { source: 'abuseipdb', available: true, score: d.abuseConfidenceScore ?? 0, totalReports: d.totalReports ?? 0, lastReported: d.lastReportedAt ?? null, isp: d.isp ?? '', usageType: d.usageType ?? '' };
+    _reputationCache.set(ip, { data: out, ts: Date.now() });
+    res.json(out);
+  } catch (e) { res.json({ source: 'abuseipdb', error: e.message }); }
+});
+
 app.get('/search', (req, res) => {
   const { type, q, page = '1', limit = '100' } = req.query;
   if (!type || !q) return res.status(400).json({ error: 'type and q required' });
@@ -722,6 +746,31 @@ app.delete('/allowlist', requireAdmin, express.json(), (req, res) => {
   if (!type || !value) return res.status(400).json({ error: 'type and value required' });
   console.log(`allowlist remove by admin "${req.adminName || 'default'}": ${type}:${value}`);
   res.json(allowlist.remove(type, value));
+});
+
+// --- Alert Rules ---
+app.get('/admin/alert-rules', requireAdmin, (req, res) => {
+  res.json(alertRules.load());
+});
+
+app.post('/admin/alert-rules', requireAdmin, express.json(), (req, res) => {
+  const { name, enabled, condition, action } = req.body || {};
+  if (!name || !condition || !condition.field || !condition.operator) {
+    return res.status(400).json({ error: 'name and condition.field/operator required' });
+  }
+  try {
+    res.json(alertRules.create({ name, enabled: enabled !== false, condition, action: action || 'notify' }));
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.put('/admin/alert-rules/:id', requireAdmin, express.json(), (req, res) => {
+  const result = alertRules.update(req.params.id, req.body || {});
+  if (!result) return res.status(404).json({ error: 'rule not found' });
+  res.json(result);
+});
+
+app.delete('/admin/alert-rules/:id', requireAdmin, (req, res) => {
+  res.json(alertRules.remove(req.params.id));
 });
 
 // --- Prometheus metrics ---
