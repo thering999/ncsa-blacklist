@@ -676,7 +676,7 @@ app.get('/export/json', (req, res) => {
   res.json(out);
 });
 
-app.get('/watch', (req, res) => {
+app.get('/watch', requireAdminIfConfigured, (req, res) => {
   res.json(watchlist.load());
 });
 

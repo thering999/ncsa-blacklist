@@ -1,6 +1,6 @@
 // NOTE: Place a 192x192 PNG at /public/icon-192.png for notification icons.
 
-const CACHE_NAME = 'ncsa-v2';
+const CACHE_NAME = 'ncsa-v3';
 const CACHE_URLS = ['/', '/index.html', '/manifest.json'];
 const API_PATHS = ['/check', '/bulk', '/recent', '/stats', '/search', '/trend'];
 
