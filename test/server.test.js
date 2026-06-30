@@ -1,6 +1,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
+const http = require('http');
 const os = require('os');
 const path = require('path');
 
@@ -41,27 +42,41 @@ before(() => new Promise((resolve) => {
 }));
 
 after(() => new Promise((resolve) => {
+  // Close all connections including undici keepalive pool (Node 18.2+)
+  if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
   for (const socket of openSockets) socket.destroy();
   const cleanup = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} resolve(); };
   server.close(cleanup);
-  // Force resolve after 2s in case connections linger (unref = don't hold event loop)
-  setTimeout(cleanup, 2000).unref();
+  setTimeout(cleanup, 500).unref();
 }));
 
-async function get(p) {
-  const res = await fetch(baseUrl + p);
-  const ct = res.headers.get('content-type') || '';
-  return { status: res.status, body: ct.includes('json') ? await res.json() : await res.text() };
+function request(method, p, body, contentType) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(baseUrl + p);
+    const opts = { method, hostname: u.hostname, port: u.port, path: u.pathname + u.search,
+      headers: { Connection: 'close', ...(contentType ? { 'Content-Type': contentType } : {}) } };
+    const req = http.request(opts, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString();
+        const ct = res.headers['content-type'] || '';
+        let parsed;
+        try { parsed = ct.includes('json') ? JSON.parse(text) : text; } catch { parsed = text; }
+        resolve({ status: res.statusCode, body: parsed, headers: res.headers });
+      });
+    });
+    req.on('error', reject);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
 }
 
+async function get(p) { return request('GET', p); }
+
 async function post(p, body, text = false) {
-  const res = await fetch(baseUrl + p, {
-    method: 'POST',
-    headers: { 'Content-Type': text ? 'text/plain' : 'application/json' },
-    body: text ? body : JSON.stringify(body),
-  });
-  const ct = res.headers.get('content-type') || '';
-  return { status: res.status, body: ct.includes('json') ? await res.json() : await res.text() };
+  const b = text ? body : JSON.stringify(body);
+  return request('POST', p, b, text ? 'text/plain' : 'application/json');
 }
 
 test('GET /healthz returns ok', async () => {
@@ -211,12 +226,11 @@ test('GET /watch returns array', async () => {
 });
 
 test('GET /metrics returns Prometheus text', async () => {
-  const res = await fetch(baseUrl + '/metrics');
-  const text = await res.text();
-  assert.strictEqual(res.status, 200);
-  assert.ok(text.includes('ncsa_store_size'));
-  assert.ok(text.includes('ncsa_feed_up'));
-  assert.ok(text.includes('ncsa_feed_file_age_seconds'));
+  const { status, body } = await get('/metrics');
+  assert.strictEqual(status, 200);
+  assert.ok(body.includes('ncsa_store_size'));
+  assert.ok(body.includes('ncsa_feed_up'));
+  assert.ok(body.includes('ncsa_feed_file_age_seconds'));
 });
 
 test('GET /history returns array', async () => {
@@ -226,21 +240,31 @@ test('GET /history returns array', async () => {
 });
 
 test('GET /metrics open when METRICS_TOKEN unset', async () => {
-  const res = await fetch(baseUrl + '/metrics');
-  assert.strictEqual(res.status, 200);
+  const { status } = await get('/metrics');
+  assert.strictEqual(status, 200);
 });
 
 test('GET /metrics returns 401 when METRICS_TOKEN set and no auth', async () => {
   process.env.METRICS_TOKEN = 'secret123';
-  const res = await fetch(baseUrl + '/metrics');
-  assert.strictEqual(res.status, 401);
+  const { status } = await get('/metrics');
+  assert.strictEqual(status, 401);
   delete process.env.METRICS_TOKEN;
 });
 
 test('GET /metrics accepts correct METRICS_TOKEN', async () => {
   process.env.METRICS_TOKEN = 'secret123';
-  const res = await fetch(baseUrl + '/metrics', { headers: { Authorization: 'Bearer secret123' } });
-  assert.strictEqual(res.status, 200);
+  const { status } = await request('GET', '/metrics', undefined, undefined);
+  // Re-request with auth header via raw request
+  const { status: s2 } = await new Promise((resolve) => {
+    const u = new URL(baseUrl + '/metrics');
+    const req = http.request({ method: 'GET', hostname: u.hostname, port: u.port, path: '/metrics',
+      headers: { Connection: 'close', Authorization: 'Bearer secret123' } }, (res) => {
+      res.resume(); res.on('end', () => resolve({ status: res.statusCode }));
+    });
+    req.on('error', () => resolve({ status: 0 }));
+    req.end();
+  });
+  assert.strictEqual(s2, 200);
   delete process.env.METRICS_TOKEN;
 });
 
@@ -257,12 +281,12 @@ test('GET /check/auto/ allowlisted IP overrides blacklist', async () => {
   assert.strictEqual(body.blacklisted, false);
   assert.strictEqual(body.allowlisted, true);
   // cleanup
-  await fetch(baseUrl + '/allowlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ip', value: '1.2.3.4' }) });
+  await request('DELETE', '/allowlist', JSON.stringify({ type: 'ip', value: '1.2.3.4' }), 'application/json');
 });
 
 test('responses include X-Request-Id header', async () => {
-  const res = await fetch(baseUrl + '/healthz');
-  const rid = res.headers.get('x-request-id');
+  const { headers } = await get('/healthz');
+  const rid = headers['x-request-id'];
   assert.ok(rid, 'X-Request-Id header must be present');
   assert.match(rid, /^[0-9a-f-]{36}$/, 'must be a UUID');
 });
@@ -286,7 +310,7 @@ test('POST /scan excludes allowlisted IPs from hits', async () => {
   assert.ok(!body.hits.includes('1.2.3.4'), '1.2.3.4 should be excluded by allowlist');
   assert.ok(body.hits.includes('5.6.7.8'), '5.6.7.8 should still be reported');
   // cleanup
-  await fetch(baseUrl + '/allowlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ip', value: '1.2.3.4' }) });
+  await request('DELETE', '/allowlist', JSON.stringify({ type: 'ip', value: '1.2.3.4' }), 'application/json');
 });
 
 test('GET /admin/feed-health returns per-feed status (no auth configured)', async () => {

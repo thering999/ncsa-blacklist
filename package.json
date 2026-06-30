@@ -12,7 +12,7 @@
     "export:iptables": "node src/export-iptables.js",
     "export:dnsmasq": "node src/export-dnsmasq.js",
     "export:wazuh": "node src/export-wazuh-cdb.js",
-    "test": "node --test"
+    "test": "node --test --test-force-exit"
   },
   "engines": {
     "node": ">=18"
