@@ -943,15 +943,20 @@ select.input option{background:#0d1117;color:var(--text)}
             <option value="type">ประเภท feed</option>
             <option value="added_count">จำนวนที่เพิ่ม</option>
             <option value="removed_count">จำนวนที่ลบ</option>
+            <option value="total_count">จำนวนรวมทั้งหมด</option>
+            <option value="watch_hit_count">จำนวน watch hit</option>
           </select>
           <select id="ar-op" class="input" style="font-size:.75rem">
             <option value="eq">= เท่ากับ</option>
             <option value="gt">&gt; มากกว่า</option>
             <option value="lt">&lt; น้อยกว่า</option>
+            <option value="gte">&gt;= มากกว่าเท่ากับ</option>
+            <option value="lte">&lt;= น้อยกว่าเท่ากับ</option>
             <option value="contains">contains</option>
           </select>
           <input type="text" id="ar-value" class="input" placeholder="ip / 100" style="font-size:.75rem">
         </div>
+        <input type="number" id="ar-cooldown" class="input" placeholder="Cooldown (นาที, default 60)" min="0" style="font-size:.75rem;margin-top:6px">
         <button onclick="createAlertRule()" class="btn btn-primary btn-sm">บันทึก Rule</button>
       </div>
     </details>
@@ -5449,19 +5454,33 @@ async function enrichGeo(value) {
   } catch { box.style.display='none'; }
 }
 
+const REPUTATION_SOURCE_LABELS = { abuseipdb: 'AbuseIPDB', virustotal: 'VirusTotal' };
+
+function reputationBadge(s) {
+  const label = REPUTATION_SOURCE_LABELS[s.source] || s.source;
+  if (s.available === false || s.error) return '';
+  const score = s.score ?? 0;
+  const color = score >= 80 ? '#dc2626' : score >= 25 ? '#d97706' : '#16a34a';
+  const text = score >= 80 ? `${label}: ${score}%+` : score >= 25 ? `${label}: ${score}%` : `${label}: clean`;
+  const titleParts = s.source === 'virustotal'
+    ? [`Malicious votes: ${esc(String(s.maliciousVotes ?? 0))}/${esc(String(s.totalVotes ?? 0))}`, `Owner: ${esc(s.asOwner||'')}`]
+    : [`Reports: ${esc(String(s.totalReports ?? 0))}`, `ISP: ${esc(s.isp||'')}`, `Usage: ${esc(s.usageType||'')}`];
+  return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:${color}20;color:${color};font-size:.7rem;font-weight:600;border:1px solid ${color}40" title="${titleParts.join(' | ')}">🛡 ${esc(text)}</span>`;
+}
+
 async function enrichReputation(ip) {
   try {
     const d = await apiFetch(`/reputation/ip/${encodeURIComponent(ip)}`).then(r=>r.json());
-    if (!d || d.available === false || d.error) return;
-    const score = d.score ?? 0;
-    const color = score >= 80 ? '#dc2626' : score >= 25 ? '#d97706' : '#16a34a';
-    const label = score >= 80 ? `AbuseIPDB: ${score}%+` : score >= 25 ? `AbuseIPDB: ${score}%` : 'AbuseIPDB: clean';
-    const badge = `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:${color}20;color:${color};font-size:.7rem;font-weight:600;border:1px solid ${color}40" title="Reports: ${esc(String(d.totalReports))} | ISP: ${esc(d.isp||'')} | Usage: ${esc(d.usageType||'')}">🛡 ${esc(label)}</span>`;
+    const sources = (d && d.sources) || [];
+    const badges = sources.map(reputationBadge).filter(Boolean);
+    if (!badges.length) return;
     const header = document.querySelector('#single-result .result-header');
     if (header && !header.querySelector('.abuse-badge')) {
       const span = document.createElement('span');
       span.className = 'abuse-badge';
-      span.innerHTML = badge;
+      span.style.display = 'inline-flex';
+      span.style.gap = '4px';
+      span.innerHTML = badges.join('');
       header.insertBefore(span, header.querySelector('.copy-btn'));
     }
   } catch {}
@@ -10965,7 +10984,7 @@ async function loadAlertRules() {
           <input type="checkbox" ${r.enabled?'checked':''} onchange="toggleAlertRule('${esc(r.id)}',this.checked)" style="accent-color:var(--cyan)">
           <span style="font-size:.76rem;color:${r.enabled?'var(--text)':'var(--text3)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>
         </label>
-        <span style="font-size:.65rem;color:var(--text3);white-space:nowrap">${esc(r.condition.field)} ${esc(r.condition.operator)} ${esc(String(r.condition.value))}</span>
+        <span style="font-size:.65rem;color:var(--text3);white-space:nowrap" title="${r.last_fired?'Last fired: '+esc(r.last_fired):'ยังไม่เคยแจ้งเตือน'}">${esc(r.condition.field)} ${esc(r.condition.operator)} ${esc(String(r.condition.value))} · ${r.cooldown_minutes ?? 60}m${r.last_fired?' 🔔':''}</span>
         <button onclick="deleteAlertRule('${esc(r.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:0 2px" title="ลบ">✕</button>
       </div>`).join('');
   } catch(e) { el.innerHTML=`<span style="color:var(--red)">${esc(e.message)}</span>`; }
@@ -10977,19 +10996,22 @@ async function createAlertRule() {
   const field = document.getElementById('ar-field').value;
   const operator = document.getElementById('ar-op').value;
   const value = (document.getElementById('ar-value').value||'').trim();
+  const cooldownRaw = (document.getElementById('ar-cooldown').value||'').trim();
+  const cooldown_minutes = cooldownRaw ? Number(cooldownRaw) : 60;
   const st = document.getElementById('alert-rules-status');
   if (!name || !value) { st.innerHTML='<span style="color:var(--red)">กรอกชื่อและค่าเงื่อนไข</span>'; return; }
   try {
     const res = await fetch('/admin/alert-rules', {
       method:'POST',
       headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},
-      body: JSON.stringify({name, enabled:true, condition:{field, operator, value}, action:'notify'})
+      body: JSON.stringify({name, enabled:true, condition:{field, operator, value}, action:'notify', cooldown_minutes})
     });
     const data = await res.json();
     if (!res.ok) { st.innerHTML=`<span style="color:var(--red)">${esc(data.error||'error')}</span>`; return; }
     st.innerHTML='<span style="color:var(--green)">✓ บันทึกแล้ว</span>';
     document.getElementById('ar-name').value='';
     document.getElementById('ar-value').value='';
+    document.getElementById('ar-cooldown').value='';
     document.getElementById('alert-rule-form-wrap').removeAttribute('open');
     loadAlertRules();
     setTimeout(()=>{ st.innerHTML=''; }, 3000);

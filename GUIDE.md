@@ -69,6 +69,9 @@ open http://localhost:3939
 | `SMTP_TO` | Recipient address(es) | — |
 | **Feeds** | | |
 | `EXTRA_FEEDS` | Extra blocklist feeds: `name:url,name2:url2` | — |
+| **Reputation** | | |
+| `ABUSEIPDB_KEY` | AbuseIPDB API key for `/reputation/ip/:value` cross-check | — (source skipped) |
+| `VIRUSTOTAL_KEY` | VirusTotal API key for `/reputation/ip/:value` cross-check | — (source skipped) |
 
 ---
 
@@ -93,6 +96,7 @@ open http://localhost:3939
 | `POST /check/bulk` | JSON | `{type, values[]}` max 10 000 | Batch lookup; domain uses parent-matching |
 | `POST /check/cidr` | JSON | `{cidr: "1.2.3.0/24"}` max /16 | Find blacklisted IPs in subnet |
 | `GET /search?type=ip&q=23.129` | — | q ≥ 3 chars | Partial match, max 100 results |
+| `GET /reputation/ip/:value` | — | — | Cross-check IP against configured reputation sources (AbuseIPDB, VirusTotal) — skips sources with no API key set |
 
 ### Scan & Export
 
@@ -142,6 +146,17 @@ open http://localhost:3939
 | `POST /allowlist` | Auth + JSON `{type, value}` | Add entry — allowlisted values always return `blacklisted: false, allowlisted: true` regardless of feed content |
 | `DELETE /allowlist` | Auth + JSON `{type, value}` | Remove entry |
 
+### Alert Rules (requires auth)
+
+| Endpoint | Method | Description |
+|----------|--------|--------------|
+| `GET /admin/alert-rules` | Auth | List all rules |
+| `POST /admin/alert-rules` | Auth + JSON `{name, condition:{field, operator, value}, enabled?, cooldown_minutes?}` | Create rule (max 20). `field`: `type`\|`added_count`\|`removed_count`\|`total_count`\|`watch_hit_count`. `operator`: `eq`\|`gt`\|`lt`\|`gte`\|`lte`\|`contains`. `cooldown_minutes` default 60 |
+| `PUT /admin/alert-rules/:id` | Auth + JSON patch | Update rule fields |
+| `DELETE /admin/alert-rules/:id` | Auth | Remove rule |
+
+Rules are evaluated on every sync (`notify()` → `evaluateRules()`); a matching rule fires once per `cooldown_minutes` window (tracked via `last_fired`) to avoid repeat-alert spam on persistent conditions.
+
 ### News & Recent
 
 | Endpoint | Description |
@@ -190,6 +205,18 @@ Domain with parent match:
   "matchType": "parent"
 }
 ```
+
+### `/reputation/ip/:value`
+```json
+{
+  "ip": "23.129.64.100",
+  "sources": [
+    { "source": "abuseipdb", "available": true, "score": 42, "totalReports": 3, "lastReported": "2026-06-20T...", "isp": "Acme", "usageType": "hosting" },
+    { "source": "virustotal", "available": true, "score": 20, "maliciousVotes": 2, "totalVotes": 10, "asOwner": "Test ASN", "country": "TH" }
+  ]
+}
+```
+Sources without a configured API key are omitted from the array; a failed lookup returns `{source, available: false, error}`.
 
 ### `/admin/feed-health`
 ```json
@@ -251,7 +278,9 @@ ncsa-blacklist/
 │   ├── scan.js         Log scanner (regex IP extraction + blacklist match)
 │   ├── watchlist.js    Watch list persistence (data/watchlist.json)
 │   ├── allowlist.js    Allow list persistence (data/allowlist.json)
-│   ├── notify.js       Webhook/LINE/email dispatch; notifyStale() for feed alerts
+│   ├── notify.js        Webhook/LINE/email dispatch; notifyStale() for feed alerts; evaluateRules() for alert rules
+│   ├── alert_rules.js   Alert rule persistence (data/alert_rules.json), CRUD (max 20 rules)
+│   ├── reputation.js    Reputation source registry (AbuseIPDB, VirusTotal) + capped LRU cache
 │   ├── auth.js         ADMIN_TOKEN / ADMIN_TOKENS bearer auth middleware
 │   ├── geoip.js        geoip-lite wrapper (offline MaxMind GeoLite2)
 │   ├── news.js         ThaICERT cybernews CKAN fetch + CSV parser
@@ -356,8 +385,8 @@ DATA_DIR=./local-data node src/server.js   # start server
 ### Run tests
 ```bash
 npm test
-# 72 tests across 9 test files
-# Covers: auth, allowlist, diff, fetch (ETag via mock HTTP), notify, scan, scheduler, server (integration), watchlist
+# 98 tests across 13 test files
+# Covers: auth, allowlist, alert_rules (incl. cooldown), diff, fetch (ETag via mock HTTP), notify, reputation (registry + cache), scan, scheduler, server (integration), watchlist
 ```
 
 ### Add a new endpoint

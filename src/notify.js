@@ -1,6 +1,5 @@
 const crypto = require('crypto');
-const path = require('path');
-const fs = require('fs');
+const alertRules = require('./alert_rules');
 
 async function notifyWebhook(url, body, headers) {
   const secret = process.env.WEBHOOK_SECRET;
@@ -84,24 +83,28 @@ function matchRule(condition, result) {
   if (field === 'type') actual = result.type;
   else if (field === 'added_count') actual = result.added ?? 0;
   else if (field === 'removed_count') actual = result.removed ?? 0;
+  else if (field === 'total_count') actual = result.total ?? 0;
+  else if (field === 'watch_hit_count') actual = result.watchHits?.length ?? 0;
   else return false;
   if (operator === 'eq') return String(actual) === String(value);
   if (operator === 'gt') return Number(actual) > Number(value);
   if (operator === 'lt') return Number(actual) < Number(value);
+  if (operator === 'gte') return Number(actual) >= Number(value);
+  if (operator === 'lte') return Number(actual) <= Number(value);
   if (operator === 'contains') return String(actual).includes(String(value));
   return false;
 }
 
+function ruleOnCooldown(rule) {
+  if (!rule.last_fired) return false;
+  const cooldownMs = (rule.cooldown_minutes ?? 60) * 60_000;
+  return Date.now() - new Date(rule.last_fired).getTime() < cooldownMs;
+}
+
 async function evaluateRules(results) {
-  let rules;
-  try {
-    const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-    const file = path.join(DATA_DIR, 'alert_rules.json');
-    if (!fs.existsSync(file)) return;
-    rules = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch { return; }
+  const rules = alertRules.load();
   for (const rule of rules) {
-    if (!rule.enabled) continue;
+    if (!rule.enabled || ruleOnCooldown(rule)) continue;
     for (const result of results) {
       if (result.error) continue;
       if (matchRule(rule.condition, result)) {
@@ -109,6 +112,7 @@ async function evaluateRules(results) {
         if (process.env.LINE_NOTIFY_TOKEN) await notifyLine(text);
         if (process.env.SMTP_HOST && process.env.SMTP_TO) await notifyEmail(`[NCSA] Alert: ${rule.name}`, text);
         if (process.env.WEBHOOK_URL) await notifyWebhook(process.env.WEBHOOK_URL, JSON.stringify({ text }), { 'Content-Type': 'application/json' });
+        alertRules.update(rule.id, { last_fired: new Date().toISOString() });
         break;
       }
     }
