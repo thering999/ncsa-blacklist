@@ -9,6 +9,7 @@ const watchlist = require('./watchlist');
 const allowlist = require('./allowlist');
 const alertRules = require('./alert_rules');
 const reputation = require('./reputation');
+const wazuh = require('./wazuh');
 const { DATA_DIR } = require('./paths');
 const { FEEDS, RECENT_FILE } = require('./fetch');
 
@@ -591,6 +592,26 @@ app.post('/admin/webhook-test', requireAdmin, express.json(), async (req, res) =
     res.json({ ok: r.ok, status: r.status, statusText: r.statusText });
   } catch (e) {
     res.status(502).json({ error: e.message });
+  }
+});
+
+app.get('/admin/wazuh/alerts', requireAdminIfConfigured, rateLimit(30, 60_000), async (req, res) => {
+  let cfg = {};
+  try { cfg = fs.existsSync(ORG_CONFIG_FILE) ? JSON.parse(fs.readFileSync(ORG_CONFIG_FILE, 'utf8')) : {}; } catch {}
+  const wazuhIP = cfg.wazuhIP;
+  if (!wazuhIP || wazuhIP === 'WAZUH-SERVER') return res.status(400).json({ ok: false, error: 'wazuhIP not configured' });
+  const hours = Math.min(Math.max(parseInt(req.query.hours) || 24, 1), 168);
+  try {
+    const result = await wazuh.queryAlerts({
+      wazuhIP,
+      wazuhUser: cfg.wazuhUser || 'admin',
+      wazuhPass: cfg.wazuhPass || '',
+      insecureTLS: !!cfg.wazuhInsecureTLS,
+      hours,
+    });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
   }
 });
 

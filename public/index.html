@@ -818,7 +818,14 @@ select.input option{background:#0d1117;color:var(--text)}
     <div class="setting-row">
       <div class="setting-label">Wazuh Reg. Password</div>
       <input class="input mono" id="s-wazuh-pass" type="password" placeholder="registration password">
-      <div class="setting-desc">ใช้สำหรับ agent install command เท่านั้น — ไม่ส่งออกนอก browser</div>
+      <div class="setting-desc">ใช้สำหรับ agent install command และ /admin/wazuh/alerts proxy — เก็บใน data/org_config.json ฝั่ง server</div>
+    </div>
+    <div class="setting-row">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="s-wazuh-insecure-tls">
+        <span class="setting-label" style="margin:0">Wazuh ใช้ self-signed certificate</span>
+      </label>
+      <div class="setting-desc">เปิดถ้า Wazuh indexer (port 9200) ใช้ cert ที่ออกเอง — ข้าม TLS verify เฉพาะ proxy call นี้</div>
     </div>
     <div class="setting-row">
       <div class="setting-label">MISP URL</div>
@@ -4800,6 +4807,7 @@ const CFG_DEFAULT = {
   wazuhAgent: 'agent-name',
   wazuhType: 'local',
   wazuhPass: '',
+  wazuhInsecureTLS: false,
   kpiMin: new Array(7).fill(false),
   kpiMax: new Array(8).fill(false),
   assets: [],
@@ -5002,6 +5010,7 @@ function saveAllSettings() {
   cfg.wazuhAgent  = document.getElementById('s-wazuh-agent').value.trim() || cfg.wazuhAgent;
   cfg.wazuhType   = document.getElementById('s-wazuh-type').value;
   cfg.wazuhPass   = document.getElementById('s-wazuh-pass').value;
+  cfg.wazuhInsecureTLS = document.getElementById('s-wazuh-insecure-tls').checked;
   if (cfg.wazuhType === 'ket10') cfg.wazuhIP = KET10_WAZUH_IP;
   cfg.mispUrl     = document.getElementById('s-misp-url').value.trim()    || cfg.mispUrl;
   cfg.firewallType= document.getElementById('s-fw-type').value;
@@ -5061,6 +5070,7 @@ function populateSettingsForm() {
   document.getElementById('s-wazuh-agent').value = cfg.wazuhAgent !== CFG_DEFAULT.wazuhAgent ? cfg.wazuhAgent : '';
   document.getElementById('s-wazuh-type').value  = cfg.wazuhType || 'local';
   document.getElementById('s-wazuh-pass').value  = cfg.wazuhPass || '';
+  document.getElementById('s-wazuh-insecure-tls').checked = !!cfg.wazuhInsecureTLS;
   document.getElementById('s-misp-url').value    = cfg.mispUrl !== CFG_DEFAULT.mispUrl ? cfg.mispUrl : '';
   document.getElementById('s-fw-type').value     = cfg.firewallType || 'fortigate';
   document.getElementById('s-fw-ip').value       = cfg.firewallIP !== CFG_DEFAULT.firewallIP ? cfg.firewallIP : '';
@@ -6130,30 +6140,24 @@ async function loadWazuhAlerts(){
   const el=document.getElementById('wazuh-alert-list');if(!el)return;
   el.innerHTML='<div style="padding:10px;text-align:center;color:var(--text3);font-size:.8rem">⏳ กำลังดึง alerts...</div>';
   try{
-    const cfg=getCfg();
-    // Try Wazuh indexer API (port 9200) — CORS likely blocked; show helpful message
-    const r=await fetch(`https://${cfg.wazuhIP}:9200/wazuh-alerts-*/_search`,{
-      method:'POST',signal:AbortSignal.timeout(5000),
-      headers:{'Content-Type':'application/json','Authorization':'Basic '+btoa('admin:'+(cfg.wazuhPass||''))},
-      body:JSON.stringify({size:10,sort:[{'timestamp':{order:'desc'}}],query:{range:{timestamp:{gte:'now-24h'}}}})
-    });
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    const r=await apiFetch('/admin/wazuh/alerts?hours=24');
     const d=await r.json();
-    const hits=(d.hits&&d.hits.hits)||[];
+    if(!r.ok||!d.ok)throw new Error(d.error||('HTTP '+r.status));
+    const hits=d.hits||[];
     if(!hits.length){el.innerHTML='<div style="padding:10px;text-align:center;color:var(--text3);font-size:.8rem">ไม่มี alert ใน 24 ชั่วโมงที่ผ่านมา</div>';return;}
-    el.innerHTML=hits.map(h=>{
-      const s=h._source||{};const lvl=s.rule&&s.rule.level||0;
+    el.innerHTML=hits.map(s=>{
+      const lvl=s.level||0;
       const color=lvl>=12?'var(--red)':lvl>=8?'var(--orange)':lvl>=5?'var(--yellow)':'var(--green)';
       return `<div style="padding:7px 10px;border-radius:6px;border:1px solid var(--card-b);font-size:.73rem;display:flex;gap:8px;align-items:flex-start">
         <span style="font-weight:800;color:${color};min-width:24px">L${lvl}</span>
-        <div><div style="color:var(--text1)">${esc((s.rule&&s.rule.description)||'—')}</div>
-        <div style="color:var(--text3);font-size:.65rem">${s.timestamp?new Date(s.timestamp).toLocaleString('th-TH'):''} · agent: ${esc((s.agent&&s.agent.name)||'—')}</div></div>
+        <div><div style="color:var(--text1)">${esc(s.description||'—')}</div>
+        <div style="color:var(--text3);font-size:.65rem">${s.timestamp?new Date(s.timestamp).toLocaleString('th-TH'):''} · agent: ${esc(s.agent||'—')}</div></div>
       </div>`;
     }).join('');
   }catch(e){
     const cfg=getCfg();
     el.innerHTML=`<div style="padding:10px 12px;border-radius:8px;background:rgba(255,171,0,.06);border:1px solid rgba(255,171,0,.2);font-size:.76rem">
-      <div style="color:var(--orange);font-weight:700">⚠ ไม่สามารถเชื่อมต่อ Wazuh โดยตรงได้ (CORS/Auth)</div>
+      <div style="color:var(--orange);font-weight:700">⚠ ไม่สามารถเชื่อมต่อ Wazuh ได้: ${esc(e.message)}</div>
       <div style="color:var(--text2);margin-top:4px">Wazuh Dashboard: <a href="https://${encodeURIComponent(cfg.wazuhIP)}" target="_blank" style="color:var(--cyan)">https://${esc(cfg.wazuhIP)}</a></div>
       <div style="color:var(--text3);font-size:.68rem;margin-top:4px">เปิด Wazuh → Discover → filter agent.name: <strong>${esc(cfg.wazuhAgent||'agent')}</strong></div>
     </div>`;
@@ -8108,11 +8112,11 @@ async function topoPollStatus(){
     }catch{n.status='unknown';}
   }
   const wNode=_topoNodes.find(n=>n.type==='siem'&&n.id==='wazuh');
-  if(wNode){const wu=localStorage.getItem('wazuhUrl')||orgCfg.wazuhUrl,wp=localStorage.getItem('wazuhPass')||'';
-    if(wu&&wp){try{const ar=await fetch(wu+'/security/user/authenticate',{method:'POST',headers:{'Authorization':'Basic '+btoa((localStorage.getItem('wazuhUser')||'wazuh-wui')+':'+wp)},signal:AbortSignal.timeout(4000)});
-      if(ar.ok){const ad=await ar.json(),jwt=ad?.data?.token;if(jwt){const er=await fetch(wu+'/alerts?limit=1&sort=-timestamp',{headers:{'Authorization':'Bearer '+jwt},signal:AbortSignal.timeout(4000)});
-        if(er.ok){const ed=await er.json(),ta=ed?.data?.total_affected_items||0;_topoAlerts['wazuh']=ta;wNode.status=ta>0?'alert':'online';lsSet('topo_alerts',_topoAlerts);if(ta>0)topoSpawnPacket('wazuh','fw','#f59e0b',1);}}}
-    }catch{}}}
+  if(wNode&&orgCfg.wazuhIP&&orgCfg.wazuhIP!=='WAZUH-SERVER'){
+    try{const r=await fetch('/admin/wazuh/alerts?hours=1',{signal:AbortSignal.timeout(4000)});
+      const d=await r.json();
+      if(r.ok&&d.ok){const ta=d.total||0;_topoAlerts['wazuh']=ta;wNode.status=ta>0?'alert':'online';lsSet('topo_alerts',_topoAlerts);if(ta>0)topoSpawnPacket('wazuh','fw','#f59e0b',1);}
+    }catch{}}
   if(Math.random()>0.5){const nr=[['internet','fw'],['fw','waf'],['waf','web'],['web','db'],['kong','api'],['api','db']];const r=nr[Math.floor(Math.random()*nr.length)];topoSpawnPacket(r[0],r[1],'#3b82f6',1);}
   topoDraw();
   document.getElementById('topo-poll-status').textContent='⬤ live — '+new Date().toLocaleTimeString('th-TH');

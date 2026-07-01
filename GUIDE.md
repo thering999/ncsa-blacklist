@@ -157,6 +157,14 @@ open http://localhost:3939
 
 Rules are evaluated on every sync (`notify()` → `evaluateRules()`); a matching rule fires once per `cooldown_minutes` window (tracked via `last_fired`) to avoid repeat-alert spam on persistent conditions.
 
+### Wazuh Proxy (requires auth if `ADMIN_TOKEN`/`ADMIN_TOKENS` set)
+
+| Endpoint | Method | Description |
+|----------|--------|--------------|
+| `GET /admin/wazuh/alerts?hours=24` | Auth | Proxies a query to the Wazuh indexer (`:9200/wazuh-alerts-*/_search`) server-side, returns `{ok, total, hits:[{level, description, timestamp, agent}]}` |
+
+Wazuh connection settings (`wazuhIP`, `wazuhPass`, `wazuhInsecureTLS`) are configured via the dashboard Settings panel, not env vars — they're part of the org config already persisted to `data/org_config.json` via `GET`/`POST /config`. The dashboard's browser-side code never talks to Wazuh directly (blocked by CSP `connect-src` for arbitrary hosts, and hits CORS in real deployments); this endpoint does the request server-side instead. `wazuhInsecureTLS: true` skips certificate verification for that one call — only enable it for a Wazuh instance with a self-signed cert.
+
 ### News & Recent
 
 | Endpoint | Description |
@@ -281,6 +289,7 @@ ncsa-blacklist/
 │   ├── notify.js        Webhook/LINE/email dispatch; notifyStale() for feed alerts; evaluateRules() for alert rules
 │   ├── alert_rules.js   Alert rule persistence (data/alert_rules.json), CRUD (max 20 rules)
 │   ├── reputation.js    Reputation source registry (AbuseIPDB, VirusTotal) + capped LRU cache
+│   ├── wazuh.js         Server-side Wazuh indexer query (avoids browser CORS/CSP)
 │   ├── auth.js         ADMIN_TOKEN / ADMIN_TOKENS bearer auth middleware
 │   ├── geoip.js        geoip-lite wrapper (offline MaxMind GeoLite2)
 │   ├── news.js         ThaICERT cybernews CKAN fetch + CSV parser
@@ -385,8 +394,8 @@ DATA_DIR=./local-data node src/server.js   # start server
 ### Run tests
 ```bash
 npm test
-# 98 tests across 13 test files
-# Covers: auth, allowlist, alert_rules (incl. cooldown), diff, fetch (ETag via mock HTTP), notify, reputation (registry + cache), scan, scheduler, server (integration), watchlist
+# 104 tests across 14 test files
+# Covers: auth, allowlist, alert_rules (incl. cooldown), diff, fetch (ETag via mock HTTP), notify, reputation (registry + cache), scan, scheduler, server (integration), watchlist, wazuh (mock indexer)
 ```
 
 ### Add a new endpoint
