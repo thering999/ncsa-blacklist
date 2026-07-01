@@ -8,6 +8,7 @@ COPY src ./src
 COPY public ./public
 
 RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
+RUN mkdir -p /data && chown -R app:app /data
 USER app
 
 ENV DATA_DIR=/data
