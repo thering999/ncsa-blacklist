@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#00e5ff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -8096,12 +8097,12 @@ async function topoPollStatus(){
   for(const n of _topoNodes){
     if(!n.health&&!n.ip)continue;
     try{
-      const url=n.health||(n.ip?'/check?q='+encodeURIComponent(n.ip):null);if(!url)continue;
+      const url=n.health||(n.ip?'/check/auto/'+encodeURIComponent(n.ip):null);if(!url)continue;
       const res=await fetch(url,{signal:AbortSignal.timeout(3000)});
       const wasAlert=n.status==='alert';
       if(n.health){n.status=res.ok?'online':'warning';}
-      else{const data=await res.json();n.status=data.found?'alert':'online';
-        if(data.found){_topoAlerts[n.id]=(_topoAlerts[n.id]||0)+1;lsSet('topo_alerts',_topoAlerts);
+      else{const data=await res.json();n.status=data.blacklisted?'alert':'online';
+        if(data.blacklisted){_topoAlerts[n.id]=(_topoAlerts[n.id]||0)+1;lsSet('topo_alerts',_topoAlerts);
           topoSpawnPacket('internet','fw','#ef4444',3);setTimeout(()=>topoSpawnPacket('fw',n.id,'#ef4444',2),500);
           if(!wasAlert&&typeof showToast==='function')showToast('⚠️ '+n.label+' IP พบใน Blacklist!','error');}}
     }catch{n.status='unknown';}
@@ -8135,8 +8136,8 @@ async function topoShowPanel(n){
   html+=`<tr><td style="color:#64748b">Alerts</td><td style="color:${_topoAlerts[n.id]?'#ef4444':'#22c55e'}">${_topoAlerts[n.id]||0}</td></tr></table>`;
   if(n.ip){
     html+=`<div style="margin-top:0.75rem"><b style="font-size:0.8rem">🔍 Blacklist Check</b>`;
-    try{const res=await fetch('/check?q='+encodeURIComponent(n.ip),{signal:AbortSignal.timeout(3000)});const data=await res.json();
-      html+=`<div style="margin-top:0.25rem;padding:0.4rem 0.6rem;border-radius:4px;background:${data.found?'#7f1d1d':'#14532d'};color:${data.found?'#fca5a5':'#86efac'};font-size:0.8rem">${data.found?'⚠️ พบใน Blacklist':'✅ ไม่พบใน Blacklist'}</div>`;
+    try{const res=await fetch('/check/auto/'+encodeURIComponent(n.ip),{signal:AbortSignal.timeout(3000)});const data=await res.json();
+      html+=`<div style="margin-top:0.25rem;padding:0.4rem 0.6rem;border-radius:4px;background:${data.blacklisted?'#7f1d1d':'#14532d'};color:${data.blacklisted?'#fca5a5':'#86efac'};font-size:0.8rem">${data.blacklisted?'⚠️ พบใน Blacklist':'✅ ไม่พบใน Blacklist'}</div>`;
     }catch{html+=`<div style="color:#64748b;font-size:0.8rem;margin-top:0.25rem">ตรวจสอบไม่ได้</div>`;}
     html+=`</div>`;
   }
@@ -8153,7 +8154,7 @@ async function topoShowPanel(n){
 
 function topoCtxCheckBlacklist(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode?.ip){const el=document.getElementById('search-input')||document.querySelector('input[placeholder*="IP"]');if(el){el.value=_topoCtxNode.ip;el.closest('form')?.dispatchEvent(new Event('submit'));}else alert('IP: '+_topoCtxNode.ip);}}
 function topoCtxWazuhAlerts(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode)topoShowPanel(_topoCtxNode);}
-function topoCtxPing(){document.getElementById('topo-ctx-menu').style.display='none';if(!_topoCtxNode?.ip)return alert('ไม่มี IP');fetch('/check?q='+encodeURIComponent(_topoCtxNode.ip)).then(r=>r.json()).then(d=>showToast(_topoCtxNode.ip+': '+(d.found?'⚠️ Blacklisted':'✅ Clean'))).catch(()=>showToast('Error','error'));}
+function topoCtxPing(){document.getElementById('topo-ctx-menu').style.display='none';if(!_topoCtxNode?.ip)return alert('ไม่มี IP');fetch('/check/auto/'+encodeURIComponent(_topoCtxNode.ip)).then(r=>r.json()).then(d=>showToast(_topoCtxNode.ip+': '+(d.blacklisted?'⚠️ Blacklisted':'✅ Clean'))).catch(()=>showToast('Error','error'));}
 function topoCtxCopyIP(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode?.ip){navigator.clipboard.writeText(_topoCtxNode.ip);showToast('Copy IP: '+_topoCtxNode.ip);}}
 function topoCtxViewCVE(){document.getElementById('topo-ctx-menu').style.display='none';if(_topoCtxNode)topoShowPanel(_topoCtxNode);}
 function topoCtxDeleteNode(){document.getElementById('topo-ctx-menu').style.display='none';if(!_topoCtxNode)return;if(!confirm('ลบ '+_topoCtxNode.label+'?'))return;_topoNodes=_topoNodes.filter(n=>n.id!==_topoCtxNode.id);_topoNodes.forEach(n=>{n.connections=(n.connections||[]).filter(c=>c!==_topoCtxNode.id&&c!==_topoCtxNode.label);});topoSave();topoDraw();}
