@@ -9733,7 +9733,7 @@ async function lookupIocQuick(){
   resEl.textContent='🔍 กำลังตรวจสอบ…';
   try {
     if(type==='ip'){
-      const inBl=await apiFetch(`/check?ip=${encodeURIComponent(val)}`).then(r=>r.json());
+      const inBl=await apiFetch(`/check/auto/${encodeURIComponent(val)}`).then(r=>r.json());
       const listed=inBl.listed||inBl.blacklisted||false;
       resEl.innerHTML=`<span style="color:${listed?'var(--red)':'var(--green)'}">${listed?'🔴 อยู่ใน Blacklist':'🟢 ไม่พบ IP นี้'}</span> | <a href="https://www.virustotal.com/gui/ip-address/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">VT</a> <a href="https://www.shodan.io/host/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">Shodan</a> <a href="https://www.abuseipdb.com/check/${encodeURIComponent(val)}" target="_blank" style="color:var(--cyan)">AbuseIPDB</a>`;
     } else {
@@ -10433,11 +10433,11 @@ async function runLogBulkCheck() {
     if (lbl) lbl.textContent = pct.toFixed(0) + '%';
   }, 400);
   try {
-    const res = await fetch('/bulk', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({items: _logExtractedIPs.slice(0,10000)})});
+    const res = await fetch('/check/bulk', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:'auto', values: _logExtractedIPs.slice(0,10000)})});
     clearInterval(pTimer);
     const bar2 = document.getElementById('log-progress-bar'); if(bar2) bar2.style.width='100%';
     const data = await res.json();
-    const hits = data.results ? data.results.filter(r => r.found) : [];
+    const hits = data.results ? data.results.filter(r => r.blacklisted) : [];
     out.innerHTML = `<div style="margin-top:1rem"><b style="color:var(--red)">${hits.length} รายการพบใน Blacklist</b> จาก ${_logExtractedIPs.length} IP<br><br>` +
       (hits.length ? hits.map(r => `<span style="background:rgba(255,23,68,.12);padding:2px 8px;border-radius:4px;margin:2px;display:inline-block;color:var(--red)">${esc(r.item||r.value||r.ip||'')}</span>`).join('') : '<span style="color:var(--green)">✅ ไม่พบ IP ใน Blacklist</span>') + '</div>';
   } catch(e) { clearInterval(pTimer); out.innerHTML = `<div class="empty">ตรวจสอบไม่ได้: ${esc(e.message)}</div>`; }
