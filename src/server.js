@@ -44,6 +44,7 @@ app.use(helmet({
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:'],
       connectSrc: ["'self'", 'https://ipinfo.io', 'https://crt.sh', 'https://dns.google', 'https://services.nvd.nist.gov', 'https://notify-api.line.me'],
+      upgradeInsecureRequests: null,
     },
   },
 }));
